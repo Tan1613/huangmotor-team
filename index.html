@@ -826,6 +826,16 @@ async function afterLogin(){
   if(isAdminOrSuper()){
     ['nav-admin-section','nav-admin-tasks','nav-admin-dept','nav-admin-leave','nav-admin-attendance','nav-performance','nav-admin-users'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
     document.getElementById('newAnnBtn').style.display='';
+  } else {
+    // Show nav based on individual permissions
+    var canTask=currentUser.can_assign_task_dept||currentUser.can_assign_task_cross;
+    var canAtt=currentUser.can_view_attendance;
+    var canLeave=currentUser.can_approve_leave;
+    var canPerf=currentUser.can_view_perf_dept||currentUser.can_view_perf_all;
+    if(canTask){var el=document.getElementById('nav-admin-tasks');if(el)el.style.display='';document.getElementById('nav-admin-section').style.display='';}
+    if(canAtt){var el=document.getElementById('nav-admin-attendance');if(el)el.style.display='';document.getElementById('nav-admin-section').style.display='';}
+    if(canLeave){var el=document.getElementById('nav-admin-leave');if(el)el.style.display='';document.getElementById('nav-admin-section').style.display='';}
+    if(canPerf){var el=document.getElementById('nav-performance');if(el)el.style.display='';document.getElementById('nav-admin-section').style.display='';}
   }
   // Load data
   await loadAllUsersCache();
@@ -1115,20 +1125,27 @@ function toggleTaskAssignType(){
   document.getElementById('task_dept_wrap').style.display=t==='dept'?'':'none';
 }
 async function openTaskModal(){
+  var canCross=currentUser.role==='admin'||currentUser.can_assign_task_cross;
+  var canDept=currentUser.role==='admin'||currentUser.can_assign_task_dept||currentUser.can_assign_task_cross;
+  if(!canDept){toast('No permission to assign tasks','error');return;}
   document.getElementById('task_title').value='';document.getElementById('task_desc').value='';
   document.getElementById('task_plate').value='';document.getElementById('task_vehicle_model').value='';
   document.getElementById('task_due').value='';document.getElementById('task_type').value='general';
   document.getElementById('task_priority').value='normal';document.getElementById('task_assign_type').value='person';
   toggleTaskAssignType();
-  // Populate assignee
   var sel=document.getElementById('task_assignee');sel.innerHTML='';
-  allUsers.filter(function(u){return u.is_active!==false;}).forEach(function(u){
-    var opt=document.createElement('option');opt.value=u.username;opt.textContent=(u.display_name||u.username)+' ('+u.role+')';sel.appendChild(opt);
+  var users=canCross
+    ?allUsers.filter(function(u){return u.is_active!==false;})
+    :allUsers.filter(function(u){return u.is_active!==false&&u.department===currentUser.department;});
+  users.forEach(function(u){
+    var opt=document.createElement('option');opt.value=u.username;
+    opt.textContent=(u.display_name||u.username)+(u.department?' ('+u.department+')':'');
+    sel.appendChild(opt);
   });
-  // Populate departments
   await loadAllDepts();
   var dsel=document.getElementById('task_dept_id');dsel.innerHTML='<option value="">Select department...</option>';
-  allDepts.forEach(function(d){var o=document.createElement('option');o.value=d.id;o.textContent=d.name;dsel.appendChild(o);});
+  var depts=canCross?allDepts:allDepts.filter(function(d){return d.name===currentUser.department;});
+  depts.forEach(function(d){var o=document.createElement('option');o.value=d.id;o.textContent=d.name;dsel.appendChild(o);});
   openModal('taskModal');
 }
 async function saveTask(){
@@ -1269,9 +1286,20 @@ async function markTodayAttendance(){document.getElementById('attDate').value=ne
 
 /* ══ PERFORMANCE ══ */
 async function loadPerformance(){
+  var canAll=currentUser.role==='admin'||currentUser.can_view_perf_all;
+  var canDept=canAll||currentUser.can_view_perf_dept;
   var days=parseInt(document.getElementById('perfPeriod').value)||30;
   var since=new Date(Date.now()-days*86400000).toISOString();
-  var tasks=await sbGet('tasks','status=eq.completed&completed_at=gte.'+since+'&select=assigned_to,task_type,completed_at');
+  var q='status=eq.completed&completed_at=gte.'+since+'&select=assigned_to,task_type,completed_at';
+  if(!canAll&&canDept&&currentUser.department){
+    // Filter by dept members
+    var deptMembers=allUsers.filter(function(u){return u.department===currentUser.department;}).map(function(u){return u.username;});
+    q+='&assigned_to=in.('+deptMembers.map(encodeURIComponent).join(',')+')';
+  } else if(!canAll&&!canDept){
+    // Own only
+    q+='&assigned_to=eq.'+encodeURIComponent(currentUser.username);
+  }
+  var tasks=await sbGet('tasks',q);
   // By user
   var byUser={};tasks.forEach(function(t){if(!t.assigned_to)return;byUser[t.assigned_to]=(byUser[t.assigned_to]||0)+1;});
   var maxVal=Math.max(1,...Object.values(byUser));
