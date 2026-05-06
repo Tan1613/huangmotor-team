@@ -686,7 +686,97 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <!-- ADMIN: USERS -->
       <div class="page" id="page-admin-users">
         <div class="page-title">👥 User Management</div>
-        <div class="page-sub">Manage staff accounts and departments</div>
+        <div class="page-sub">Create accounts and manage permissions</div>
+
+        <!-- Add User -->
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-title">Create New Account</div>
+          <div class="form-row">
+            <div class="form-field">
+              <label>Username</label>
+              <input type="text" id="nu_username" placeholder="e.g. ahmad">
+            </div>
+            <div class="form-field">
+              <label>Password</label>
+              <input type="password" id="nu_password" placeholder="Min. 8 characters">
+            </div>
+            <div class="form-field">
+              <label>Display Name</label>
+              <input type="text" id="nu_dispname" placeholder="Full name">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label>System Role</label>
+              <select id="nu_role" onchange="toggleUserModules()">
+                <option value="staff">Staff</option>
+                <option value="admin">Admin</option>
+                <option value="partner">Partner</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Department</label>
+              <select id="nu_dept">
+                <option value="">— No Department —</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Position</label>
+              <input type="text" id="nu_position" placeholder="e.g. Sales Executive">
+            </div>
+          </div>
+
+          <!-- Module permissions -->
+          <div id="nu_modules" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:.8rem">
+            <!-- Tools -->
+            <div style="border:1px solid var(--color-border-info,#1e3a5f);border-radius:8px;overflow:hidden">
+              <div style="background:#0d1e35;padding:8px 12px;display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="nu_tools" onchange="toggleNuPerms('tools',this.checked)">
+                <label for="nu_tools" style="font-size:13px;font-weight:600;color:#60a5fa;cursor:pointer;flex:1">🔧 Tools</label>
+                <span style="font-size:10px;color:#2a4a6a">tools.huangmotor.com</span>
+              </div>
+              <div id="nu_tools_perms" style="display:none;padding:8px 12px;flex-direction:column;gap:6px">
+                <div style="font-size:10px;color:#4a6fa5;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Edit permissions</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_pl"> Edit Pricelist</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_gen"> Edit Generator</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_mf"> Edit Max Finance</label>
+                <div style="height:1px;background:#1e2d45;margin:2px 0"></div>
+                <div style="font-size:10px;color:#4a6fa5;font-weight:600;text-transform:uppercase;letter-spacing:.05em">View restriction</div>
+                <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--color-text-primary)">
+                  <input type="checkbox" id="nu_viewer" style="margin-top:2px">
+                  <span>Viewer Mode<span style="display:block;font-size:10px;color:#4a6fa5">Limits visible fields in Pricelist & Calculator</span></span>
+                </label>
+              </div>
+            </div>
+            <!-- Team -->
+            <div style="border:1px solid #1a3a1a;border-radius:8px;overflow:hidden">
+              <div style="background:#0d2318;padding:8px 12px;display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="nu_team" onchange="toggleNuPerms('team',this.checked)">
+                <label for="nu_team" style="font-size:13px;font-weight:600;color:#34d399;cursor:pointer;flex:1">👥 Team</label>
+                <span style="font-size:10px;color:#1a3a1a">team.huangmotor.com</span>
+              </div>
+              <div id="nu_team_perms" style="display:none;padding:8px 12px;flex-direction:column;gap:6px">
+                <div style="font-size:10px;color:#4a6fa5;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Tasks</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_task_dept"> Assign tasks (own dept)</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_task_cross"> Assign tasks (cross-dept)</label>
+                <div style="height:1px;background:#1e2d45;margin:2px 0"></div>
+                <div style="font-size:10px;color:#4a6fa5;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Attendance</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_attendance"> View attendance</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_leave"> Approve leave</label>
+                <div style="height:1px;background:#1e2d45;margin:2px 0"></div>
+                <div style="font-size:10px;color:#4a6fa5;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Performance</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_perf_own" checked> View own performance</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_perf_dept"> View dept performance</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-primary)"><input type="checkbox" id="nu_perf_all"> View all performance</label>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+            <button class="btn primary" onclick="createUser()">+ Create Account</button>
+          </div>
+        </div>
+
+        <!-- User list -->
         <div id="adminUserList"></div>
       </div>
 
@@ -761,6 +851,7 @@ async function sbDelete(table,match){
 }
 
 function esc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+async function sha256(msg){var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(msg));return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');}
 function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(type||'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2500);}
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
@@ -823,7 +914,7 @@ async function afterLogin(){
   var badge=document.getElementById('tbBadge');
   badge.textContent=currentUser.role;badge.className='tb-badge '+(currentUser.role||'staff');
   // Admin nav
-  if(isAdminOrSuper()){
+  if(currentUser.role==='admin'){
     ['nav-admin-section','nav-admin-tasks','nav-admin-dept','nav-admin-leave','nav-admin-attendance','nav-performance','nav-admin-users'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
     document.getElementById('newAnnBtn').style.display='';
   } else {
@@ -1325,22 +1416,161 @@ async function loadPerformance(){
   document.getElementById('perfTypes').innerHTML=typeHTML||'<div class="empty-state"><p>No data</p></div>';
 }
 
-/* ══ ADMIN USERS ══ */
+/* ══ USER MANAGEMENT ══ */
+function toggleUserModules(){
+  var role=document.getElementById('nu_role').value;
+  document.getElementById('nu_modules').style.display=role==='staff'?'grid':'none';
+}
+function toggleNuPerms(mod,checked){
+  var el=document.getElementById('nu_'+mod+'_perms');
+  if(el)el.style.display=checked?'flex':'none';
+}
+
+async function createUser(){
+  var u=document.getElementById('nu_username').value.trim();
+  var p=document.getElementById('nu_password').value;
+  var r=document.getElementById('nu_role').value;
+  if(!u||!p){toast('Username and password required','error');return;}
+  if(p.length<6){toast('Password too short (min 6 chars)','error');return;}
+  var hash=await sha256(p);
+  var isAdmin=r==='admin';
+  var dept=document.getElementById('nu_dept').value;
+  var data={
+    username:u,password_hash:hash,role:r,is_active:true,
+    display_name:document.getElementById('nu_dispname').value.trim()||null,
+    position:document.getElementById('nu_position').value.trim()||null,
+    department:dept||null,
+    can_access_tools:isAdmin||document.getElementById('nu_tools').checked,
+    can_access_team:isAdmin||document.getElementById('nu_team').checked,
+    can_access_partner:false,
+    can_edit_pricelist:isAdmin||document.getElementById('nu_pl').checked,
+    can_edit_generator:isAdmin||document.getElementById('nu_gen').checked,
+    can_edit_mf:isAdmin||document.getElementById('nu_mf').checked,
+    is_viewer_mode:!isAdmin&&document.getElementById('nu_viewer').checked,
+    can_assign_task_dept:isAdmin||document.getElementById('nu_task_dept').checked,
+    can_assign_task_cross:isAdmin||document.getElementById('nu_task_cross').checked,
+    can_view_attendance:isAdmin||document.getElementById('nu_attendance').checked,
+    can_approve_leave:isAdmin||document.getElementById('nu_leave').checked,
+    can_view_perf_own:true,
+    can_view_perf_dept:isAdmin||document.getElementById('nu_perf_dept').checked,
+    can_view_perf_all:isAdmin||document.getElementById('nu_perf_all').checked
+  };
+  var res=await sbPost('users',data);
+  if(res){
+    // Reset form
+    ['nu_username','nu_password','nu_dispname','nu_position'].forEach(function(id){document.getElementById(id).value='';});
+    ['nu_tools','nu_team','nu_pl','nu_gen','nu_mf','nu_viewer','nu_task_dept','nu_task_cross','nu_attendance','nu_leave','nu_perf_dept','nu_perf_all'].forEach(function(id){document.getElementById(id).checked=false;});
+    document.getElementById('nu_perf_own').checked=true;
+    document.getElementById('nu_tools_perms').style.display='none';
+    document.getElementById('nu_team_perms').style.display='none';
+    document.getElementById('nu_role').value='staff';
+    document.getElementById('nu_modules').style.display='grid';
+    toast('Account "'+u+'" created','success');
+    await loadAllUsersCache();
+    await loadAdminUsers();
+  } else {toast('Failed — username may already exist','error');}
+}
+
 async function loadAdminUsers(){
-  var users=await sbGet('users','select=username,display_name,role,department,is_active&order=username.asc');
-  var deptLabels={admin:'👑 Admin',supervisor:'🔷 Supervisor',clerk:'📄 Clerk',technician:'🔧 Technician',sales:'🚗 Sales',general:'—'};
-  var deptOptions=['admin','supervisor','clerk','technician','sales','general'].map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');
-  document.getElementById('adminUserList').innerHTML=users.map(function(u){
-    return '<div class="user-row">'
-      +'<div class="user-row-name">'+(esc(u.display_name)||esc(u.username))+'<span style="font-size:10px;color:#4a6fa5;margin-left:5px">@'+esc(u.username)+'</span></div>'
-      +'<span class="user-row-role tb-badge '+(u.role||'staff')+'">'+esc(u.role||'staff')+'</span>'
-      +'<select onchange="updateUserDept(\''+u.username+'\',this.value)" class="btn" style="padding:3px 7px;font-size:11px"><option value="">Dept</option>'+deptOptions.replace('value="'+(u.department||'general')+'"','value="'+(u.department||'general')+'" selected')+'</select>'
+  await loadAllUsersCache();
+  // Populate dept dropdown
+  await loadAllDepts();
+  var dsel=document.getElementById('nu_dept');
+  dsel.innerHTML='<option value="">— No Department —</option>';
+  allDepts.forEach(function(d){var o=document.createElement('option');o.value=d.name;o.textContent=d.name;dsel.appendChild(o);});
+
+  if(!allUsers.length){document.getElementById('adminUserList').innerHTML='<div class="empty-state"><p>No users found</p></div>';return;}
+  var html=allUsers.map(function(u){
+    var isAdm=u.role==='admin';
+    var mods=[];
+    if(isAdm||u.can_access_tools)mods.push('<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:#0d1e35;color:#60a5fa">Tools</span>');
+    if(isAdm||u.can_access_team)mods.push('<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:#0d2318;color:#34d399">Team</span>');
+    return '<div class="user-row" style="flex-wrap:wrap">'
+      +'<div class="user-row-name">'
+      +(esc(u.display_name)||esc(u.username))
+      +'<span style="font-size:10px;color:#4a6fa5;margin-left:5px">@'+esc(u.username)+'</span>'
+      +(u.department?'<span style="font-size:10px;color:#6b8ab0;margin-left:5px">· '+esc(u.department)+'</span>':'')
+      +'</div>'
+      +'<div style="display:flex;gap:4px;align-items:center">'+mods.join('')+'</div>'
+      +'<span class="user-row-role tb-badge '+(u.role||'staff')+'">'+esc(u.role)+'</span>'
       +'<span style="font-size:10px;color:'+(u.is_active!==false?'#34d399':'#f87171')+'">'+(u.is_active!==false?'Active':'Disabled')+'</span>'
+      +'<div style="display:flex;gap:4px;margin-left:auto">'
+      +'<button class="btn sm" onclick="editUser(\''+esc(u.username)+'\')">Edit</button>'
+      +(u.username!==currentUser.username?'<button class="btn sm" onclick="toggleActive(\''+esc(u.username)+'\','+(u.is_active!==false?'false':'true')+')">'+(u.is_active!==false?'Disable':'Enable')+'</button>':'')
+      +(u.username!==currentUser.username?'<button class="btn sm" onclick="resetPw(\''+esc(u.username)+'\')">Reset PW</button>':'')
+      +(u.username!==currentUser.username&&isAdm===false?'<button class="btn sm danger" onclick="removeUser(\''+esc(u.username)+'\')">Delete</button>':'')
+      +'</div>'
       +'</div>';
   }).join('');
+  document.getElementById('adminUserList').innerHTML=html;
 }
-async function updateUserDept(username,dept){
-  await sbPatch('users',{username:username},{department:dept});toast(username+' → '+dept,'success');
+
+async function toggleActive(username,active){
+  await sbPatch('users',{username:username},{is_active:active==='true'||active===true});
+  toast(username+' '+(active===true||active==='true'?'enabled':'disabled'),'success');
+  await loadAdminUsers();
+}
+async function resetPw(username){
+  var np=prompt('New password for "'+username+'":');
+  if(!np||np.length<6){if(np!==null)toast('Password too short','error');return;}
+  var hash=await sha256(np);
+  await sbPatch('users',{username:username},{password_hash:hash,failed_attempts:0,locked_until:null});
+  toast('Password reset for "'+username+'"','success');
+}
+async function removeUser(username){
+  if(!confirm('Permanently delete "'+username+'"?\nThis cannot be undone.'))return;
+  await sbDelete('users',{username:username});
+  toast('User deleted','success');
+  await loadAllUsersCache();
+  await loadAdminUsers();
+}
+async function editUser(username){
+  var rows=await sbGet('users','username=eq.'+encodeURIComponent(username)+'&select=*');
+  if(!rows.length)return;
+  var u=rows[0];var isAdm=u.role==='admin';
+  var ck=function(f){return u[f]?'checked':''};
+  var body='<div style="font-size:13px;font-weight:600;margin-bottom:12px">Edit: <span style="color:#60a5fa">@'+esc(username)+'</span>'+(isAdm?' <span style="font-size:10px;color:#fbbf24">(Admin — all permissions)</span>':'')+'</div>'
+    +'<div class="form-row" style="margin-bottom:10px">'
+    +'<div class="form-field"><label>Display Name</label><input type="text" id="eu_name" value="'+esc(u.display_name||'')+'" '+(isAdm?'':'')+'></div>'
+    +'<div class="form-field"><label>Position</label><input type="text" id="eu_pos" value="'+esc(u.position||'')+'" '+(currentUser.role==='admin'?'':'readonly')+' style="opacity:'+(currentUser.role==='admin'?'1':'.5')+'"></div>'
+    +'</div>';
+  if(!isAdm){
+    var mkSec=function(title,color,items){
+      return '<div style="border:1px solid '+color+'33;border-radius:8px;overflow:hidden;margin-bottom:8px">'
+        +'<div style="background:'+color+'11;padding:6px 10px;font-size:11px;font-weight:600;color:'+color+'">'+title+'</div>'
+        +'<div style="padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:5px">'
+        +items.map(function(item){return '<label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="eu_'+item[0]+'" '+ck(item[0])+'>'+item[1]+'</label>';}).join('')
+        +'</div></div>';
+    };
+    body+=mkSec('Tools Access','#60a5fa',[['can_access_tools','Access Tools'],['can_edit_pricelist','Edit Pricelist'],['can_edit_generator','Edit Generator'],['can_edit_mf','Edit Max Finance'],['is_viewer_mode','Viewer Mode']]);
+    body+=mkSec('Team Access','#34d399',[['can_access_team','Access Team'],['can_assign_task_dept','Assign Tasks (Dept)'],['can_assign_task_cross','Assign Tasks (Cross)'],['can_view_attendance','View Attendance'],['can_approve_leave','Approve Leave'],['can_view_perf_own','View Own Perf'],['can_view_perf_dept','View Dept Perf'],['can_view_perf_all','View All Perf']]);
+  }
+  body+='<div class="form-actions">'
+    +'<button class="btn" onclick="closeModal(\'taskDetailModal\')">Cancel</button>'
+    +'<button class="btn primary" onclick="saveEditUser(\''+esc(username)+'\','+isAdm+')">Save</button>'
+    +'</div>';
+  document.getElementById('taskDetailBody').innerHTML=body;
+  openModal('taskDetailModal');
+}
+async function saveEditUser(username,isAdm){
+  var data={
+    display_name:document.getElementById('eu_name').value.trim()||null,
+    position:(currentUser.role==='admin'?document.getElementById('eu_pos').value.trim():undefined)
+  };
+  if(!isAdm){
+    ['can_access_tools','can_edit_pricelist','can_edit_generator','can_edit_mf','is_viewer_mode',
+     'can_access_team','can_assign_task_dept','can_assign_task_cross','can_view_attendance',
+     'can_approve_leave','can_view_perf_own','can_view_perf_dept','can_view_perf_all'].forEach(function(f){
+      var el=document.getElementById('eu_'+f);if(el)data[f]=el.checked;
+    });
+  }
+  // Remove undefined
+  Object.keys(data).forEach(function(k){if(data[k]===undefined)delete data[k];});
+  await sbPatch('users',{username:username},data);
+  closeModal('taskDetailModal');
+  toast('Saved','success');
+  await loadAllUsersCache();
+  await loadAdminUsers();
 }
 
 /* ══ PROFILE ══ */
