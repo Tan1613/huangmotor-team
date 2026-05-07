@@ -246,6 +246,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .chat-send-btn{padding:8px 14px;background:#1d4ed8;border:none;border-radius:8px;color:#fff;font-size:13px;cursor:pointer;flex-shrink:0}
 .chat-img-btn{padding:8px;background:#1e2d45;border:none;border-radius:8px;color:#93c5fd;font-size:14px;cursor:pointer;flex-shrink:0}
 .chat-img-preview{max-width:120px;max-height:80px;border-radius:6px;margin-bottom:4px;display:block}
+@media(max-width:768px){
   .main{flex-direction:column}
   .sidebar{width:100%;height:auto;flex-direction:row;overflow-x:auto;padding:.4rem .5rem;border-right:none;border-bottom:1px solid #1e2d45;flex-shrink:0}
   .nav-section{display:none}
@@ -1629,10 +1630,11 @@ async function loadMyLeave(){
     +'</div></div>';
 
   var listHtml=rows.length?rows.map(function(r){
-    var d2=Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
+    var d2=r.is_half_day?0.5:Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
+    var halfLabel=r.is_half_day?(' <span style="background:#1e2d45;color:#93c5fd;font-size:10px;padding:1px 6px;border-radius:4px">'+(r.half_day_session==='am'?'½ Morning AM':'½ Afternoon PM')+'</span>'):'';
     return '<div class="leave-item">'
       +'<div class="leave-info">'
-      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> '+fmtDate(r.start_date)+' → '+fmtDate(r.end_date)+' <span style="font-size:11px;color:#4a6fa5">('+d2+' day'+(d2>1?'s':'')+')</span></div>'
+      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> '+fmtDate(r.start_date)+(r.is_half_day?'':' → '+fmtDate(r.end_date))+halfLabel+' <span style="font-size:11px;color:#4a6fa5">('+d2+' day'+(d2>1?'s':'')+')</span></div>'
       +'<div class="leave-dates">'+(r.reason?esc(r.reason):'-')+'</div>'
       +'</div><div class="leave-status '+r.status+'">'+r.status+'</div></div>';
   }).join(''):'<div class="empty-state"><div class="icon">🌴</div><p>No leave applications yet</p></div>';
@@ -1642,27 +1644,30 @@ async function loadMyLeave(){
 
 async function submitLeave(){
   var s=document.getElementById('leave_start').value;
+  var leaveType=document.getElementById('leave_type').value;
   var half=document.getElementById('leave_half').value;
   var e=half!=='no'?s:document.getElementById('leave_end').value;
   if(!s){toast('Please select a date','error');return;}
   if(half==='no'&&!e){toast('Please select end date','error');return;}
-  // Check min advance days
-  if(currentUser.role!=='admin'){
+  // Emergency and medical are exempt from advance notice
+  var exemptTypes=['emergency','medical'];
+  if(currentUser.role!=='admin'&&exemptTypes.indexOf(leaveType)<0){
     var cfg=await sbGet('leave_config','key=eq.min_advance_days&select=value');
     var minAdv=cfg.length?parseInt(cfg[0].value):1;
     var daysAhead=Math.round((new Date(s)-new Date())/86400000);
-    if(daysAhead<minAdv){toast('Must apply at least '+minAdv+' day'+(minAdv>1?'s':'')+' in advance','error');return;}
+    if(daysAhead<minAdv){toast('Must apply at least '+minAdv+' day'+(minAdv>1?'s':'')+' in advance\n(Emergency & Medical are exempt)','error');return;}
   }
   await sbPost('leave_requests',{
     username:currentUser.username,
-    leave_type:document.getElementById('leave_type').value,
+    leave_type:leaveType,
     start_date:s,end_date:e,
     reason:document.getElementById('leave_reason').value.trim(),
     status:'pending',
     is_half_day:half!=='no',
     half_day_session:half!=='no'?half:null
   });
-  closeModal('leaveModal');loadMyLeave();toast('Leave application submitted','success');
+  closeModal('leaveModal');loadMyLeave();
+  toast('Leave submitted'+(half!=='no'?' (Half day — '+(half==='am'?'Morning AM':'Afternoon PM')+')':''),'success');
 }
 
 async function loadAllLeave(){
@@ -1679,10 +1684,11 @@ async function loadAllLeave(){
   if(!rows.length){document.getElementById('adminLeaveList').innerHTML='<div class="empty-state"><div class="icon">📋</div><p>No leave requests</p></div>';return;}
   document.getElementById('adminLeaveList').innerHTML=rows.map(function(r){
     var isPending=r.status==='pending';
-    var days2=Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
+    var days2=r.is_half_day?0.5:Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
+    var halfLbl=r.is_half_day?' <span style="font-size:10px;color:#93c5fd">'+(r.half_day_session==='am'?'½AM':'½PM')+'</span>':'';
     return '<div class="leave-item">'
       +'<div class="leave-info">'
-      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> <b>'+esc(r.username)+'</b> — '+fmtDate(r.start_date)+' to '+fmtDate(r.end_date)+' <span style="font-size:11px;color:#4a6fa5">('+days2+' day'+(days2>1?'s':'')+')</span></div>'
+      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> <b>'+esc(r.username)+'</b> — '+fmtDate(r.start_date)+(r.is_half_day?'':' to '+fmtDate(r.end_date))+halfLbl+' <span style="font-size:11px;color:#4a6fa5">('+days2+' day'+(days2>1?'s':'')+')</span></div>'
       +'<div class="leave-dates">'+(r.reason?esc(r.reason):'-')+'</div>'
       +'</div>'
       +'<div style="display:flex;gap:5px;align-items:center">'
@@ -1787,10 +1793,10 @@ function setAttToday(){
 }
 async function loadAttendance(){
   var date=document.getElementById('attDate').value;if(!date)return;
+  var canEdit=currentUser.role==='admin'||currentUser.can_view_attendance;
   document.getElementById('attDateLabel').textContent='Attendance — '+fmtDate(date);
   var recs=await sbGet('attendance','date=eq.'+date+'&select=*');
   var recMap={};recs.forEach(function(r){recMap[r.username]=r;});
-  // Load approved leave for this date
   var leaves=await sbGet('leave_requests','start_date=lte.'+date+'&end_date=gte.'+date+'&status=eq.approved&select=username');
   var onLeave=new Set(leaves.map(function(l){return l.username;}));
   var users=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});
@@ -1804,22 +1810,25 @@ async function loadAttendance(){
       {in:rec.check_in_3,out:rec.check_out_3}
     ];
     var sessHtml=sessions.map(function(s,i){
+      var disabled=!canEdit||st==='leave'||st==='holiday'?'disabled':'';
       return '<div style="display:flex;align-items:center;gap:4px;font-size:11px">'
         +'<span style="color:#4a6fa5;min-width:14px">S'+(i+1)+'</span>'
-        +'<input type="time" value="'+(s.in?fmtTime(s.in):'')+'" onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'in\','+(i+1)+',this.value)" style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px" '+(st==='leave'||st==='holiday'?'disabled':'')+'>'
+        +'<input type="time" value="'+(s.in?fmtTime(s.in):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'in\','+(i+1)+',this.value)"':'')+' '+disabled+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
         +'<span style="color:#2a4a6a">→</span>'
-        +'<input type="time" value="'+(s.out?fmtTime(s.out):'')+'" onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'out\','+(i+1)+',this.value)" style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px" '+(st==='leave'||st==='holiday'?'disabled':'')+'>'
+        +'<input type="time" value="'+(s.out?fmtTime(s.out):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'out\','+(i+1)+',this.value)"':'')+' '+disabled+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
         +'</div>';
     }).join('');
     return '<div class="att-row" style="flex-wrap:wrap;gap:8px">'
       +'<div class="att-status-dot '+(st==='present'?'present':st==='leave'?'leave':st==='holiday'?'holiday':'absent')+'"></div>'
       +'<div class="att-name">'+(esc(u.display_name)||esc(u.username))+'</div>'
-      +'<select onchange="updateAttStatus(\''+u.username+'\',\''+date+'\',this.value)" class="btn" style="padding:3px 7px;font-size:11px">'
-      +'<option value="present"'+(st==='present'?' selected':'')+'>Present</option>'
-      +'<option value="absent"'+(st==='absent'?' selected':'')+'>Absent</option>'
-      +'<option value="leave"'+(st==='leave'?' selected':'')+'>Leave</option>'
-      +'<option value="holiday"'+(st==='holiday'?' selected':'')+'>Holiday</option>'
-      +'</select>'
+      +(canEdit
+        ?'<select onchange="updateAttStatus(\''+u.username+'\',\''+date+'\',this.value)" class="btn" style="padding:3px 7px;font-size:11px">'
+          +'<option value="present"'+(st==='present'?' selected':'')+'>Present</option>'
+          +'<option value="absent"'+(st==='absent'?' selected':'')+'>Absent</option>'
+          +'<option value="leave"'+(st==='leave'?' selected':'')+'>Leave</option>'
+          +'<option value="holiday"'+(st==='holiday'?' selected':'')+'>Holiday</option>'
+          +'</select>'
+        :'<span class="task-status '+(st==='present'?'in_progress':st==='leave'?'accepted':'pending')+'">'+st+'</span>')
       +'<div style="display:flex;flex-direction:column;gap:3px">'+sessHtml+'</div>'
       +'</div>';
   }).join('');
