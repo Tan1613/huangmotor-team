@@ -274,17 +274,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .cards-grid{grid-template-columns:1fr}
   .page-title{font-size:15px}
 }
-#mobileNav{display:none;position:fixed;bottom:0;left:0;right:0;height:60px;background:#111827;border-top:1px solid #1e2d45;z-index:200;justify-content:space-around;align-items:center;padding:0 4px;box-shadow:0 -4px 20px rgba(0,0,0,.3)}
-.mob-nav-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;cursor:pointer;color:#4a6fa5;border-radius:8px;min-width:52px;border:none;background:none;font-size:9px;transition:color .15s;-webkit-tap-highlight-color:transparent}
+#mobileNav{display:none;position:fixed;bottom:0;left:0;right:0;height:60px;background:#111827;border-top:1px solid #1e2d45;z-index:1000;justify-content:space-around;align-items:center;padding:0 4px;box-shadow:0 -4px 20px rgba(0,0,0,.3)}
+.mob-nav-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;cursor:pointer;color:#4a6fa5;border-radius:8px;min-width:52px;border:none;background:none;font-size:9px;transition:color .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .mob-nav-btn.active{color:#60a5fa}
 .mob-nav-btn .mn-icon{font-size:22px;line-height:1}
 .mob-nav-btn .mn-badge{position:absolute;top:2px;right:6px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:0 4px;font-weight:700}
-#mobileMoreDrawer{display:none;position:fixed;bottom:60px;left:0;right:0;background:#111827;border-top:1px solid #1e2d45;z-index:199;flex-direction:column;padding:.5rem .7rem;max-height:65vh;overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,.5)}
-.more-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;color:#6b8ab0;font-size:13px;-webkit-tap-highlight-color:transparent}
+#mobileMoreDrawer{display:none;position:fixed;bottom:60px;left:0;right:0;background:#111827;border-top:1px solid #1e2d45;z-index:999;flex-direction:column;padding:.5rem .7rem;max-height:65vh;overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,.5)}
+.more-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;color:#6b8ab0;font-size:13px;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 .more-item:active,.more-item.active{background:#1e2d45;color:#f0f6fc}
 .more-item .mi-icon{font-size:18px;width:24px;text-align:center}
 .more-section{font-size:10px;color:#2a4a6a;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:8px 12px 2px}
-.drawer-overlay{display:none;position:fixed;inset:0;bottom:60px;z-index:198;background:rgba(0,0,0,.3)}
+.drawer-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:60px;z-index:998;background:rgba(0,0,0,.3)}
 .drawer-overlay.open{display:block}
 </style>
 </head>
@@ -868,6 +868,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <div class="page-sub">Assign and monitor all tasks</div>
           </div>
           <button class="btn primary" onclick="openTaskModal()">+ Assign Task</button>
+          <button class="btn" id="trashToggleBtn" onclick="toggleTrash()">🗑️ Trash</button>
         </div>
         <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
           <select class="btn" id="adminTaskFilter" onchange="loadAllTasks()">
@@ -1328,15 +1329,23 @@ async function afterLogin(){
     document.getElementById('newAnnBtn').style.display='';
     showAdminMobileNav();
   } else {
-    // Show nav based on individual permissions
     var canTask=currentUser.can_assign_task_dept||currentUser.can_assign_task_cross;
     var canAtt=currentUser.can_view_attendance;
     var canLeave=currentUser.can_approve_leave;
-    var canPerf=currentUser.can_view_perf_dept||currentUser.can_view_perf_all;
-    if(canTask){var el=document.getElementById('nav-admin-tasks');if(el)el.style.display='';document.getElementById('nav-admin-section').style.display='';}
-    if(canAtt){var el=document.getElementById('nav-admin-attendance');if(el)el.style.display='';document.getElementById('nav-admin-section').style.display='';}
-    if(canLeave){var el=document.getElementById('nav-admin-leave');if(el)el.style.display='';document.getElementById('nav-admin-section').style.display='';}
-    if(canPerf){var el=document.getElementById('nav-performance');if(el)el.style.display='';document.getElementById('nav-admin-section').style.display='';}
+    var canPerf=currentUser.can_view_perf_own||currentUser.can_view_perf_dept||currentUser.can_view_perf_all;
+    var anyAdmin=canTask||canAtt||canLeave||canPerf;
+    if(canTask){['nav-admin-tasks','nav-admin-section'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});}
+    if(canAtt){['nav-admin-attendance','nav-admin-section'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});}
+    if(canLeave){['nav-admin-leave','nav-admin-section'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});}
+    if(canPerf){
+      ['nav-performance'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
+      // Show in mobile more drawer too
+      var mnPerf=document.getElementById('mn-performance');if(mnPerf)mnPerf.style.display='';
+      var mnSec=document.getElementById('mnAdminSection');if(mnSec)mnSec.style.display='';
+    }
+    if(anyAdmin){
+      var mnSec2=document.getElementById('mnAdminSection');if(mnSec2)mnSec2.style.display='';
+    }
   }
   // Load data
   await loadAllUsersCache();
@@ -1595,7 +1604,7 @@ async function loadMyTasks(){
   // Highlight active filter
   document.querySelectorAll('[id^="tf-"]').forEach(function(b){b.classList.remove('primary');});
   var ab=document.getElementById('tf-'+taskFilter);if(ab)ab.classList.add('primary');
-  var q='order=created_at.desc&select=*';
+  var q='order=created_at.desc&select=*&deleted_at=is.null';
   if(taskFilter!=='all')q+='&status=eq.'+taskFilter;
   var all=await sbGet('tasks',q);
   var tasks=all.filter(function(t){
@@ -1613,15 +1622,21 @@ function filterTasks(f){
   var btn=document.getElementById('tf-'+f);if(btn)btn.classList.add('primary');
   loadMyTasks();
 }
+var showTrash=false;
 async function loadAllTasks(){
   var fStatus=document.getElementById('adminTaskFilter').value;
   var fType=document.getElementById('adminTaskTypeFilter').value;
   var q='order=created_at.desc';
+  if(showTrash){q+='&deleted_at=not.is.null';}
+  else{q+='&deleted_at=is.null';}
   if(fStatus!=='all')q+='&status=eq.'+fStatus;
   if(fType!=='all')q+='&task_type=eq.'+fType;
   var tasks=await sbGet('tasks',q);
+  var trashBtn=document.getElementById('trashToggleBtn');
+  if(trashBtn)trashBtn.textContent=showTrash?'📋 Active Tasks':'🗑️ Trash';
   renderTaskList(tasks,document.getElementById('adminTaskList'),true);
 }
+function toggleTrash(){showTrash=!showTrash;loadAllTasks();}
 function renderTaskList(tasks,container,isAdmin){
   if(!tasks.length){container.innerHTML='<div class="empty-state"><div class="icon">✅</div><p>No tasks found</p></div>';return;}
   var typeLabels={sale:'🚗 Sale',maintenance:'🔧 Maintenance',aftersales:'🛠️ After-Sales',general:'📋 General'};
@@ -1644,7 +1659,8 @@ function renderTaskList(tasks,container,isAdmin){
       +(notes.length?'<span style="font-size:11px;color:#4a6fa5">'+notes.length+' note'+(notes.length>1?'s':'')+'</span>':'')
       +'<div style="margin-left:auto;display:flex;gap:5px">'
       +'<button class="btn sm" onclick="openTaskDetail('+t.id+')">View</button>'
-      +(isAdmin&&t.status!=='completed'?'<button class="btn sm danger" onclick="deleteTask('+t.id+')">Delete</button>':'')
+      +(isAdmin&&!t.deleted_at?'<button class="btn sm danger" onclick="deleteTask('+t.id+')">🗑️</button>':'')
+      +(isAdmin&&t.deleted_at?'<button class="btn sm success" onclick="restoreTask('+t.id+')">↩ Restore</button>':'')
       +'</div></div>'
       +'</div>';
   }).join('');
@@ -1766,11 +1782,11 @@ async function cancelSaleTask(taskId,saleId){
   var reason=prompt('Please provide a reason for cancellation:');
   if(reason===null)return;
   if(!reason.trim()){toast('Cancellation reason required','error');return;}
-  // Cancel the task
   await sbPatch('tasks',{id:taskId},{status:'cancelled',updated_at:new Date().toISOString()});
-  // Update sale record
+  await sbPost('change_log',{username:currentUser.username,action:'cancel_sale_task',table_name:'tasks',record_id:String(taskId),after_data:{reason:reason.trim(),by:currentUser.username}});
   if(saleId){
     await sbPatch('sales_records',{id:saleId},{status:'cancelled',cancel_reason:reason.trim(),updated_at:new Date().toISOString()});
+    await sbPost('change_log',{username:currentUser.username,action:'cancel_sale',table_name:'sales_records',record_id:String(saleId),after_data:{reason:reason.trim(),by:currentUser.username}});
   }
   toast('Sale cancelled','success');
   closeModal('taskDetailModal');
@@ -1797,7 +1813,17 @@ async function updateTaskStatus(taskId,status){
   if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
   loadDashboard();
 }
-async function deleteTask(id){if(!confirm('Delete this task?'))return;await sbDelete('tasks',{id:id});loadAllTasks();toast('Task deleted');}
+async function deleteTask(id){
+  if(!confirm('Move task to trash? Admin can restore it.'))return;
+  await sbPatch('tasks',{id:id},{deleted_at:new Date().toISOString(),deleted_by:currentUser.username,updated_at:new Date().toISOString()});
+  await sbPost('change_log',{username:currentUser.username,action:'delete_task',table_name:'tasks',record_id:String(id),after_data:{deleted_by:currentUser.username}});
+  loadAllTasks();toast('Task moved to trash','success');
+}
+async function restoreTask(id){
+  await sbPatch('tasks',{id:id},{deleted_at:null,deleted_by:null,updated_at:new Date().toISOString()});
+  await sbPost('change_log',{username:currentUser.username,action:'restore_task',table_name:'tasks',record_id:String(id),after_data:{restored_by:currentUser.username}});
+  loadAllTasks();toast('Task restored','success');
+}
 
 function toggleTaskAssignType(){
   var t=document.getElementById('task_assign_type').value;
@@ -2093,9 +2119,12 @@ async function loadAttendance(){
         +'<input type="time" value="'+(s.out?fmtTime(s.out):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'out\','+(i+1)+',this.value)"':'')+' '+disabled+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
         +'</div>';
     }).join('');
-    return '<div class="att-row" style="flex-wrap:wrap;gap:8px">'
+    var photos=[rec.checkin_photo,rec.checkin_photo_2,rec.checkin_photo_3].filter(Boolean);
+    var photoHtml=canEdit&&photos.length?'<div style="display:flex;gap:4px;margin-top:4px">'+photos.map(function(p,i){
+      return '<img src="'+p+'" onclick="viewFullImg(this.src)" title="S'+(i+1)+' photo" style="width:36px;height:36px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid #1e2d45">';
+    }).join('')+'</div>':'';
       +'<div class="att-status-dot '+(st==='present'?'present':st==='leave'?'leave':st==='holiday'?'holiday':'absent')+'"></div>'
-      +'<div class="att-name">'+(esc(u.display_name)||esc(u.username))+'</div>'
+      +'<div style="flex:1;min-width:100px"><div class="att-name">'+(esc(u.display_name)||esc(u.username))+'</div>'+photoHtml+'</div>'
       +(canEdit
         ?'<select onchange="updateAttStatus(\''+u.username+'\',\''+date+'\',this.value)" class="btn" style="padding:3px 7px;font-size:11px">'
           +'<option value="present"'+(st==='present'?' selected':'')+'>Present</option>'
@@ -2920,6 +2949,14 @@ async function saveSale(){
     description:taskDesc
   });
   var taskId=task&&task.length?task[0].id:null;
+  // Auto start work for creator
+  if(taskId){
+    await sbPatch('tasks',{id:taskId},{
+      workers:[currentUser.username],
+      status:'in_progress',
+      progress_notes:[{username:currentUser.username,note:'▶ Sale created and started by '+(currentUser.display_name||currentUser.username),ts:new Date().toISOString()}]
+    });
+  }
   await sbPost('sales_records',{
     record_no:recNo,customer_name:cust,
     customer_phone:document.getElementById('sl_cust_phone').value,
@@ -3077,28 +3114,64 @@ async function loadCheckin(){
 async function doCheckIn(){
   var today=new Date().toISOString().slice(0,10);
   var photoFile=document.getElementById('checkinPhoto').files[0];
-  // Require GPS if no photo
-  if(!photoFile&&!checkinGPSCoords){
-    toast('GPS location required. Please allow location access or attach a photo.','error');
-    // Retry GPS
-    if(navigator.geolocation){
-      navigator.geolocation.getCurrentPosition(function(pos){
-        checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
-        var el=document.getElementById('checkinGPS');
-        if(el)el.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
-        toast('GPS acquired — tap Check In again','success');
-      },null,{enableHighAccuracy:true,timeout:8000});
+  var btn=document.getElementById('checkinBtn');
+  btn.disabled=true;btn.textContent='⏳ Processing...';
+  try{
+    if(!photoFile&&!checkinGPSCoords){
+      var gpsEl=document.getElementById('checkinGPS');
+      if(gpsEl)gpsEl.textContent='📍 Getting GPS...';
+      await new Promise(function(resolve,reject){
+        if(!navigator.geolocation){reject({code:99,message:'GPS not supported on this device'});return;}
+        navigator.geolocation.getCurrentPosition(function(pos){
+          checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
+          if(gpsEl)gpsEl.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
+          resolve();
+        },function(err){reject(err);},{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+      });
     }
-    return;
+    var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
+    var r=rec.length?rec[0]:{};
+    var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
+    if(!field){toast('All sessions recorded today','success');await loadCheckin();return;}
+    var data={};data[field]=new Date().toISOString();data.self_checkin=true;data.status='present';
+    var isIn=field.indexOf('out')<0;
+    if(checkinGPSCoords){data[isIn?'checkin_lat':'checkout_lat']=checkinGPSCoords.lat;data[isIn?'checkin_lng':'checkout_lng']=checkinGPSCoords.lng;}
+    if(photoFile&&isIn){
+      var b64=await compressPhoto(photoFile);
+      var pf=field==='check_in'?'checkin_photo':field==='check_in_2'?'checkin_photo_2':field==='check_in_3'?'checkin_photo_3':null;
+      if(pf)data[pf]=b64;
+    }
+    if(rec.length){await sbPatch('attendance',{username:currentUser.username,date:today},data);}
+    else{data.username=currentUser.username;data.date=today;await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});}
+    document.getElementById('checkinPhoto').value='';
+    toast('Recorded ✓','success');
+    await loadCheckin();
+  }catch(err){
+    var msg=err&&err.code===1?'❌ Location permission denied — enable GPS in browser settings':
+            err&&err.code===2?'❌ GPS signal unavailable — move outdoors or attach a photo':
+            err&&err.code===3?'❌ GPS timed out — try again or attach a photo':
+            '❌ '+(err&&err.message||'Error occurred');
+    toast(msg,'error');
+    await loadCheckin();
   }
-  var r=rec.length?rec[0]:{};
-  var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
-  if(!field){toast('All sessions recorded today','success');return;}
-  var data={};data[field]=new Date().toISOString();data.self_checkin=true;data.status='present';
-  if(checkinGPSCoords){var isIn=field.indexOf('out')<0;data[isIn?'checkin_lat':'checkout_lat']=checkinGPSCoords.lat;data[isIn?'checkin_lng':'checkout_lng']=checkinGPSCoords.lng;}
-  if(rec.length){await sbPatch('attendance',{username:currentUser.username,date:today},data);}
-  else{data.username=currentUser.username;data.date=today;await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});}
-  toast('Recorded ✓','success');await loadCheckin();
+}
+
+function compressPhoto(file){
+  return new Promise(function(resolve){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var c=document.createElement('canvas');
+        var s=Math.min(1,600/img.width);
+        c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        resolve(c.toDataURL('image/jpeg',0.6));
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 /* ══ TASK VISIBILITY ══ */
