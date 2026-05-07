@@ -488,6 +488,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="nav-item" onclick="openPage('leave')" id="nav-leave">
         <span class="nav-icon">🌴</span>Leave
       </div>
+      <div class="nav-item" onclick="openPage('my-attendance')" id="nav-my-attendance">
+        <span class="nav-icon">📊</span>My Attendance
+      </div>
       <div class="nav-section" id="nav-admin-section" style="display:none">Admin</div>
       <div class="nav-item" onclick="openPage('admin-tasks')" id="nav-admin-tasks" style="display:none">
         <span class="nav-icon">📊</span>All Tasks
@@ -568,15 +571,44 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
       <!-- CALENDAR -->
       <div class="page" id="page-calendar">
-        <div class="page-title">📅 Calendar</div>
-        <div class="page-sub">Tasks, leave and announcements</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <div>
+            <div class="page-title">📅 Calendar</div>
+            <div class="page-sub">Tasks, leave and public holidays</div>
+          </div>
+          <button class="btn sm primary" id="calAddHolidayBtn" onclick="openHolidayModal()" style="display:none">+ Holiday</button>
+        </div>
         <div class="card">
           <div class="cal-nav">
             <button class="btn sm" onclick="calPrev()">‹</button>
             <h3 id="calTitle"></h3>
             <button class="btn sm" onclick="calNext()">›</button>
           </div>
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--color-text-secondary);margin-bottom:8px;flex-wrap:wrap">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#0d2d1a;display:inline-block"></span>Task due</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1a0d2d;display:inline-block"></span>Approved leave</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#2d1a0d;display:inline-block"></span>Public holiday</span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1a1a2d;display:inline-block"></span>Rest day</span>
+          </div>
           <div class="cal-grid" id="calGrid"></div>
+        </div>
+      </div>
+
+      <!-- Holiday modal -->
+      <div class="modal-overlay" id="holidayModal">
+        <div class="modal" style="max-width:360px">
+          <div class="modal-hdr"><h3>📅 Add Holiday / Rest Day</h3><button class="btn sm" onclick="closeModal('holidayModal')">✕</button></div>
+          <div class="modal-body">
+            <div class="form-field"><label>Date</label><input type="date" id="hol_date"></div>
+            <div class="form-field"><label>Name</label><input type="text" id="hol_name" placeholder="e.g. Hari Raya Aidilfitri"></div>
+            <div class="form-field"><label>Type</label>
+              <select id="hol_type"><option value="public">Public Holiday</option><option value="rest">Rest Day</option></select>
+            </div>
+            <div class="form-actions">
+              <button class="btn" onclick="closeModal('holidayModal')">Cancel</button>
+              <button class="btn primary" onclick="saveHoliday()">Save</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -589,6 +621,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           </div>
           <button class="btn primary" onclick="openLeaveModal()">+ Apply Leave</button>
         </div>
+        <div id="leaveBalanceBar" style="margin-bottom:1rem"></div>
         <div id="leaveList"></div>
       </div>
 
@@ -647,16 +680,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="page" id="page-admin-leave">
         <div class="page-title">📋 Leave Approvals</div>
         <div class="page-sub">Review and approve leave requests</div>
+        <div class="card" style="margin-bottom:1rem" id="leaveConfigCard">
+          <div class="card-title">⚙ Leave Settings</div>
+          <div class="form-row" style="align-items:flex-end">
+            <div class="form-field">
+              <label>Minimum advance notice (days)</label>
+              <input type="number" id="leaveMinDays" min="0" max="30" value="1" style="width:120px">
+            </div>
+            <div class="form-field">
+              <label>Annual leave entitlement (days/year)</label>
+              <input type="number" id="leaveAnnualDays" min="0" max="60" value="14" style="width:120px">
+            </div>
+            <div class="form-field" style="padding-bottom:1rem">
+              <button class="btn primary" onclick="saveLeaveConfig()">Save Settings</button>
+            </div>
+          </div>
+        </div>
         <div id="adminLeaveList"></div>
       </div>
 
       <!-- ADMIN: ATTENDANCE -->
       <div class="page" id="page-admin-attendance">
-        <div class="page-title">🕐 Attendance</div>
-        <div class="page-sub" id="attDateLabel"></div>
-        <div style="display:flex;gap:6px;margin-bottom:1rem;align-items:center">
-          <input type="date" id="attDate" class="btn" style="padding:5px 10px" oninput="loadAttendance()">
-          <button class="btn sm primary" onclick="markTodayAttendance()">Mark Today</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <div>
+            <div class="page-title">🕐 Attendance</div>
+            <div class="page-sub" id="attDateLabel"></div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="date" id="attDate" class="btn" style="padding:5px 10px" oninput="loadAttendance()">
+            <button class="btn sm primary" onclick="setAttToday()">Today</button>
+          </div>
         </div>
         <div id="attList"></div>
       </div>
@@ -664,13 +717,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <!-- PERFORMANCE -->
       <div class="page" id="page-performance">
         <div class="page-title">📈 Performance</div>
-        <div class="page-sub">Team workload and task completion</div>
-        <div style="display:flex;gap:6px;margin-bottom:1rem">
+        <div class="page-sub">Task completion and workload</div>
+        <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
           <select class="btn" id="perfPeriod" onchange="loadPerformance()">
             <option value="7">Last 7 days</option>
             <option value="30" selected>Last 30 days</option>
             <option value="90">Last 90 days</option>
           </select>
+          <select class="btn" id="perfUser" onchange="loadPerformance()">
+            <option value="all">All Staff</option>
+          </select>
+          <select class="btn" id="perfType" onchange="loadPerformance()">
+            <option value="all">All Types</option>
+            <option value="sale">Sale</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="aftersales">After-Sales</option>
+            <option value="general">General</option>
+          </select>
+          <input type="date" id="perfFrom" class="btn" style="padding:5px 8px" oninput="loadPerformance()" placeholder="From">
+          <input type="date" id="perfTo" class="btn" style="padding:5px 8px" oninput="loadPerformance()" placeholder="To">
         </div>
         <div class="cards-grid" id="perfStats"></div>
         <div class="card">
@@ -680,6 +745,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="card">
           <div class="card-title">Tasks by Type</div>
           <div id="perfTypes"></div>
+        </div>
+      </div>
+
+      <!-- MY ATTENDANCE REPORT -->
+      <div class="page" id="page-my-attendance">
+        <div class="page-title">📊 My Attendance</div>
+        <div class="page-sub">Personal attendance summary and leave balance</div>
+        <div style="display:flex;gap:6px;margin-bottom:1rem;align-items:center">
+          <select class="btn" id="myAttMonth" onchange="loadMyAttendance()"></select>
+          <select class="btn" id="myAttYear" onchange="loadMyAttendance()"></select>
+        </div>
+        <div class="cards-grid" id="myAttStats"></div>
+        <div class="card" style="margin-top:1rem">
+          <div class="card-title">Daily Log</div>
+          <div id="myAttLog"></div>
         </div>
       </div>
 
@@ -743,8 +823,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
                 <div style="height:1px;background:#1e2d45;margin:2px 0"></div>
                 <div style="font-size:10px;color:#4a6fa5;font-weight:600;text-transform:uppercase;letter-spacing:.05em">View restriction</div>
                 <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--color-text-primary)">
-                  <input type="checkbox" id="nu_viewer" style="margin-top:2px">
-                  <span>Viewer Mode<span style="display:block;font-size:10px;color:#4a6fa5">Limits visible fields in Pricelist & Calculator</span></span>
+                  <input type="checkbox" id="nu_viewer" style="margin-top:2px" onchange="onViewerChange(this.checked)">
+                  <span>Viewer Mode<span style="display:block;font-size:10px;color:#4a6fa5">Limits visible fields. Cannot combine with Edit permissions.</span></span>
                 </label>
               </div>
             </div>
@@ -958,10 +1038,11 @@ function openPage(name){
   else if(name==='tasks')loadMyTasks();
   else if(name==='calendar')renderCalendar();
   else if(name==='leave')loadMyLeave();
+  else if(name==='my-attendance')loadMyAttendance();
   else if(name==='admin-tasks')loadAllTasks();
   else if(name==='admin-dept')loadDeptPage();
-  else if(name==='admin-leave')loadAllLeave();
-  else if(name==='admin-attendance'){document.getElementById('attDate').value=new Date().toISOString().slice(0,10);loadAttendance();}
+  else if(name==='admin-leave'){loadAllLeave();loadLeaveConfig();}
+  else if(name==='admin-attendance'){setAttToday();}
   else if(name==='performance')loadPerformance();
   else if(name==='admin-users')loadAdminUsers();
   else if(name==='profile')loadProfilePage();
@@ -1268,155 +1349,396 @@ function updateLeaveDays(){
   if(s&&e){var d=Math.round((new Date(e)-new Date(s))/86400000)+1;document.getElementById('leaveDaysCount').textContent=d>0?d+' day'+(d>1?'s':''):'Invalid dates';}
 }
 async function loadMyLeave(){
+  // Load leave config
+  var cfg=await sbGet('leave_config','select=key,value');
+  var cfgMap={};cfg.forEach(function(c){cfgMap[c.key]=c.value;});
+  var alTotal=parseInt(cfgMap.annual_leave_days)||14;
+  var minAdv=parseInt(cfgMap.min_advance_days)||1;
+
+  // My leave records this year
+  var year=new Date().getFullYear();
   var rows=await sbGet('leave_requests','username=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc');
-  if(!rows.length){document.getElementById('leaveList').innerHTML='<div class="empty-state"><div class="icon">🌴</div><p>No leave applications yet</p></div>';return;}
-  document.getElementById('leaveList').innerHTML=rows.map(function(r){
+  var approved=rows.filter(function(r){return r.status==='approved';});
+  var alUsed=approved.filter(function(r){return r.leave_type==='annual';}).reduce(function(sum,r){return sum+Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;},0);
+  var unpaidUsed=approved.filter(function(r){return r.leave_type==='unpaid';}).reduce(function(sum,r){return sum+Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;},0);
+
+  // Attendance stats this year
+  var attRows=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=gte.'+year+'-01-01&select=status,date');
+  var workdays=attRows.filter(function(r){return r.status!=='holiday';});
+  var present=workdays.filter(function(r){return r.status==='present';}).length;
+  var absent=workdays.filter(function(r){return r.status==='absent';}).length;
+  var attRate=workdays.length>0?Math.round(present/workdays.length*100):0;
+
+  // Stats cards
+  var statsHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem">'
+    +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(alTotal-alUsed)+'</div><div class="sub">of '+alTotal+' days</div></div>'
+    +'<div class="stat-card blue"><div class="label">AL Used</div><div class="value">'+alUsed+'</div><div class="sub">this year</div></div>'
+    +'<div class="stat-card yellow"><div class="label">Unpaid Leave</div><div class="value">'+unpaidUsed+'</div><div class="sub">this year</div></div>'
+    +'<div class="stat-card '+(absent>3?'red':'blue')+'"><div class="label">Absent</div><div class="value">'+absent+'</div><div class="sub">'+attRate+'% attendance</div></div>'
+    +'</div>';
+
+  var listHtml=rows.length?rows.map(function(r){
+    var days2=Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
     return '<div class="leave-item">'
       +'<div class="leave-info">'
-      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> '+fmtDate(r.start_date)+' → '+fmtDate(r.end_date)+'</div>'
+      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> '+fmtDate(r.start_date)+' → '+fmtDate(r.end_date)+' <span style="font-size:11px;color:#4a6fa5">('+days2+' day'+( days2>1?'s':'')+')</span></div>'
       +'<div class="leave-dates">'+(r.reason?esc(r.reason):'-')+'</div>'
       +'</div>'
       +'<div class="leave-status '+r.status+'">'+r.status+'</div>'
       +'</div>';
-  }).join('');
+  }).join(''):'<div class="empty-state"><div class="icon">🌴</div><p>No leave applications yet</p></div>';
+
+  document.getElementById('leaveList').innerHTML=statsHtml+listHtml;
 }
+
+async function submitLeave(){
+  var s=document.getElementById('leave_start').value,e=document.getElementById('leave_end').value;
+  if(!s||!e){toast('Please select dates','error');return;}
+  // Check min advance days (admin can bypass)
+  if(currentUser.role!=='admin'){
+    var cfg=await sbGet('leave_config','key=eq.min_advance_days&select=value');
+    var minAdv=cfg.length?parseInt(cfg[0].value):1;
+    var daysAhead=Math.round((new Date(s)-new Date())/86400000);
+    if(daysAhead<minAdv){toast('Leave must be applied at least '+minAdv+' day'+(minAdv>1?'s':'')+' in advance','error');return;}
+  }
+  await sbPost('leave_requests',{username:currentUser.username,leave_type:document.getElementById('leave_type').value,start_date:s,end_date:e,reason:document.getElementById('leave_reason').value.trim(),status:'pending'});
+  closeModal('leaveModal');loadMyLeave();toast('Leave application submitted','success');
+}
+
 async function loadAllLeave(){
+  // Leave config section for admin
+  var cfg=await sbGet('leave_config','select=key,value');
+  var cfgMap={};cfg.forEach(function(c){cfgMap[c.key]=c.value;});
+  var configHtml='';
+  if(currentUser.role==='admin'){
+    configHtml='<div class="card" style="margin-bottom:1rem">'
+      +'<div class="card-title">Leave Settings</div>'
+      +'<div class="form-row">'
+      +'<div class="form-field"><label>Min Advance Days (staff must apply X days before)</label>'
+      +'<input type="number" id="lcMinAdv" min="0" value="'+(cfgMap.min_advance_days||1)+'" style="width:100px">'
+      +'</div>'
+      +'<div class="form-field"><label>Annual Leave Days per Year</label>'
+      +'<input type="number" id="lcAlDays" min="0" value="'+(cfgMap.annual_leave_days||14)+'" style="width:100px">'
+      +'</div>'
+      +'</div>'
+      +'<div class="form-actions" style="margin-top:.5rem;padding-top:.5rem">'
+      +'<button class="btn primary" onclick="saveLeaveConfig()">Save Settings</button>'
+      +'</div></div>';
+  }
   var rows=await sbGet('leave_requests','order=created_at.desc');
-  if(!rows.length){document.getElementById('adminLeaveList').innerHTML='<div class="empty-state"><div class="icon">📋</div><p>No leave requests</p></div>';return;}
-  document.getElementById('adminLeaveList').innerHTML=rows.map(function(r){
+  if(!rows.length){document.getElementById('adminLeaveList').innerHTML=configHtml+'<div class="empty-state"><div class="icon">📋</div><p>No leave requests</p></div>';return;}
+  var listHtml=rows.map(function(r){
     var isPending=r.status==='pending';
+    var days2=Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
     return '<div class="leave-item">'
       +'<div class="leave-info">'
-      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> <b>'+esc(r.username)+'</b> — '+fmtDate(r.start_date)+' to '+fmtDate(r.end_date)+'</div>'
+      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> <b>'+esc(r.username)+'</b> — '+fmtDate(r.start_date)+' to '+fmtDate(r.end_date)+' <span style="font-size:11px;color:#4a6fa5">('+days2+' day'+(days2>1?'s':'')+')</span></div>'
       +'<div class="leave-dates">'+(r.reason?esc(r.reason):'-')+'</div>'
       +'</div>'
       +'<div style="display:flex;gap:5px;align-items:center">'
       +(isPending?'<button class="btn sm success" onclick="reviewLeave('+r.id+',\'approved\')">Approve</button><button class="btn sm danger" onclick="reviewLeave('+r.id+',\'rejected\')">Reject</button>':'<span class="leave-status '+r.status+'">'+r.status+'</span>')
       +'</div></div>';
   }).join('');
+  document.getElementById('adminLeaveList').innerHTML=configHtml+listHtml;
 }
+
+async function saveLeaveConfig(){
+  var minAdv=document.getElementById('lcMinAdv').value;
+  var alDays=document.getElementById('lcAlDays').value;
+  await fetch(SB_URL+'/rest/v1/leave_config',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify([{key:'min_advance_days',value:parseInt(minAdv)},{key:'annual_leave_days',value:parseInt(alDays)}])});
+  toast('Leave settings saved','success');
+}
+
 async function reviewLeave(id,status){
   await sbPatch('leave_requests',{id:id},{status:status,reviewed_by:currentUser.username,reviewed_at:new Date().toISOString()});
   loadAllLeave();toast('Leave '+status,'success');loadDashboard();
 }
-function openLeaveModal(){document.getElementById('leave_start').value='';document.getElementById('leave_end').value='';document.getElementById('leave_reason').value='';document.getElementById('leaveDaysCount').textContent='—';openModal('leaveModal');}
-async function submitLeave(){
-  var s=document.getElementById('leave_start').value,e=document.getElementById('leave_end').value;
-  if(!s||!e){toast('Please select dates','error');return;}
-  await sbPost('leave_requests',{username:currentUser.username,leave_type:document.getElementById('leave_type').value,start_date:s,end_date:e,reason:document.getElementById('leave_reason').value.trim(),status:'pending'});
-  closeModal('leaveModal');loadMyLeave();toast('Leave application submitted','success');
+function openLeaveModal(){
+  document.getElementById('leave_start').value='';
+  document.getElementById('leave_end').value='';
+  document.getElementById('leave_reason').value='';
+  document.getElementById('leaveDaysCount').textContent='—';
+  openModal('leaveModal');
 }
-
-/* ══ CALENDAR ══ */
 var calDate=new Date();
 function calPrev(){calDate=new Date(calDate.getFullYear(),calDate.getMonth()-1,1);renderCalendar();}
 function calNext(){calDate=new Date(calDate.getFullYear(),calDate.getMonth()+1,1);renderCalendar();}
 async function renderCalendar(){
+  if(currentUser.role==='admin'){var hb=document.getElementById('calAddHolidayBtn');if(hb)hb.style.display='';}
   var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   document.getElementById('calTitle').textContent=months[calDate.getMonth()]+' '+calDate.getFullYear();
   var y=calDate.getFullYear(),m=calDate.getMonth();
   var first=new Date(y,m,1);var last=new Date(y,m+1,0);
-  var startDay=(first.getDay()+6)%7; // 0=Mon
-  // Load events
+  var startDay=(first.getDay()+6)%7;
   var startStr=y+'-'+(m+1).toString().padStart(2,'0')+'-01';
   var endStr=y+'-'+(m+1).toString().padStart(2,'0')+'-'+last.getDate().toString().padStart(2,'0');
-  var myTasks=await sbGet('tasks','assigned_to=eq.'+encodeURIComponent(currentUser.username)+'&due_date=gte.'+startStr+'&due_date=lte.'+endStr+'&select=title,due_date');
-  var myLeave=await sbGet('leave_requests','username=eq.'+encodeURIComponent(currentUser.username)+'&start_date=lte.'+endStr+'&end_date=gte.'+startStr+'&status=eq.approved&select=leave_type,start_date,end_date');
-  // Build event map
+  // Load events
+  var myTasks=await sbGet('tasks','assigned_to=eq.'+encodeURIComponent(currentUser.username)+'&due_date=gte.'+startStr+'&due_date=lte.'+endStr+'&select=title,due_date,status');
+  // Load approved leave (own + others if admin)
+  var leaveQ='start_date=lte.'+endStr+'&end_date=gte.'+startStr+'&status=eq.approved&select=leave_type,start_date,end_date,username';
+  var approvedLeave=await sbGet('leave_requests',leaveQ);
+  // Load holidays
+  await loadHolidays(y,m+1);
+  // Build maps
   var events={};
-  myTasks.forEach(function(t){if(!t.due_date)return;var d=t.due_date.slice(0,10);if(!events[d])events[d]=[];events[d].push({type:'task',label:t.title});});
-  myLeave.forEach(function(l){
+  myTasks.forEach(function(t){if(!t.due_date)return;var d=t.due_date.slice(0,10);if(!events[d])events[d]=[];events[d].push({type:'task',label:t.title,status:t.status});});
+  approvedLeave.forEach(function(l){
     var d=new Date(l.start_date),end=new Date(l.end_date);
-    while(d<=end){var k=d.toISOString().slice(0,10);if(!events[k])events[k]=[];events[k].push({type:'leave',label:l.leave_type});d=new Date(d.getTime()+86400000);}
+    while(d<=end){
+      var k=d.toISOString().slice(0,10);
+      if(!events[k])events[k]=[];
+      var isMe=l.username===currentUser.username;
+      var label=(isMe?'My leave':(esc(l.username)))+' ('+l.leave_type+')';
+      events[k].push({type:'leave',label:label});
+      d=new Date(d.getTime()+86400000);
+    }
+  });
+  holidaysCache.forEach(function(h){
+    if(!events[h.date])events[h.date]=[];
+    events[h.date].push({type:h.type==='rest'?'rest':'holiday',label:h.name});
   });
   // Render
   var html=days.map(function(d){return '<div class="cal-day-hdr">'+d+'</div>';}).join('');
-  // Empty cells before first day
   for(var i=0;i<startDay;i++)html+='<div class="cal-day other-month"></div>';
   var today=new Date();today.setHours(0,0,0,0);
   for(var d=1;d<=last.getDate();d++){
     var dt=new Date(y,m,d);dt.setHours(0,0,0,0);
     var key=y+'-'+(m+1).toString().padStart(2,'0')+'-'+d.toString().padStart(2,'0');
     var isToday=dt.getTime()===today.getTime();
-    var evHTML=(events[key]||[]).slice(0,3).map(function(e){return '<div class="cal-event '+e.type+'">'+esc(e.label)+'</div>';}).join('');
-    html+='<div class="cal-day'+(isToday?' today':'')+'" onclick=""><div class="cal-day-num">'+d+'</div>'+evHTML+'</div>';
+    var isWeekend=dt.getDay()===0||dt.getDay()===6;
+    var dayEvs=events[key]||[];
+    var evHTML=dayEvs.slice(0,3).map(function(e){
+      var cls=e.type==='task'?'task':e.type==='leave'?'leave':e.type==='rest'?'rest':'announce';
+      return '<div class="cal-event '+cls+'">'+esc(e.label)+'</div>';
+    }).join('');
+    html+='<div class="cal-day'+(isToday?' today':'')+(isWeekend?' other-month':'')+'">'
+      +'<div class="cal-day-num">'+d+'</div>'+evHTML+'</div>';
   }
   document.getElementById('calGrid').innerHTML=html;
 }
 
 /* ══ ATTENDANCE ══ */
+var leaveConfigCache={min_advance_days:1,annual_leave_days:14};
+async function loadLeaveConfig(){
+  var rows=await sbGet('leave_config','');
+  rows.forEach(function(r){leaveConfigCache[r.key]=parseInt(r.value)||r.value;});
+  var el1=document.getElementById('leaveMinDays');var el2=document.getElementById('leaveAnnualDays');
+  if(el1)el1.value=leaveConfigCache.min_advance_days||1;
+  if(el2)el2.value=leaveConfigCache.annual_leave_days||14;
+}
+function setAttToday(){
+  var today=new Date().toISOString().slice(0,10);
+  document.getElementById('attDate').value=today;
+  loadAttendance();
+}
 async function loadAttendance(){
   var date=document.getElementById('attDate').value;if(!date)return;
-  document.getElementById('attDateLabel').textContent='Attendance for '+fmtDate(date);
-  var recs=await sbGet('attendance','date=eq.'+date+'&select=username,status,check_in,check_out');
+  document.getElementById('attDateLabel').textContent='Attendance — '+fmtDate(date);
+  var recs=await sbGet('attendance','date=eq.'+date+'&select=*');
   var recMap={};recs.forEach(function(r){recMap[r.username]=r;});
-  var users=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='viewer';});
+  // Load approved leave for this date
+  var leaves=await sbGet('leave_requests','start_date=lte.'+date+'&end_date=gte.'+date+'&status=eq.approved&select=username');
+  var onLeave=new Set(leaves.map(function(l){return l.username;}));
+  var users=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});
   if(!users.length){document.getElementById('attList').innerHTML='<div class="empty-state"><p>No staff found</p></div>';return;}
   document.getElementById('attList').innerHTML=users.map(function(u){
-    var rec=recMap[u.username]||{};var st=rec.status||'absent';
-    var dot='att-status-dot '+(st==='present'?'present':st==='leave'?'leave':st==='holiday'?'holiday':'absent');
-    return '<div class="att-row">'
-      +'<div class="'+dot+'"></div>'
+    var rec=recMap[u.username]||{};
+    var st=onLeave.has(u.username)?'leave':(rec.status||'absent');
+    var sessions=[
+      {in:rec.check_in,out:rec.check_out},
+      {in:rec.check_in_2,out:rec.check_out_2},
+      {in:rec.check_in_3,out:rec.check_out_3}
+    ];
+    var sessHtml=sessions.map(function(s,i){
+      return '<div style="display:flex;align-items:center;gap:4px;font-size:11px">'
+        +'<span style="color:#4a6fa5;min-width:14px">S'+(i+1)+'</span>'
+        +'<input type="time" value="'+(s.in?fmtTime(s.in):'')+'" onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'in\','+(i+1)+',this.value)" style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px" '+(st==='leave'||st==='holiday'?'disabled':'')+'>'
+        +'<span style="color:#2a4a6a">→</span>'
+        +'<input type="time" value="'+(s.out?fmtTime(s.out):'')+'" onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'out\','+(i+1)+',this.value)" style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px" '+(st==='leave'||st==='holiday'?'disabled':'')+'>'
+        +'</div>';
+    }).join('');
+    return '<div class="att-row" style="flex-wrap:wrap;gap:8px">'
+      +'<div class="att-status-dot '+(st==='present'?'present':st==='leave'?'leave':st==='holiday'?'holiday':'absent')+'"></div>'
       +'<div class="att-name">'+(esc(u.display_name)||esc(u.username))+'</div>'
-      +'<div class="att-time">'+(rec.check_in?fmtTime(rec.check_in):'—')+' → '+(rec.check_out?fmtTime(rec.check_out):'—')+'</div>'
-      +'<select onchange="setAttStatus(\''+u.username+'\',\''+date+'\',this.value)" class="btn" style="padding:3px 7px;font-size:11px">'
+      +'<select onchange="updateAttStatus(\''+u.username+'\',\''+date+'\',this.value)" class="btn" style="padding:3px 7px;font-size:11px">'
       +'<option value="present"'+(st==='present'?' selected':'')+'>Present</option>'
       +'<option value="absent"'+(st==='absent'?' selected':'')+'>Absent</option>'
       +'<option value="leave"'+(st==='leave'?' selected':'')+'>Leave</option>'
       +'<option value="holiday"'+(st==='holiday'?' selected':'')+'>Holiday</option>'
       +'</select>'
+      +'<div style="display:flex;flex-direction:column;gap:3px">'+sessHtml+'</div>'
       +'</div>';
   }).join('');
 }
-async function setAttStatus(username,date,status){
-  await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify({username:username,date:date,status:status,check_in:status==='present'?new Date().toISOString():null})});
-  toast(username+' marked '+status,'success');
+async function updateAttStatus(username,date,status){
+  await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify({username:username,date:date,status:status})});
+  toast(esc(username)+' → '+status,'success');
+  loadAttendance();
 }
-async function markTodayAttendance(){document.getElementById('attDate').value=new Date().toISOString().slice(0,10);loadAttendance();}
+async function updateAttSession(username,date,inOut,session,value){
+  var fieldMap={in:{1:'check_in',2:'check_in_2',3:'check_in_3'},out:{1:'check_out',2:'check_out_2',3:'check_out_3'}};
+  var field=fieldMap[inOut][session];
+  if(!field)return;
+  var data={username:username,date:date,status:'present'};
+  data[field]=value?date+'T'+value+':00':null;
+  await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(data)});
+}
 
-/* ══ PERFORMANCE ══ */
+/* ══ HOLIDAYS ══ */
+var holidaysCache=[];
+async function loadHolidays(year,month){
+  var from=year+'-'+(month).toString().padStart(2,'0')+'-01';
+  var lastDay=new Date(year,month,0).getDate();
+  var to=year+'-'+(month).toString().padStart(2,'0')+'-'+lastDay.toString().padStart(2,'0');
+  holidaysCache=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&order=date.asc');
+  return holidaysCache;
+}
+async function saveHoliday(){
+  var date=document.getElementById('hol_date').value;
+  var name=document.getElementById('hol_name').value.trim();
+  if(!date||!name){toast('Date and name required','error');return;}
+  await sbPost('holidays',{date:date,name:name,type:document.getElementById('hol_type').value,created_by:currentUser.username});
+  closeModal('holidayModal');renderCalendar();toast('Holiday added','success');
+}
+function openHolidayModal(){document.getElementById('hol_date').value='';document.getElementById('hol_name').value='';openModal('holidayModal');}
+
+/* ══ MY ATTENDANCE REPORT ══ */
+async function loadMyAttendance(){
+  var selMonth=document.getElementById('myAttMonth');
+  var selYear=document.getElementById('myAttYear');
+  if(!selMonth.options.length){
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    months.forEach(function(m,i){var o=document.createElement('option');o.value=i+1;o.textContent=m;selMonth.appendChild(o);});
+    var now=new Date();selMonth.value=now.getMonth()+1;
+    for(var y=now.getFullYear();y>=now.getFullYear()-3;y--){var o=document.createElement('option');o.value=y;o.textContent=y;selYear.appendChild(o);}
+    selYear.value=now.getFullYear();
+  }
+  var month=parseInt(selMonth.value);var year=parseInt(selYear.value);
+  var from=year+'-'+month.toString().padStart(2,'0')+'-01';
+  var lastDay=new Date(year,month,0).getDate();
+  var to=year+'-'+month.toString().padStart(2,'0')+'-'+lastDay.toString().padStart(2,'0');
+  // Fetch attendance
+  var atts=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=gte.'+from+'&date=lte.'+to+'&order=date.asc');
+  var attMap={};atts.forEach(function(a){attMap[a.date]=a;});
+  // Fetch approved leaves this year for balance
+  var yearLeaves=await sbGet('leave_requests','username=eq.'+encodeURIComponent(currentUser.username)+'&status=eq.approved&start_date=gte.'+year+'-01-01&select=leave_type,start_date,end_date');
+  var usedAL=0,usedMC=0,usedUnpaid=0;
+  yearLeaves.forEach(function(l){
+    var days=Math.round((new Date(l.end_date)-new Date(l.start_date))/86400000)+1;
+    if(l.leave_type==='annual')usedAL+=days;
+    else if(l.leave_type==='medical')usedMC+=days;
+    else if(l.leave_type==='unpaid')usedUnpaid+=days;
+  });
+  var al=leaveConfigCache.annual_leave_days||14;
+  // Count this month
+  var present=0,absent=0,onLeave=0,holidays=0;
+  var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date');
+  var holDates=new Set(hols.map(function(h){return h.date;}));
+  // Count working days (Mon-Fri, excluding holidays)
+  var workingDays=0;
+  for(var d=1;d<=lastDay;d++){
+    var dt=new Date(year,month-1,d);var key=from.slice(0,8)+d.toString().padStart(2,'0');
+    var dow=dt.getDay();
+    if(dow===0||dow===6)continue;
+    if(holDates.has(key)){holidays++;continue;}
+    workingDays++;
+    var rec=attMap[key];
+    if(rec){
+      if(rec.status==='present')present++;
+      else if(rec.status==='leave')onLeave++;
+      else absent++;
+    } else absent++;
+  }
+  var rate=workingDays>0?Math.round(present/workingDays*100):0;
+  document.getElementById('myAttStats').innerHTML=
+    '<div class="stat-card blue"><div class="label">Attendance Rate</div><div class="value">'+rate+'%</div><div class="sub">'+present+' / '+workingDays+' days</div></div>'
+    +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(al-usedAL)+'</div><div class="sub">Used: '+usedAL+' / '+al+' days</div></div>'
+    +'<div class="stat-card yellow"><div class="label">MC Used</div><div class="value">'+usedMC+'</div><div class="sub">This year</div></div>'
+    +'<div class="stat-card red"><div class="label">Absent / Unpaid</div><div class="value">'+absent+'</div><div class="sub">Unpaid leave: '+usedUnpaid+' days</div></div>';
+  // Daily log
+  var logHtml='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="font-size:11px;color:#4a6fa5"><th style="text-align:left;padding:6px 0;border-bottom:1px solid #1e2d45">Date</th><th>Status</th><th>S1 In</th><th>S1 Out</th><th>S2 In</th><th>S2 Out</th></tr></thead><tbody>';
+  for(var d=1;d<=lastDay;d++){
+    var key=year+'-'+month.toString().padStart(2,'0')+'-'+d.toString().padStart(2,'0');
+    var dt=new Date(year,month-1,d);var dow=dt.getDay();
+    if(dow===0||dow===6)continue;
+    var rec=attMap[key]||{};var isHol=holDates.has(key);
+    var st=isHol?'holiday':(rec.status||'absent');
+    var stColor={present:'#34d399',absent:'#f87171',leave:'#fbbf24',holiday:'#a78bfa'}[st]||'#9ca3af';
+    logHtml+='<tr style="border-bottom:1px solid #0d1626"><td style="padding:5px 0;color:#e0e6f0">'+fmtDate(key)+'</td>'
+      +'<td style="text-align:center"><span style="font-size:10px;color:'+stColor+'">'+st+'</span></td>'
+      +'<td style="text-align:center;color:#6b8ab0;font-size:11px">'+(rec.check_in?fmtTime(rec.check_in):'—')+'</td>'
+      +'<td style="text-align:center;color:#6b8ab0;font-size:11px">'+(rec.check_out?fmtTime(rec.check_out):'—')+'</td>'
+      +'<td style="text-align:center;color:#6b8ab0;font-size:11px">'+(rec.check_in_2?fmtTime(rec.check_in_2):'—')+'</td>'
+      +'<td style="text-align:center;color:#6b8ab0;font-size:11px">'+(rec.check_out_2?fmtTime(rec.check_out_2):'—')+'</td>'
+      +'</tr>';
+  }
+  logHtml+='</tbody></table>';
+  document.getElementById('myAttLog').innerHTML=logHtml;
+}
+
+/* ══ PERFORMANCE (updated with filters) ══ */
 async function loadPerformance(){
   var canAll=currentUser.role==='admin'||currentUser.can_view_perf_all;
   var canDept=canAll||currentUser.can_view_perf_dept;
   var days=parseInt(document.getElementById('perfPeriod').value)||30;
-  var since=new Date(Date.now()-days*86400000).toISOString();
-  var q='status=eq.completed&completed_at=gte.'+since+'&select=assigned_to,task_type,completed_at';
+  var since=new Date(Date.now()-days*86400000).toISOString().slice(0,10);
+  var fUser=document.getElementById('perfUser').value;
+  var fType=document.getElementById('perfType').value;
+  var fFrom=document.getElementById('perfFrom').value;
+  var fTo=document.getElementById('perfTo').value;
+  var q='status=eq.completed&select=assigned_to,task_type,completed_at';
+  q+='&completed_at=gte.'+(fFrom||since)+'T00:00:00Z';
+  if(fTo)q+='&completed_at=lte.'+fTo+'T23:59:59Z';
+  if(fUser&&fUser!=='all')q+='&assigned_to=eq.'+encodeURIComponent(fUser);
+  if(fType&&fType!=='all')q+='&task_type=eq.'+fType;
   if(!canAll&&canDept&&currentUser.department){
-    // Filter by dept members
     var deptMembers=allUsers.filter(function(u){return u.department===currentUser.department;}).map(function(u){return u.username;});
-    q+='&assigned_to=in.('+deptMembers.map(encodeURIComponent).join(',')+')';
+    if(deptMembers.length)q+='&assigned_to=in.('+deptMembers.map(encodeURIComponent).join(',')+')';
   } else if(!canAll&&!canDept){
-    // Own only
     q+='&assigned_to=eq.'+encodeURIComponent(currentUser.username);
   }
   var tasks=await sbGet('tasks',q);
-  // By user
+  // Populate user filter
+  var sel=document.getElementById('perfUser');var curVal=sel.value;
+  sel.innerHTML='<option value="all">All Staff</option>';
+  var visible=canAll?allUsers:(canDept?allUsers.filter(function(u){return u.department===currentUser.department;}):allUsers.filter(function(u){return u.username===currentUser.username;}));
+  visible.forEach(function(u){var o=document.createElement('option');o.value=u.username;o.textContent=u.display_name||u.username;if(u.username===curVal)o.selected=true;sel.appendChild(o);});
+  var total=tasks.length;
   var byUser={};tasks.forEach(function(t){if(!t.assigned_to)return;byUser[t.assigned_to]=(byUser[t.assigned_to]||0)+1;});
   var maxVal=Math.max(1,...Object.values(byUser));
-  var total=tasks.length;
-  // Stats
   document.getElementById('perfStats').innerHTML=
-    '<div class="stat-card green"><div class="label">Total Completed</div><div class="value">'+total+'</div><div class="sub">last '+days+' days</div></div>'
+    '<div class="stat-card green"><div class="label">Tasks Completed</div><div class="value">'+total+'</div></div>'
     +'<div class="stat-card blue"><div class="label">Active Staff</div><div class="value">'+Object.keys(byUser).length+'</div></div>';
-  // Bars
   var bars=Object.entries(byUser).sort(function(a,b){return b[1]-a[1];}).map(function(kv){
     var pct=Math.round(kv[1]/maxVal*100);
     var u=allUsers.find(function(x){return x.username===kv[0];})||{};
     return '<div class="perf-bar-wrap"><div class="perf-name">'+(esc(u.display_name)||esc(kv[0]))+'</div><div class="perf-bar-bg"><div class="perf-bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg,#1d4ed8,#3b82f6)">'+kv[1]+'</div></div><div class="perf-count">'+kv[1]+'</div></div>';
   }).join('');
-  document.getElementById('perfBars').innerHTML=bars||'<div class="empty-state"><p>No completed tasks in this period</p></div>';
-  // By type
+  document.getElementById('perfBars').innerHTML=bars||'<div class="empty-state"><p>No data</p></div>';
   var byType={};tasks.forEach(function(t){byType[t.task_type]=(byType[t.task_type]||0)+1;});
   var typeColors={sale:'#34d399',maintenance:'#60a5fa',aftersales:'#fbbf24',general:'#9ca3af'};
-  var typeHTML=Object.entries(byType).map(function(kv){
+  document.getElementById('perfTypes').innerHTML=Object.entries(byType).map(function(kv){
     var pct=Math.round(kv[1]/Math.max(1,total)*100);
     return '<div class="perf-bar-wrap"><div class="perf-name">'+kv[0]+'</div><div class="perf-bar-bg"><div class="perf-bar-fill" style="width:'+pct+'%;background:'+(typeColors[kv[0]]||'#6b7280')+'">'+kv[1]+'</div></div><div class="perf-count">'+kv[1]+'</div></div>';
-  }).join('');
-  document.getElementById('perfTypes').innerHTML=typeHTML||'<div class="empty-state"><p>No data</p></div>';
+  }).join('')||'<div class="empty-state"><p>No data</p></div>';
 }
 
 /* ══ USER MANAGEMENT ══ */
+function onViewerChange(checked){
+  // Viewer mode is mutually exclusive with edit permissions
+  if(checked){
+    ['nu_pl','nu_gen','nu_mf'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el){el.checked=false;el.disabled=true;}
+    });
+  } else {
+    ['nu_pl','nu_gen','nu_mf'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el)el.disabled=false;
+    });
+  }
+}
 function toggleUserModules(){
   var role=document.getElementById('nu_role').value;
   document.getElementById('nu_modules').style.display=role==='staff'?'grid':'none';
@@ -1543,6 +1865,7 @@ async function editUser(username){
         +'</div></div>';
     };
     body+=mkSec('Tools Access','#60a5fa',[['can_access_tools','Access Tools'],['can_edit_pricelist','Edit Pricelist'],['can_edit_generator','Edit Generator'],['can_edit_mf','Edit Max Finance'],['is_viewer_mode','Viewer Mode']]);
+    body+='<script>document.getElementById("eu_is_viewer_mode").addEventListener("change",function(){var c=this.checked;["eu_can_edit_pricelist","eu_can_edit_generator","eu_can_edit_mf"].forEach(function(id){var el=document.getElementById(id);if(el){el.disabled=c;if(c)el.checked=false;}});});<\/script>';
     body+=mkSec('Team Access','#34d399',[['can_access_team','Access Team'],['can_assign_task_dept','Assign Tasks (Dept)'],['can_assign_task_cross','Assign Tasks (Cross)'],['can_view_attendance','View Attendance'],['can_approve_leave','Approve Leave'],['can_view_perf_own','View Own Perf'],['can_view_perf_dept','View Dept Perf'],['can_view_perf_all','View All Perf']]);
   }
   body+='<div class="form-actions">'
