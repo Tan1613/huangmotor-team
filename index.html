@@ -293,6 +293,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 
+<!-- Edit Sale Modal -->
+<div class="modal-overlay" id="editSaleModal">
+  <div class="modal">
+    <div class="modal-hdr"><h3>✎ Edit Sale</h3><button class="btn sm" onclick="closeModal('editSaleModal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="es_id">
+      <div class="form-row">
+        <div class="form-field"><label>Customer Name</label><input type="text" id="es_name"></div>
+        <div class="form-field"><label>Customer Phone</label><input type="text" id="es_phone"></div>
+      </div>
+      <div class="form-field"><label>Customer IC</label><input type="text" id="es_ic" maxlength="14" oninput="formatIC(this)"></div>
+      <div class="form-row">
+        <div class="form-field"><label>Cash OTR (RM)</label><input type="number" id="es_price"></div>
+        <div class="form-field"><label>Down Payment (RM)</label><input type="number" id="es_dp"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>HP Company</label><input type="text" id="es_hp_co"></div>
+        <div class="form-field"><label>HP Monthly × Months</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="number" id="es_hp_monthly" placeholder="Monthly" style="flex:1">
+            <span style="color:#4a6fa5">×</span>
+            <input type="number" id="es_hp_tenure" placeholder="Months" style="flex:1">
+          </div>
+        </div>
+      </div>
+      <div class="form-field"><label>Notes</label><textarea id="es_notes" rows="2"></textarea></div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('editSaleModal')">Cancel</button>
+        <button class="btn primary" onclick="saveEditSale()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Data View Requests Modal -->
+<div class="modal-overlay" id="dataReqModal">
+  <div class="modal">
+    <div class="modal-hdr"><h3>🔍 Data View Requests</h3><button class="btn sm" onclick="closeModal('dataReqModal')">✕</button></div>
+    <div class="modal-body" id="dataReqBody"></div>
+  </div>
+</div>
+
 <!-- Room Manage Modal -->
 <div class="modal-overlay" id="roomManageModal">
   <div class="modal">
@@ -1085,6 +1127,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <div class="page-sub">Motorcycle sales records</div>
           </div>
           <button class="btn primary" onclick="openSaleModal()">+ New Sale</button>
+          <button class="btn" onclick="openDataRequests()" id="dataReqBtn">🔍 Requests</button>
         </div>
         <div id="mySalesList"></div>
       </div>
@@ -1565,9 +1608,6 @@ async function loadMyTasks(){
   renderTaskList(tasks,document.getElementById('taskList'),false);
 }
 function filterTasks(f){
-  taskFilter=f;loadMyTasks();
-}
-function filterTasks(f){
   taskFilter=f;
   document.querySelectorAll('[id^="tf-"]').forEach(function(b){b.classList.remove('primary');});
   var btn=document.getElementById('tf-'+f);if(btn)btn.classList.add('primary');
@@ -1588,15 +1628,17 @@ function renderTaskList(tasks,container,isAdmin){
   container.innerHTML=tasks.map(function(t){
     var prioBar=t.priority==='urgent'?'urgent':t.priority==='high'?'high':t.priority==='low'?'low':'normal';
     var notes=t.progress_notes||[];
+    var workers=t.workers||[];
+    var workerNames=workers.map(function(u){var usr=allUsers.find(function(x){return x.username===u;})||{};return esc(usr.display_name||u);}).join(', ');
     return '<div class="task-item '+prioBar+'">'
       +'<div class="task-header"><span class="task-title">'+esc(t.title)+'</span><span class="task-type '+t.task_type+'">'+(typeLabels[t.task_type]||t.task_type)+'</span></div>'
       +'<div class="task-meta">'
-      +(isAdmin?'<span>👤 '+(t.assigned_to?esc(t.assigned_to):(t.assigned_dept?'🏬 '+esc(t.assigned_dept):'Unassigned'))+'</span>':'')
+      +(isAdmin?'<span>👤 '+(t.assigned_to?esc(t.assigned_to):(t.assigned_dept?'🏬 '+esc(t.assigned_dept):'All staff'))+'</span>':'')
       +(!isAdmin&&t.assigned_dept?'<span>🏬 '+esc(t.assigned_dept)+'</span>':'')
       +(t.due_date?'<span>📅 '+fmtDate(t.due_date)+'</span>':'')
       +'<span>'+fmtRelative(t.created_at)+'</span>'
-      +(t.vehicle_info&&t.vehicle_info.plate?'<span>🚗 '+esc(t.vehicle_info.plate)+'</span>':'')
       +'</div>'
+      +(workers.length?'<div style="font-size:11px;color:#4a6fa5;margin-bottom:4px">Workers: '+workerNames+'</div>':'')
       +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
       +'<span class="task-status '+t.status+'">'+t.status.replace('_',' ')+'</span>'
       +(notes.length?'<span style="font-size:11px;color:#4a6fa5">'+notes.length+' note'+(notes.length>1?'s':'')+'</span>':'')
@@ -1608,74 +1650,140 @@ function renderTaskList(tasks,container,isAdmin){
   }).join('');
 }
 async function openTaskDetail(id){
-  var tasks=await sbGet('tasks','id=eq.'+id);
+  var tasks=await sbGet('tasks','id=eq.'+id+'&select=*');
   if(!tasks.length)return;
   var t=tasks[0];var notes=t.progress_notes||[];
+  var workers=t.workers||[];
   var isSaleTask=t.task_type==='sale';
-  // Anyone who can see the task can act on it if it's a sale task
-  // For regular tasks: only assigned person can act
+  var isCreator=t.assigned_by===currentUser.username;
+  var isAdmin=currentUser.role==='admin';
+  var iAmWorker=workers.indexOf(currentUser.username)>=0;
   var canAct=t.assigned_to===currentUser.username||t.assigned_dept===currentUser.department||
     (isSaleTask&&isTaskVisible(t))||isAdminOrSuper();
-  var statusBtns='';
-  if(canAct){
-    if(t.status==='pending'&&!isSaleTask)statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button><button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
-    else if(t.status==='accepted'||t.status==='pending')statusBtns='<button class="btn sm primary" onclick="updateTaskStatus('+id+',\'in_progress\')">▶ Start Work</button>';
-    else if(t.status==='in_progress')statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'completed\')">✅ Mark Complete</button>';
+
+  // Sale task: find related sale record for masked data
+  var saleRec=null;
+  if(isSaleTask){
+    var saleRows=await sbGet('sales_records','task_id=eq.'+id+'&select=*');
+    if(saleRows.length)saleRec=saleRows[0];
   }
+  var isSaleOwner=saleRec&&saleRec.salesperson===currentUser.username;
+
+  // Status buttons
+  var statusBtns='';
+  if(canAct&&t.status!=='completed'&&t.status!=='cancelled'){
+    if(t.status==='pending'&&!isSaleTask)
+      statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button>'
+        +'<button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
+    else if(t.status==='accepted'||t.status==='pending'){
+      if(!iAmWorker||!isSaleTask)
+        statusBtns='<button class="btn sm primary" onclick="startWork('+id+')">▶ Start Work</button>';
+      else statusBtns='<span style="font-size:11px;color:#34d399">✓ You are working on this</span>';
+    }
+    else if(t.status==='in_progress'&&(iAmWorker||!isSaleTask))
+      statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'completed\')">✅ Mark Complete</button>';
+  }
+  // Sale owner can cancel
+  if(isSaleTask&&(isSaleOwner||isAdmin)&&t.status!=='completed'&&t.status!=='cancelled')
+    statusBtns+='<button class="btn sm danger" onclick="cancelSaleTask('+id+(saleRec?','+saleRec.id:'')+')">✕ Cancel Sale</button>';
+
+  // Workers display
+  var workerNames=workers.map(function(u){var usr=allUsers.find(function(x){return x.username===u;})||{};return esc(usr.display_name||u);}).join(', ');
+
+  // Sale data display (masked for non-owner)
+  var saleHtml='';
+  if(saleRec){
+    var showFull=isSaleOwner||isAdmin;
+    var phoneTxt=showFull?(saleRec.customer_phone||'—')
+      :'<span style="color:#4a6fa5">•••••••</span> '
+      +(iAmWorker?'<button class="btn sm" onclick="requestDataView('+saleRec.id+',\'phone\',\''+esc(saleRec.salesperson)+'\')">Request</button>':'<span style="font-size:10px;color:#2a4a6a">Start work to request</span>');
+    var icTxt=showFull?(saleRec.customer_ic||'—')
+      :'<span style="color:#4a6fa5">••••••-••-••••</span> '
+      +(iAmWorker?'<button class="btn sm" onclick="requestDataView('+saleRec.id+',\'ic\',\''+esc(saleRec.salesperson)+'\')">Request</button>':'<span style="font-size:10px;color:#2a4a6a">Start work to request</span>');
+    saleHtml='<div style="background:#0a0f1a;border:1px solid #1e2d45;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px">'
+      +'<div style="font-weight:600;color:#60a5fa;margin-bottom:6px">Sale Details — '+esc(saleRec.record_no)+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
+      +'<div><span style="color:#4a6fa5">Customer: </span>'+esc(saleRec.customer_name)+'</div>'
+      +'<div><span style="color:#4a6fa5">Type: </span>'+esc(saleRec.sale_type)+'</div>'
+      +'<div><span style="color:#4a6fa5">Phone: </span>'+phoneTxt+'</div>'
+      +'<div><span style="color:#4a6fa5">IC: </span>'+icTxt+'</div>'
+      +(showFull?'<div><span style="color:#4a6fa5">OTR: </span>RM '+(saleRec.sale_price?saleRec.sale_price.toLocaleString():'—')+'</div>':'')
+      +(saleRec.cancel_reason?'<div style="grid-column:1/-1;color:#f87171"><span style="color:#4a6fa5">Cancel Reason: </span>'+esc(saleRec.cancel_reason)+'</div>':'')
+      +'</div>'
+      +(isSaleOwner?'<button class="btn sm" style="margin-top:8px" onclick="openEditSale('+saleRec.id+')">✎ Edit Sale</button>':'')
+      +'</div>';
+  }
+
   var body='<div style="margin-bottom:10px">'
     +'<div style="font-size:15px;font-weight:700;color:#f0f6fc;margin-bottom:6px">'+esc(t.title)+'</div>'
     +'<span class="task-status '+t.status+'">'+t.status.replace('_',' ')+'</span>'
+    +(workers.length?'<div style="font-size:11px;color:#4a6fa5;margin-top:4px">Workers: '+workerNames+'</div>':'')
     +'</div>'
+    +saleHtml
     +(t.description?'<div style="font-size:12px;color:#6b8ab0;margin-bottom:10px;line-height:1.6">'+esc(t.description)+'</div>':'')
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;font-size:12px">'
-    +'<div><span style="color:#4a6fa5">Assigned by: </span><span>'+esc(t.assigned_by||'—')+'</span></div>'
-    +'<div><span style="color:#4a6fa5">Due: </span><span>'+fmtDate(t.due_date)+'</span></div>'
-    +(t.vehicle_info&&t.vehicle_info.plate?'<div><span style="color:#4a6fa5">Plate: </span><span>'+esc(t.vehicle_info.plate)+'</span></div><div><span style="color:#4a6fa5">Vehicle: </span><span>'+esc(t.vehicle_info.model||'—')+'</span></div>':'')
-    +'</div>'
     +'<div class="divider"></div>'
     +'<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:#93c5fd">Progress Notes</div>'
-    +(notes.length?notes.map(function(n){return '<div class="progress-note"><span class="pn-user">'+esc(n.username)+'</span> <span class="pn-time">'+fmtRelative(n.ts)+'</span><div style="color:#e0e6f0;margin-top:2px">'+esc(n.note)+'</div></div>';}).join(''):'<div style="font-size:11px;color:#2a4a6a;margin-bottom:8px">No notes yet</div>')
-    +(canAct||isAdminOrSuper()?'<div style="display:flex;gap:6px;margin-top:10px"><input type="text" id="noteInp" placeholder="Add progress note..." style="flex:1;padding:7px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px;outline:none"><button class="btn sm primary" onclick="addProgressNote('+id+')">Add</button></div>':'')
+    +(notes.length?notes.map(function(n){
+      return '<div class="progress-note"><span class="pn-user">'+esc(n.username)+'</span> <span class="pn-time">'+fmtRelative(n.ts)+'</span><div style="color:#e0e6f0;margin-top:2px">'+esc(n.note)+'</div></div>';
+    }).join(''):'<div style="font-size:11px;color:#2a4a6a;margin-bottom:8px">No notes yet</div>')
+    +((canAct||isAdmin)?'<div style="display:flex;gap:6px;margin-top:10px"><input type="text" id="noteInp" placeholder="Add progress note..." style="flex:1;padding:7px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px;outline:none"><button class="btn sm primary" onclick="addProgressNote('+id+')">Add</button></div>':'')
     +'<div class="divider"></div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap">'+statusBtns+'</div>';
   document.getElementById('taskDetailBody').innerHTML=body;
   openModal('taskDetailModal');
 }
-async function addProgressNote(taskId){
-  var note=document.getElementById('noteInp').value.trim();if(!note)return;
-  var tasks=await sbGet('tasks','id=eq.'+taskId+'&select=progress_notes');
-  var notes=tasks.length&&tasks[0].progress_notes||[];
-  notes.push({username:currentUser.username,note:note,ts:new Date().toISOString()});
-  await sbPatch('tasks',{id:taskId},{progress_notes:notes,updated_at:new Date().toISOString()});
-  toast('Note added','success');closeModal('taskDetailModal');
+
+async function startWork(taskId){
+  // Add user to workers list (individual tracking, not changing task status for everyone)
+  var tasks=await sbGet('tasks','id=eq.'+taskId+'&select=workers,progress_notes,status');
+  if(!tasks.length)return;
+  var t=tasks[0];
+  var workers=t.workers||[];
+  if(workers.indexOf(currentUser.username)>=0){toast('You are already working on this','success');return;}
+  workers.push(currentUser.username);
+  var notes=t.progress_notes||[];
+  var dispName=currentUser.display_name||currentUser.username;
+  notes.push({username:currentUser.username,note:'▶ '+dispName+' started working on this task',ts:new Date().toISOString()});
+  var upd={workers:workers,progress_notes:notes,updated_at:new Date().toISOString()};
+  // Only change status to in_progress if first worker
+  if(t.status==='accepted')upd.status='in_progress';
+  await sbPatch('tasks',{id:taskId},upd);
+  toast('You are now working on this task','success');
+  closeModal('taskDetailModal');
   if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
 }
+
+async function cancelSaleTask(taskId,saleId){
+  var reason=prompt('Please provide a reason for cancellation:');
+  if(reason===null)return;
+  if(!reason.trim()){toast('Cancellation reason required','error');return;}
+  // Cancel the task
+  await sbPatch('tasks',{id:taskId},{status:'cancelled',updated_at:new Date().toISOString()});
+  // Update sale record
+  if(saleId){
+    await sbPatch('sales_records',{id:saleId},{status:'cancelled',cancel_reason:reason.trim(),updated_at:new Date().toISOString()});
+  }
+  toast('Sale cancelled','success');
+  closeModal('taskDetailModal');
+  if(currentPage==='tasks')loadMyTasks();
+  else if(currentPage==='admin-tasks')loadAllTasks();
+  if(currentPage==='mysales')loadMySales();
+}
+
 async function updateTaskStatus(taskId,status){
   if(status==='completed'){
-    if(!confirm('Mark this task as completed?\nYour name will be recorded as the person who completed it.'))return;
+    if(!confirm('Mark as completed?\nYour name will be recorded.'))return;
   }
   var upd={status:status,updated_at:new Date().toISOString()};
   if(status==='completed'){
     upd.completed_at=new Date().toISOString();
-    // Add completion note
     var tasks=await sbGet('tasks','id=eq.'+taskId+'&select=progress_notes');
     var notes=tasks.length&&tasks[0].progress_notes||[];
-    notes.push({username:currentUser.username,note:'✅ Marked as completed by '+(currentUser.display_name||currentUser.username),ts:new Date().toISOString()});
+    notes.push({username:currentUser.username,note:'✅ Completed by '+(currentUser.display_name||currentUser.username),ts:new Date().toISOString()});
     upd.progress_notes=notes;
   }
-  if(status==='in_progress'){
-    // Multiple people can start work — add a note but don't block others
-    var tasks2=await sbGet('tasks','id=eq.'+taskId+'&select=progress_notes,status');
-    if(tasks2.length&&tasks2[0].status==='in_progress'){
-      // Already in progress — just add note that this person also started
-      var notes2=tasks2[0].progress_notes||[];
-      notes2.push({username:currentUser.username,note:'▶ '+( currentUser.display_name||currentUser.username)+' also started working on this task',ts:new Date().toISOString()});
-      upd.progress_notes=notes2;
-      delete upd.status; // don't change status if already in_progress
-    }
-  }
   await sbPatch('tasks',{id:taskId},upd);
-  toast('Task updated: '+status.replace('_',' ')+(status==='completed'?' ✅':''),'success');
+  toast('Task: '+status.replace('_',' ')+(status==='completed'?' ✅':''),'success');
   closeModal('taskDetailModal');
   if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
   loadDashboard();
@@ -2641,6 +2749,82 @@ function updateSaleModelList(){
   if(dl)dl.innerHTML=models.map(function(m){return '<option value="'+esc(m)+'"></option>';}).join('');
 }
 
+async function openEditSale(id){
+  var rows=await sbGet('sales_records','id=eq.'+id+'&select=*');
+  if(!rows.length)return;
+  var r=rows[0];
+  document.getElementById('es_id').value=id;
+  document.getElementById('es_name').value=r.customer_name||'';
+  document.getElementById('es_phone').value=r.customer_phone||'';
+  document.getElementById('es_ic').value=r.customer_ic||'';
+  document.getElementById('es_price').value=r.sale_price||'';
+  document.getElementById('es_dp').value=r.dp_amount||'';
+  document.getElementById('es_hp_co').value=r.hp_company||'';
+  // Reverse-calculate monthly/tenure from hp_amount (best effort)
+  document.getElementById('es_hp_monthly').value='';
+  document.getElementById('es_hp_tenure').value='';
+  document.getElementById('es_notes').value=r.notes||'';
+  closeModal('taskDetailModal');
+  openModal('editSaleModal');
+}
+async function saveEditSale(){
+  var id=document.getElementById('es_id').value;
+  var ic=document.getElementById('es_ic').value.trim();
+  if(ic&&ic.replace(/-/g,'').length!==12){toast('IC must be 12 digits','error');return;}
+  var monthly=parseFloat(document.getElementById('es_hp_monthly').value)||null;
+  var tenure=parseInt(document.getElementById('es_hp_tenure').value)||null;
+  var hpAmt=monthly&&tenure?monthly*tenure:null;
+  var data={
+    customer_name:document.getElementById('es_name').value.trim(),
+    customer_phone:document.getElementById('es_phone').value.trim(),
+    customer_ic:ic,
+    sale_price:parseFloat(document.getElementById('es_price').value)||null,
+    dp_amount:parseFloat(document.getElementById('es_dp').value)||null,
+    hp_company:document.getElementById('es_hp_co').value.trim(),
+    notes:document.getElementById('es_notes').value.trim(),
+    updated_at:new Date().toISOString()
+  };
+  if(hpAmt)data.hp_amount=hpAmt;
+  await sbPatch('sales_records',{id:id},data);
+  closeModal('editSaleModal');
+  toast('Sale updated','success');
+  loadMySales();
+}
+
+async function openDataRequests(){
+  var reqs=await sbGet('data_view_requests','owner=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc');
+  if(!reqs.length){document.getElementById('dataReqBody').innerHTML='<div class="empty-state"><p>No pending requests</p></div>';openModal('dataReqModal');return;}
+  document.getElementById('dataReqBody').innerHTML=reqs.map(function(r){
+    var isPending=r.status==='pending';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1e2d45;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:12px;color:#f0f6fc;font-weight:500">'+esc(r.requester)+' requests to view <span style="color:#60a5fa">'+esc(r.field_name)+'</span></div>'
+      +'<div style="font-size:11px;color:#4a6fa5">Sale #'+r.record_id+' · '+fmtRelative(r.created_at)+'</div>'
+      +'</div>'
+      +(isPending
+        ?'<button class="btn sm success" onclick="approveDataReq('+r.id+','+r.record_id+',\''+esc(r.field_name)+'\',\''+esc(r.requester)+'\')">Approve</button>'
+         +'<button class="btn sm danger" onclick="rejectDataReq('+r.id+')">Reject</button>'
+        :'<span style="font-size:11px;color:'+(r.status==='approved'?'#34d399':'#f87171')+'">'+r.status+'</span>')
+      +'</div>';
+  }).join('');
+  openModal('dataReqModal');
+}
+async function approveDataReq(reqId,saleId,field,requester){
+  // Mark approved
+  await sbPatch('data_view_requests',{id:reqId},{status:'approved',approved_at:new Date().toISOString()});
+  // Send a notification via announcement or chat — for now show toast with data
+  var rows=await sbGet('sales_records','id=eq.'+saleId+'&select=customer_phone,customer_ic');
+  var data=rows.length?rows[0]:{};
+  var value=field==='phone'?data.customer_phone:data.customer_ic;
+  toast('Approved. '+requester+' can now view the '+field,'success');
+  closeModal('dataReqModal');
+  openDataRequests();
+}
+async function rejectDataReq(reqId){
+  await sbPatch('data_view_requests',{id:reqId},{status:'rejected'});
+  openDataRequests();
+  toast('Request rejected');
+}
 async function openSaleModal(){
   await loadAllUsersCache();await loadPLData();
   ['sl_cust_name','sl_cust_phone','sl_cust_ic','sl_brand','sl_model','sl_hp_co','sl_notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
@@ -2745,11 +2929,11 @@ async function loadMySales(){
     tasks.forEach(function(t){taskNotes[t.id]={notes:t.progress_notes||[],status:t.status};});
   }
   document.getElementById('mySalesList').innerHTML=rows.map(function(r){
-    var isMine=r.salesperson===currentUser.username;
+    var isMine=r.salesperson===currentUser.username||currentUser.role==='admin';
     var si=statusInfo[r.status]||{color:'#4a6fa5',label:r.status,desc:''};
-    // Mask phone and IC for non-creator
-    var phoneDisplay=isMine?(r.customer_phone||'—'):'<span style="color:#4a6fa5;cursor:pointer" onclick="requestDataView('+r.id+',\'phone\',\''+esc(r.salesperson)+'\')">••••••• <span style="font-size:10px;color:#3b82f6">Request</span></span>';
-    var icDisplay=isMine?(r.customer_ic||'—'):'<span style="color:#4a6fa5;cursor:pointer" onclick="requestDataView('+r.id+',\'ic\',\''+esc(r.salesperson)+'\')">••••••-••-•••• <span style="font-size:10px;color:#3b82f6">Request</span></span>';
+    // MySales shows full data to creator/admin — masking only in Task Detail
+    var phoneDisplay=r.customer_phone||'—';
+    var icDisplay=r.customer_ic||'—';
     // Task participants (who started work)
     var tn=r.task_id?taskNotes[r.task_id]:null;
     var participants=[];
