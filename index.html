@@ -393,8 +393,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <option value="exclude">🚫 All except selected</option>
         </select>
         <div id="sl_visibility_users" style="display:none">
-          <div style="font-size:11px;color:#4a6fa5;margin-bottom:6px" id="sl_vis_label">Select staff:</div>
-          <div id="sl_user_checkboxes" style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid #1e2d45;border-radius:6px;max-height:150px;overflow-y:auto"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+            <span style="font-size:11px;color:#4a6fa5" id="sl_vis_label">Select staff:</span>
+            <select id="sl_dept_filter" onchange="filterVisibilityByDept()" style="padding:3px 8px;border:1px solid #1e2d45;border-radius:5px;background:#0d1626;color:#e0e6f0;font-size:11px">
+              <option value="">All Departments</option>
+            </select>
+            <button class="btn sm" onclick="selectAllVis(true)" style="font-size:10px;padding:2px 8px">All</button>
+            <button class="btn sm" onclick="selectAllVis(false)" style="font-size:10px;padding:2px 8px">None</button>
+          </div>
+          <div id="sl_user_checkboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:6px;border:1px solid #1e2d45;border-radius:6px;max-height:160px;overflow-y:auto"></div>
         </div>
       </div>
       <div class="form-actions">
@@ -1395,21 +1402,64 @@ async function loadDashboard(){
 async function loadAnnouncements(){
   document.getElementById('annList').innerHTML='<div class="skeleton"></div><div class="skeleton"></div>';
   var anns=await sbGet('announcements','order=is_pinned.desc,created_at.desc');
-  // Get read status
-  var reads=await sbGet('announcement_reads','username=eq.'+encodeURIComponent(currentUser.username)+'&select=announcement_id');
-  var readIds=new Set(reads.map(function(r){return r.announcement_id;}));
+  var reads=await sbGet('announcement_reads','username=eq.'+encodeURIComponent(currentUser.username)+'&select=announcement_id,confirmed');
+  var readMap={};reads.forEach(function(r){readMap[r.announcement_id]={read:true,confirmed:r.confirmed};});
   if(!anns.length){document.getElementById('annList').innerHTML='<div class="empty-state"><div class="icon">📭</div><p>No announcements yet</p></div>';return;}
+  // For admin, also load all reads per announcement
+  var allReads={};
+  if(isAdminOrSuper()){
+    var ar=await sbGet('announcement_reads','select=announcement_id,username,confirmed');
+    ar.forEach(function(r){if(!allReads[r.announcement_id])allReads[r.announcement_id]=[];allReads[r.announcement_id].push(r);});
+  }
   document.getElementById('annList').innerHTML=anns.map(function(a){
-    var isRead=readIds.has(a.id);var isPin=a.is_pinned;var isAdmin=isAdminOrSuper();
-    return '<div class="ann-item'+(isPin?' pinned':'')+(isRead?'':' unread')+'" onclick="markRead('+a.id+')" id="ann-'+a.id+'">'
+    var myRead=readMap[a.id]||{};
+    var isRead=!!myRead.read;var isConfirmed=!!myRead.confirmed;
+    var isPin=a.is_pinned;var isAdmin=isAdminOrSuper();
+    var readsArr=allReads[a.id]||[];
+    var readCount=readsArr.length;var confirmCount=readsArr.filter(function(r){return r.confirmed;}).length;
+    var readNames=readsArr.slice(0,5).map(function(r){var u=allUsers.find(function(x){return x.username===r.username;})||{};return esc(u.display_name||r.username);}).join(', ');
+    var confirmNames=readsArr.filter(function(r){return r.confirmed;}).slice(0,5).map(function(r){var u=allUsers.find(function(x){return x.username===r.username;})||{};return esc(u.display_name||r.username);}).join(', ');
+    return '<div class="ann-item'+(isPin?' pinned':'')+(isRead?'':' unread')+'" id="ann-'+a.id+'">'
       +(isPin?'<div class="ann-pin">📌 Pinned</div>':'')
-      +'<div class="ann-title">'+esc(a.title)+(isRead?'':' <span style="color:#3b82f6;font-size:11px">●</span>')+'</div>'
+      +'<div class="ann-title" onclick="markRead('+a.id+')">'+esc(a.title)+(isRead?'':' <span style="color:#3b82f6;font-size:11px">●</span>')+'</div>'
       +'<div class="ann-content">'+esc(a.content||'')+'</div>'
       +'<div class="ann-meta"><span>'+fmtRelative(a.created_at)+'</span><span>by '+esc(a.created_by)+'</span><span class="ann-target">'+esc(a.target_role)+'</span></div>'
-      +(isAdmin?'<div class="ann-actions"><button class="btn sm danger" onclick="deleteAnn('+a.id+',event)">Delete</button></div>':'')
+      +'<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+      +(isRead&&!isConfirmed?'<button class="btn sm success" onclick="confirmAnn('+a.id+',event)">✓ Confirm Read</button>':'')
+      +(isConfirmed?'<span style="font-size:11px;color:#34d399">✓ Confirmed</span>':'')
+      +(isAdmin&&readCount>0?'<span style="font-size:10px;color:#4a6fa5" title="'+readNames+'">👁 '+readCount+' read</span>':'')
+      +(isAdmin&&confirmCount>0?'<span style="font-size:10px;color:#34d399" title="'+confirmNames+'">✓ '+confirmCount+' confirmed</span>':'')
+      +(isAdmin?'<button class="btn sm danger" style="margin-left:auto" onclick="deleteAnn('+a.id+',event)">Delete</button>':'')
+      +(isAdmin?'<button class="btn sm" onclick="viewAnnReads('+a.id+',event)">👥 Details</button>':'')
+      +'</div>'
       +'</div>';
   }).join('');
   updateUnreadCount(anns.length-reads.length);
+}
+
+async function confirmAnn(id,e){
+  e.stopPropagation();
+  await fetch(SB_URL+'/rest/v1/announcement_reads?announcement_id=eq.'+id+'&username=eq.'+encodeURIComponent(currentUser.username),{
+    method:'PATCH',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
+    body:JSON.stringify({confirmed:true,confirmed_at:new Date().toISOString()})
+  });
+  toast('Confirmed ✓','success');loadAnnouncements();
+}
+
+async function viewAnnReads(id,e){
+  e.stopPropagation();
+  var reads=await sbGet('announcement_reads','announcement_id=eq.'+id+'&select=username,confirmed,confirmed_at,read_at');
+  if(!reads.length){toast('No reads yet');return;}
+  var body=reads.map(function(r){
+    var u=allUsers.find(function(x){return x.username===r.username;})||{};
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #1e2d45">'
+      +'<span style="flex:1;font-size:12px;color:#e0e6f0">'+(esc(u.display_name)||esc(r.username))+'</span>'
+      +'<span style="font-size:11px;color:#6b8ab0">Read '+fmtRelative(r.read_at)+'</span>'
+      +(r.confirmed?'<span style="font-size:11px;color:#34d399">✓ Confirmed</span>':'<span style="font-size:11px;color:#4a6fa5">Not confirmed</span>')
+      +'</div>';
+  }).join('');
+  document.getElementById('taskDetailBody').innerHTML='<div style="font-size:13px;font-weight:600;color:#f0f6fc;margin-bottom:10px">Readers</div>'+body;
+  openModal('taskDetailModal');
 }
 
 async function markRead(id){
@@ -2598,16 +2648,35 @@ async function openSaleModal(){
   document.getElementById('sl_type').value='new';
   document.getElementById('sl_visibility').value='all';
   document.getElementById('sl_visibility_users').style.display='none';
+  // Populate dept filter
+  await loadAllDepts();
+  var dsel=document.getElementById('sl_dept_filter');
+  dsel.innerHTML='<option value="">All Departments</option>';
+  allDepts.forEach(function(d){var o=document.createElement('option');o.value=d.name;o.textContent=d.name;dsel.appendChild(o);});
   populateBrandList();
-  // Populate staff (exclude admin — auto-included)
+  populateVisUsers();
+  openModal('saleModal');
+}
+function populateVisUsers(deptFilter){
   var wrap=document.getElementById('sl_user_checkboxes');
-  wrap.innerHTML=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='admin';}).map(function(u){
-    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;font-size:12px;color:#c9d1d9;cursor:pointer;background:#0a0f1a">'
-      +'<input type="checkbox" value="'+esc(u.username)+'" class="sl_user_ck" style="flex-shrink:0"> '
-      +'<span>'+(esc(u.display_name)||esc(u.username))+(u.department?'<br><span style="font-size:10px;color:#4a6fa5">'+esc(u.department)+'</span>':'')+'</span>'
+  var users=allUsers.filter(function(u){
+    if(u.role==='admin'||u.is_active===false)return false;
+    if(deptFilter&&u.department!==deptFilter)return false;
+    return true;
+  });
+  wrap.innerHTML=users.map(function(u){
+    return '<label style="display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:5px;background:#0a0f1a;cursor:pointer;min-width:0">'
+      +'<input type="checkbox" value="'+esc(u.username)+'" class="sl_user_ck" style="flex-shrink:0">'
+      +'<span style="font-size:11px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(esc(u.display_name)||esc(u.username))+'</span>'
       +'</label>';
   }).join('');
-  openModal('saleModal');
+}
+function filterVisibilityByDept(){
+  var dept=document.getElementById('sl_dept_filter').value;
+  populateVisUsers(dept);
+}
+function selectAllVis(checked){
+  document.querySelectorAll('.sl_user_ck').forEach(function(el){el.checked=checked;});
 }
 function toggleSaleVisibility(val){
   document.getElementById('sl_visibility_users').style.display=val==='all'?'none':'block';
@@ -2654,26 +2723,98 @@ async function saveSale(){
   closeModal('saleModal');toast('Sale created — '+recNo,'success');loadMySales();
 }
 async function loadMySales(){
-  var rows=await sbGet('sales_records','salesperson=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc');
+  // Load all sales visible to current user
+  var rows;
+  if(currentUser.role==='admin'){
+    rows=await sbGet('sales_records','order=created_at.desc');
+  } else {
+    rows=await sbGet('sales_records','salesperson=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc');
+  }
   if(!rows.length){document.getElementById('mySalesList').innerHTML='<div class="empty-state"><div class="icon">🏍️</div><p>No sales records yet</p></div>';return;}
-  var sc={pending:'#fbbf24',confirmed:'#60a5fa',delivered:'#34d399',cancelled:'#f87171'};
+  var statusInfo={
+    pending:{color:'#fbbf24',label:'Pending',desc:'Awaiting confirmation'},
+    confirmed:{color:'#60a5fa',label:'Confirmed',desc:'Deal confirmed, processing'},
+    delivered:{color:'#34d399',label:'Delivered',desc:'Vehicle delivered to customer'},
+    cancelled:{color:'#f87171',label:'Cancelled',desc:'Sale cancelled'}
+  };
+  // Load task participants for each sale's task
+  var taskIds=rows.filter(function(r){return r.task_id;}).map(function(r){return r.task_id;});
+  var taskNotes={};
+  if(taskIds.length){
+    var tasks=await sbGet('tasks','id=in.('+taskIds.join(',')+')'+'&select=id,progress_notes,status');
+    tasks.forEach(function(t){taskNotes[t.id]={notes:t.progress_notes||[],status:t.status};});
+  }
   document.getElementById('mySalesList').innerHTML=rows.map(function(r){
-    return '<div class="card" style="margin-bottom:.7rem">'
+    var isMine=r.salesperson===currentUser.username;
+    var si=statusInfo[r.status]||{color:'#4a6fa5',label:r.status,desc:''};
+    // Mask phone and IC for non-creator
+    var phoneDisplay=isMine?(r.customer_phone||'—'):'<span style="color:#4a6fa5;cursor:pointer" onclick="requestDataView('+r.id+',\'phone\',\''+esc(r.salesperson)+'\')">••••••• <span style="font-size:10px;color:#3b82f6">Request</span></span>';
+    var icDisplay=isMine?(r.customer_ic||'—'):'<span style="color:#4a6fa5;cursor:pointer" onclick="requestDataView('+r.id+',\'ic\',\''+esc(r.salesperson)+'\')">••••••-••-•••• <span style="font-size:10px;color:#3b82f6">Request</span></span>';
+    // Task participants (who started work)
+    var tn=r.task_id?taskNotes[r.task_id]:null;
+    var participants=[];
+    if(tn&&tn.notes){
+      tn.notes.forEach(function(n){
+        if(n.note&&n.note.indexOf('started working')>=0||n.note.indexOf('Start Work')>=0||n.note.indexOf('▶')>=0){
+          if(participants.indexOf(n.username)<0)participants.push(n.username);
+        }
+      });
+    }
+    var participantHtml=participants.length?
+      '<div style="font-size:11px;color:#4a6fa5;margin-top:4px">Workers: '+participants.map(function(u){
+        var usr=allUsers.find(function(x){return x.username===u;})||{};
+        return esc(usr.display_name||u);
+      }).join(', ')+'</div>':'';
+    return '<div class="card" style="margin-bottom:.8rem">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
-      +'<div><div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.vehicle_brand)+' '+esc(r.vehicle_model)+(r.vehicle_year?' ('+r.vehicle_year+')':'')+'</div>'
-      +'<div style="font-size:12px;color:#6b8ab0">👤 '+esc(r.customer_name)+' · '+(r.customer_phone||'—')+'</div>'
-      +'<div style="font-size:11px;color:#4a6fa5">'+esc(r.record_no)+' · '+fmtDate(r.sale_date)+'</div></div>'
-      +'<div style="text-align:right">'
-      +'<div style="font-size:13px;font-weight:700;color:#34d399">'+(r.sale_price?'RM '+r.sale_price.toLocaleString():'—')+'</div>'
-      +'<select onchange="updateSaleStatus('+r.id+',this.value)" class="btn" style="padding:2px 5px;font-size:10px;margin-top:4px">'
-      +['pending','confirmed','delivered','cancelled'].map(function(s){return '<option value="'+s+'"'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join('')
-      +'</select></div></div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:600;color:#f0f6fc;margin-bottom:2px">'+esc(r.vehicle_brand)+' '+esc(r.vehicle_model)+'</div>'
+      +'<div style="font-size:12px;color:#e0e6f0">👤 '+esc(r.customer_name)+'</div>'
+      +'<div style="font-size:11px;color:#6b8ab0;margin-top:2px">📞 '+phoneDisplay+'</div>'
+      +'<div style="font-size:11px;color:#6b8ab0">🪪 '+icDisplay+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+esc(r.record_no)+' · '+fmtDate(r.sale_date)+'</div>'
+      +participantHtml
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'
+      +'<div style="font-size:14px;font-weight:700;color:#34d399">'+(r.sale_price?'RM '+r.sale_price.toLocaleString():'—')+'</div>'
+      +(isMine
+        ?'<div style="position:relative">'
+          +'<div style="background:'+(si.color)+'22;border:1px solid '+(si.color)+'44;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;color:'+si.color+'" onclick="toggleSaleStatusMenu('+r.id+')">'
+          +si.label+' ▾</div>'
+          +'<div id="ssm-'+r.id+'" style="display:none;position:absolute;right:0;top:100%;margin-top:2px;background:#1e2d45;border:1px solid #2a3d55;border-radius:8px;overflow:hidden;z-index:10;min-width:160px">'
+          +Object.entries(statusInfo).map(function(kv){
+            var k=kv[0];var v=kv[1];
+            return '<div onclick="setSaleStatus('+r.id+',\''+k+'\',event)" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #1a2a3a;'+(r.status===k?'background:#0d1e35;':'')+'">'
+              +'<div style="font-size:12px;font-weight:600;color:'+v.color+'">'+v.label+'</div>'
+              +'<div style="font-size:10px;color:#4a6fa5">'+v.desc+'</div>'
+              +'</div>';
+          }).join('')
+          +'</div></div>'
+        :'<span style="background:'+si.color+'22;border:1px solid '+si.color+'44;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;color:'+si.color+'">'+si.label+'</span>')
+      +'</div>'
+      +'</div>'
       +(r.notes?'<div style="font-size:11px;color:#4a6fa5;margin-top:6px;padding-top:6px;border-top:1px solid #1e2d45">'+esc(r.notes)+'</div>':'')
       +'</div>';
   }).join('');
 }
-async function updateSaleStatus(id,status){
-  await sbPatch('sales_records',{id:id},{status:status});toast('Updated: '+status,'success');
+
+function toggleSaleStatusMenu(id){
+  document.querySelectorAll('[id^="ssm-"]').forEach(function(el){if(el.id!=='ssm-'+id)el.style.display='none';});
+  var m=document.getElementById('ssm-'+id);if(m)m.style.display=m.style.display==='none'?'block':'none';
+}
+async function setSaleStatus(id,status,e){
+  e.stopPropagation();
+  await sbPatch('sales_records',{id:id},{status:status,updated_at:new Date().toISOString()});
+  document.querySelectorAll('[id^="ssm-"]').forEach(function(el){el.style.display='none';});
+  toast('Status → '+status,'success');loadMySales();
+}
+// Close menus on click outside
+document.addEventListener('click',function(){document.querySelectorAll('[id^="ssm-"]').forEach(function(el){el.style.display='none';});});
+
+async function requestDataView(recordId,field,owner){
+  if(!confirm('Request to view '+field+' from '+owner+'?'))return;
+  await sbPost('data_view_requests',{requester:currentUser.username,owner:owner,record_type:'sale',record_id:recordId,field_name:field,status:'pending'});
+  toast('Request sent to '+owner,'success');
 }
 
 /* ══ SELF CHECK-IN ══ */
@@ -2745,6 +2886,17 @@ async function doCheckIn(){
 
 /* ══ TASK VISIBILITY ══ */
 function isTaskVisible(task){
+  // Completed sale tasks: only visible to participants (who added progress notes) and creator/admin
+  if(task.task_type==='sale'&&task.status==='completed'){
+    var isCreator=task.assigned_by===currentUser.username;
+    var isAdmin=currentUser.role==='admin';
+    if(isAdmin||isCreator)return true;
+    // Check if user participated (added a note)
+    var notes=task.progress_notes||[];
+    var participated=notes.some(function(n){return n.username===currentUser.username;});
+    if(!participated)return false;
+  }
+  // Normal visibility check
   if(!task.visibility||task.visibility==='all')return true;
   var users=task.visibility_users||[];
   if(task.visibility==='include')return users.indexOf(currentUser.username)>=0||task.assigned_by===currentUser.username;
