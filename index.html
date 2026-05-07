@@ -258,6 +258,62 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 
+<!-- Sale Modal -->
+<div class="modal-overlay" id="saleModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3>🏍️ New Sale Record</h3>
+      <button class="btn sm" onclick="closeModal('saleModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:11px;color:#4a6fa5;margin-bottom:10px">A task will be automatically created for all staff to track.</div>
+      <div class="form-row">
+        <div class="form-field"><label>Customer Name</label><input type="text" id="sl_cust_name" placeholder="Full name"></div>
+        <div class="form-field"><label>Customer Phone</label><input type="text" id="sl_cust_phone" placeholder="01X-XXX XXXX"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>Customer IC</label><input type="text" id="sl_cust_ic" placeholder="XXXXXX-XX-XXXX"></div>
+        <div class="form-field"><label>Sale Type</label>
+          <select id="sl_type"><option value="new">New</option><option value="used">Used</option><option value="trade_in">Trade-in</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>Brand</label><input type="text" id="sl_brand" placeholder="e.g. Honda"></div>
+        <div class="form-field"><label>Model</label><input type="text" id="sl_model" placeholder="e.g. Wave 125"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>Year</label><input type="number" id="sl_year" placeholder="2024"></div>
+        <div class="form-field"><label>Color</label><input type="text" id="sl_color" placeholder="e.g. Red/Black"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>Sale Price (RM)</label><input type="number" id="sl_price"></div>
+        <div class="form-field"><label>Down Payment (RM)</label><input type="number" id="sl_dp"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>HP Company</label><input type="text" id="sl_hp_co" placeholder="e.g. CIMB Bank"></div>
+        <div class="form-field"><label>HP Amount (RM)</label><input type="number" id="sl_hp_amt"></div>
+      </div>
+      <div class="form-field"><label>Notes</label><textarea id="sl_notes" rows="2"></textarea></div>
+      <div class="form-field">
+        <label>Task Visibility</label>
+        <select id="sl_visibility" onchange="toggleSaleVisibility(this.value)" style="width:100%;padding:8px;border:1px solid #1e2d45;border-radius:7px;background:#0d1626;color:#e0e6f0">
+          <option value="all">All staff can see this task</option>
+          <option value="include">Only specific staff</option>
+          <option value="exclude">Exclude specific staff</option>
+        </select>
+        <div id="sl_visibility_users" style="display:none;margin-top:6px">
+          <div style="font-size:10px;color:#4a6fa5;margin-bottom:4px" id="sl_vis_label">Select staff:</div>
+          <div id="sl_user_checkboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:120px;overflow-y:auto;padding:6px;border:1px solid #1e2d45;border-radius:6px"></div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('saleModal')">Cancel</button>
+        <button class="btn primary" onclick="saveSale()">Create Sale + Task</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- LOGIN -->
 <div id="loginScreen">
   <div class="login-card">
@@ -481,6 +537,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <div class="nav-item" onclick="openPage('tasks')" id="nav-tasks">
         <span class="nav-icon">✅</span>My Tasks
+      </div>
+      <div class="nav-item" onclick="openPage('mysales')" id="nav-mysales">
+        <span class="nav-icon">🏍️</span>My Sales
+      </div>
+      <div class="nav-item" onclick="openPage('mycheckin')" id="nav-mycheckin">
+        <span class="nav-icon">📍</span>Check In
       </div>
       <div class="nav-item" onclick="openPage('calendar')" id="nav-calendar">
         <span class="nav-icon">📅</span>Calendar
@@ -805,6 +867,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
               <input type="text" id="nu_position" placeholder="e.g. Sales Executive">
             </div>
           </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label>Date Joined</label>
+              <input type="date" id="nu_joined">
+            </div>
+            <div class="form-field">
+              <label>Date Resigned <span style="font-size:10px;color:#4a6fa5">(leave blank if active)</span></label>
+              <input type="date" id="nu_resigned">
+            </div>
+          </div>
 
           <!-- Module permissions -->
           <div id="nu_modules" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:.8rem">
@@ -858,6 +930,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
         <!-- User list -->
         <div id="adminUserList"></div>
+      </div>
+
+      <!-- MY SALES -->
+      <div class="page" id="page-mysales">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem">
+          <div>
+            <div class="page-title">🏍️ My Sales</div>
+            <div class="page-sub">Motorcycle sales records</div>
+          </div>
+          <button class="btn primary" onclick="openSaleModal()">+ New Sale</button>
+        </div>
+        <div id="mySalesList"></div>
+      </div>
+
+      <!-- MY CHECK-IN -->
+      <div class="page" id="page-mycheckin">
+        <div class="page-title">📍 Check In / Out</div>
+        <div class="page-sub" id="checkinDate"></div>
+        <div class="card" style="max-width:400px;margin:0 auto">
+          <div style="text-align:center;margin-bottom:1rem">
+            <div style="font-size:32px;font-weight:700;color:#f0f6fc" id="checkinClock">--:--</div>
+            <div style="font-size:12px;color:#4a6fa5" id="checkinStatus">Loading...</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem" id="checkinSessions"></div>
+          <div id="checkinGPS" style="font-size:11px;color:#4a6fa5;text-align:center;margin-bottom:8px">📍 Getting location...</div>
+          <div id="checkinPhotoWrap" style="margin-bottom:8px">
+            <label style="font-size:11px;color:#4a6fa5;display:block;margin-bottom:4px">📷 Photo (optional)</label>
+            <input type="file" id="checkinPhoto" accept="image/*" capture="user" style="font-size:11px;color:#c9d1d9;width:100%">
+          </div>
+          <button class="btn primary" style="width:100%;padding:12px;font-size:14px" id="checkinBtn" onclick="doCheckIn()">Check In</button>
+          <div style="font-size:10px;color:#2a4a6a;text-align:center;margin-top:6px">Your location and time will be recorded</div>
+        </div>
       </div>
 
       <!-- PROFILE -->
@@ -1036,6 +1140,8 @@ function openPage(name){
   // Lazy load
   if(name==='announcements')loadAnnouncements();
   else if(name==='tasks')loadMyTasks();
+  else if(name==='mysales')loadMySales();
+  else if(name==='mycheckin')loadCheckin();
   else if(name==='calendar')renderCalendar();
   else if(name==='leave')loadMyLeave();
   else if(name==='my-attendance')loadMyAttendance();
@@ -1185,20 +1291,22 @@ async function deleteDept(id,name){
 var taskFilter='all';
 async function loadMyTasks(){
   document.getElementById('taskList').innerHTML='<div class="skeleton"></div>';
-  // Load tasks assigned to me directly OR to my department
-  var q1='assigned_to=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc';
-  if(taskFilter!=='all')q1+='&status=eq.'+taskFilter;
-  var tasks=await sbGet('tasks',q1);
-  // Also load dept tasks if user has a department
-  if(currentUser.department){
-    var q2='assigned_dept=eq.'+encodeURIComponent(currentUser.department)+'&order=created_at.desc';
-    if(taskFilter!=='all')q2+='&status=eq.'+taskFilter;
-    var deptTasks=await sbGet('tasks',q2);
-    // Merge, dedup by id
-    var seen=new Set(tasks.map(function(t){return t.id;}));
-    deptTasks.forEach(function(t){if(!seen.has(t.id))tasks.push(t);});
-    tasks.sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at);});
-  }
+  var q='order=created_at.desc&select=*';
+  if(taskFilter!=='all')q+='&status=eq.'+taskFilter;
+  // Load all relevant tasks (own + dept + sale/all-staff tasks)
+  var all=await sbGet('tasks',q);
+  // Filter by visibility and relevance
+  var tasks=all.filter(function(t){
+    // Directly assigned to me
+    var mine=t.assigned_to===currentUser.username;
+    // Dept task for my dept
+    var deptMine=t.assigned_dept&&t.assigned_dept===currentUser.department;
+    // All-staff task (no specific assignee, visibility=all or includes me)
+    var allStaff=!t.assigned_to&&!t.assigned_dept;
+    if(!(mine||deptMine||allStaff))return false;
+    // Apply visibility filter
+    return isTaskVisible(t);
+  });
   renderTaskList(tasks,document.getElementById('taskList'),false);
 }
 function filterTasks(f){
@@ -1349,43 +1457,54 @@ function updateLeaveDays(){
   if(s&&e){var d=Math.round((new Date(e)-new Date(s))/86400000)+1;document.getElementById('leaveDaysCount').textContent=d>0?d+' day'+(d>1?'s':''):'Invalid dates';}
 }
 async function loadMyLeave(){
-  // Load leave config
   var cfg=await sbGet('leave_config','select=key,value');
   var cfgMap={};cfg.forEach(function(c){cfgMap[c.key]=c.value;});
-  var alTotal=parseInt(cfgMap.annual_leave_days)||14;
   var minAdv=parseInt(cfgMap.min_advance_days)||1;
 
-  // My leave records this year
+  // Get user's joined date for tenure calculation
+  var uRows=await sbGet('users','username=eq.'+encodeURIComponent(currentUser.username)+'&select=joined_date');
+  var joinedDate=uRows.length&&uRows[0].joined_date?new Date(uRows[0].joined_date):null;
+  var tenureYears=joinedDate?((Date.now()-joinedDate.getTime())/(365.25*24*3600*1000)):0;
+
+  // Malaysia Employment Act 1955 entitlements
+  var alTotal=tenureYears<2?8:tenureYears<5?12:16;
+  var mcTotal=tenureYears<2?14:tenureYears<5?18:22;
+
+  // Leave used this year
   var year=new Date().getFullYear();
   var rows=await sbGet('leave_requests','username=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc');
-  var approved=rows.filter(function(r){return r.status==='approved';});
-  var alUsed=approved.filter(function(r){return r.leave_type==='annual';}).reduce(function(sum,r){return sum+Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;},0);
-  var unpaidUsed=approved.filter(function(r){return r.leave_type==='unpaid';}).reduce(function(sum,r){return sum+Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;},0);
+  var thisYear=rows.filter(function(r){return r.start_date&&r.start_date.startsWith(year+'');});
+  var approved=thisYear.filter(function(r){return r.status==='approved';});
+  var countDays=function(arr,type){return arr.filter(function(r){return r.leave_type===type;}).reduce(function(s,r){return s+Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;},0);};
+  var alUsed=countDays(approved,'annual');
+  var mcUsed=countDays(approved,'medical');
+  var unpaidUsed=countDays(approved,'unpaid');
+  var emerUsed=countDays(approved,'emergency');
 
-  // Attendance stats this year
+  // Attendance stats
   var attRows=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=gte.'+year+'-01-01&select=status,date');
-  var workdays=attRows.filter(function(r){return r.status!=='holiday';});
+  var workdays=attRows.filter(function(r){return r.status!=='holiday'&&r.status!=='leave';});
   var present=workdays.filter(function(r){return r.status==='present';}).length;
   var absent=workdays.filter(function(r){return r.status==='absent';}).length;
   var attRate=workdays.length>0?Math.round(present/workdays.length*100):0;
 
-  // Stats cards
-  var statsHtml='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem">'
-    +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(alTotal-alUsed)+'</div><div class="sub">of '+alTotal+' days</div></div>'
-    +'<div class="stat-card blue"><div class="label">AL Used</div><div class="value">'+alUsed+'</div><div class="sub">this year</div></div>'
+  var tenureLabel=tenureYears<2?'< 2 years':tenureYears<5?'2–5 years':'> 5 years';
+  var statsHtml='<div class="card" style="margin-bottom:1rem">'
+    +'<div class="card-title">📊 Leave Summary '+year+' <span style="font-size:11px;color:#4a6fa5;font-weight:400">Tenure: '+tenureLabel+(joinedDate?' · Joined '+fmtDate(joinedDate.toISOString().slice(0,10)):'')+'</span></div>'
+    +'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px">'
+    +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(alTotal-alUsed)+'</div><div class="sub">Used '+alUsed+' / Entitled '+alTotal+' days</div></div>'
+    +'<div class="stat-card blue"><div class="label">MC Balance</div><div class="value">'+(mcTotal-mcUsed)+'</div><div class="sub">Used '+mcUsed+' / Entitled '+mcTotal+' days</div></div>'
     +'<div class="stat-card yellow"><div class="label">Unpaid Leave</div><div class="value">'+unpaidUsed+'</div><div class="sub">this year</div></div>'
-    +'<div class="stat-card '+(absent>3?'red':'blue')+'"><div class="label">Absent</div><div class="value">'+absent+'</div><div class="sub">'+attRate+'% attendance</div></div>'
-    +'</div>';
+    +'<div class="stat-card '+(absent>3?'red':'blue')+'"><div class="label">Attendance Rate</div><div class="value">'+attRate+'%</div><div class="sub">Absent: '+absent+' day'+(absent!==1?'s':'')+'</div></div>'
+    +'</div></div>';
 
   var listHtml=rows.length?rows.map(function(r){
-    var days2=Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
+    var d2=Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
     return '<div class="leave-item">'
       +'<div class="leave-info">'
-      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> '+fmtDate(r.start_date)+' → '+fmtDate(r.end_date)+' <span style="font-size:11px;color:#4a6fa5">('+days2+' day'+( days2>1?'s':'')+')</span></div>'
+      +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> '+fmtDate(r.start_date)+' → '+fmtDate(r.end_date)+' <span style="font-size:11px;color:#4a6fa5">('+d2+' day'+(d2>1?'s':'')+')</span></div>'
       +'<div class="leave-dates">'+(r.reason?esc(r.reason):'-')+'</div>'
-      +'</div>'
-      +'<div class="leave-status '+r.status+'">'+r.status+'</div>'
-      +'</div>';
+      +'</div><div class="leave-status '+r.status+'">'+r.status+'</div></div>';
   }).join(''):'<div class="empty-state"><div class="icon">🌴</div><p>No leave applications yet</p></div>';
 
   document.getElementById('leaveList').innerHTML=statsHtml+listHtml;
@@ -1406,28 +1525,18 @@ async function submitLeave(){
 }
 
 async function loadAllLeave(){
-  // Leave config section for admin
+  // Load config into existing HTML fields
   var cfg=await sbGet('leave_config','select=key,value');
   var cfgMap={};cfg.forEach(function(c){cfgMap[c.key]=c.value;});
-  var configHtml='';
-  if(currentUser.role==='admin'){
-    configHtml='<div class="card" style="margin-bottom:1rem">'
-      +'<div class="card-title">Leave Settings</div>'
-      +'<div class="form-row">'
-      +'<div class="form-field"><label>Min Advance Days (staff must apply X days before)</label>'
-      +'<input type="number" id="lcMinAdv" min="0" value="'+(cfgMap.min_advance_days||1)+'" style="width:100px">'
-      +'</div>'
-      +'<div class="form-field"><label>Annual Leave Days per Year</label>'
-      +'<input type="number" id="lcAlDays" min="0" value="'+(cfgMap.annual_leave_days||14)+'" style="width:100px">'
-      +'</div>'
-      +'</div>'
-      +'<div class="form-actions" style="margin-top:.5rem;padding-top:.5rem">'
-      +'<button class="btn primary" onclick="saveLeaveConfig()">Save Settings</button>'
-      +'</div></div>';
-  }
+  var el1=document.getElementById('leaveMinDays');var el2=document.getElementById('leaveAnnualDays');
+  if(el1)el1.value=cfgMap.min_advance_days||1;
+  if(el2)el2.value=cfgMap.annual_leave_days||14;
+  // Hide settings card for non-admin
+  var card=document.getElementById('leaveConfigCard');
+  if(card)card.style.display=currentUser.role==='admin'?'':'none';
   var rows=await sbGet('leave_requests','order=created_at.desc');
-  if(!rows.length){document.getElementById('adminLeaveList').innerHTML=configHtml+'<div class="empty-state"><div class="icon">📋</div><p>No leave requests</p></div>';return;}
-  var listHtml=rows.map(function(r){
+  if(!rows.length){document.getElementById('adminLeaveList').innerHTML='<div class="empty-state"><div class="icon">📋</div><p>No leave requests</p></div>';return;}
+  document.getElementById('adminLeaveList').innerHTML=rows.map(function(r){
     var isPending=r.status==='pending';
     var days2=Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
     return '<div class="leave-item">'
@@ -1439,14 +1548,6 @@ async function loadAllLeave(){
       +(isPending?'<button class="btn sm success" onclick="reviewLeave('+r.id+',\'approved\')">Approve</button><button class="btn sm danger" onclick="reviewLeave('+r.id+',\'rejected\')">Reject</button>':'<span class="leave-status '+r.status+'">'+r.status+'</span>')
       +'</div></div>';
   }).join('');
-  document.getElementById('adminLeaveList').innerHTML=configHtml+listHtml;
-}
-
-async function saveLeaveConfig(){
-  var minAdv=document.getElementById('lcMinAdv').value;
-  var alDays=document.getElementById('lcAlDays').value;
-  await fetch(SB_URL+'/rest/v1/leave_config',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify([{key:'min_advance_days',value:parseInt(minAdv)},{key:'annual_leave_days',value:parseInt(alDays)}])});
-  toast('Leave settings saved','success');
 }
 
 async function reviewLeave(id,status){
@@ -1506,13 +1607,16 @@ async function renderCalendar(){
     var dt=new Date(y,m,d);dt.setHours(0,0,0,0);
     var key=y+'-'+(m+1).toString().padStart(2,'0')+'-'+d.toString().padStart(2,'0');
     var isToday=dt.getTime()===today.getTime();
-    var isWeekend=dt.getDay()===0||dt.getDay()===6;
+    var isSunday=dt.getDay()===0; // Fixed rest day
     var dayEvs=events[key]||[];
+    // Mark Sunday as rest if not already a holiday
+    var hasHoliday=dayEvs.some(function(e){return e.type==='holiday'||e.type==='rest';});
+    if(isSunday&&!hasHoliday)dayEvs.unshift({type:'rest',label:'Rest Day'});
     var evHTML=dayEvs.slice(0,3).map(function(e){
       var cls=e.type==='task'?'task':e.type==='leave'?'leave':e.type==='rest'?'rest':'announce';
       return '<div class="cal-event '+cls+'">'+esc(e.label)+'</div>';
     }).join('');
-    html+='<div class="cal-day'+(isToday?' today':'')+(isWeekend?' other-month':'')+'">'
+    html+='<div class="cal-day'+(isToday?' today':'')+(isSunday?' other-month':'')+'">'
       +'<div class="cal-day-num">'+d+'</div>'+evHTML+'</div>';
   }
   document.getElementById('calGrid').innerHTML=html;
@@ -1526,6 +1630,13 @@ async function loadLeaveConfig(){
   var el1=document.getElementById('leaveMinDays');var el2=document.getElementById('leaveAnnualDays');
   if(el1)el1.value=leaveConfigCache.min_advance_days||1;
   if(el2)el2.value=leaveConfigCache.annual_leave_days||14;
+}
+async function saveLeaveConfig(){
+  var min=parseInt(document.getElementById('leaveMinDays').value)||1;
+  var ann=parseInt(document.getElementById('leaveAnnualDays').value)||14;
+  await fetch(SB_URL+'/rest/v1/leave_config',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify([{key:'min_advance_days',value:min},{key:'annual_leave_days',value:ann}])});
+  leaveConfigCache.min_advance_days=min;leaveConfigCache.annual_leave_days=ann;
+  toast('Leave settings saved','success');
 }
 function setAttToday(){
   var today=new Date().toISOString().slice(0,10);
@@ -1762,6 +1873,8 @@ async function createUser(){
     display_name:document.getElementById('nu_dispname').value.trim()||null,
     position:document.getElementById('nu_position').value.trim()||null,
     department:dept||null,
+    joined_date:document.getElementById('nu_joined').value||null,
+    resigned_date:document.getElementById('nu_resigned').value||null,
     can_access_tools:isAdmin||document.getElementById('nu_tools').checked,
     can_access_team:isAdmin||document.getElementById('nu_team').checked,
     can_access_partner:false,
@@ -1925,6 +2038,142 @@ async function saveProfile(){
   document.getElementById('profileAvatar').textContent=(fields.display_name||currentUser.username).charAt(0).toUpperCase();
   setTimeout(function(){document.getElementById('profileMsg').textContent='';},2000);
   toast('Profile saved','success');
+}
+
+/* ══ MY SALES ══ */
+async function openSaleModal(){
+  ['sl_cust_name','sl_cust_phone','sl_cust_ic','sl_brand','sl_model','sl_color','sl_hp_co','sl_notes'].forEach(function(id){document.getElementById(id).value='';});
+  ['sl_price','sl_dp','sl_hp_amt','sl_year'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('sl_type').value='new';
+  document.getElementById('sl_visibility').value='all';
+  document.getElementById('sl_visibility_users').style.display='none';
+  var wrap=document.getElementById('sl_user_checkboxes');
+  wrap.innerHTML=allUsers.filter(function(u){return u.is_active!==false;}).map(function(u){
+    return '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#c9d1d9"><input type="checkbox" value="'+esc(u.username)+'" class="sl_user_ck"> '+(esc(u.display_name)||esc(u.username))+'</label>';
+  }).join('');
+  openModal('saleModal');
+}
+function toggleSaleVisibility(val){
+  document.getElementById('sl_visibility_users').style.display=val==='all'?'none':'block';
+  document.getElementById('sl_vis_label').textContent=val==='include'?'Only these staff can see:':'Hide from these staff:';
+}
+async function saveSale(){
+  var cust=document.getElementById('sl_cust_name').value.trim();
+  var brand=document.getElementById('sl_brand').value.trim();
+  var model=document.getElementById('sl_model').value.trim();
+  if(!cust||!brand||!model){toast('Customer name, brand and model required','error');return;}
+  var recNo='HM-'+new Date().getFullYear()+'-'+Date.now().toString().slice(-5);
+  var vis=document.getElementById('sl_visibility').value;
+  var selUsers=Array.from(document.querySelectorAll('.sl_user_ck:checked')).map(function(el){return el.value;});
+  var task=await sbPost('tasks',{
+    title:'Sale: '+brand+' '+model+' — '+cust,
+    task_type:'sale',assigned_by:currentUser.username,status:'pending',priority:'normal',
+    vehicle_info:{brand:brand,model:model,color:document.getElementById('sl_color').value},
+    visibility:vis,visibility_users:selUsers,
+    description:'Customer: '+cust+'\nPhone: '+document.getElementById('sl_cust_phone').value+'\nIC: '+document.getElementById('sl_cust_ic').value
+  });
+  var taskId=task&&task.length?task[0].id:null;
+  await sbPost('sales_records',{
+    record_no:recNo,customer_name:cust,
+    customer_phone:document.getElementById('sl_cust_phone').value,
+    customer_ic:document.getElementById('sl_cust_ic').value,
+    vehicle_brand:brand,vehicle_model:model,
+    vehicle_year:parseInt(document.getElementById('sl_year').value)||null,
+    vehicle_color:document.getElementById('sl_color').value,
+    sale_type:document.getElementById('sl_type').value,
+    sale_price:parseFloat(document.getElementById('sl_price').value)||null,
+    dp_amount:parseFloat(document.getElementById('sl_dp').value)||null,
+    hp_company:document.getElementById('sl_hp_co').value,
+    hp_amount:parseFloat(document.getElementById('sl_hp_amt').value)||null,
+    notes:document.getElementById('sl_notes').value,
+    salesperson:currentUser.username,task_id:taskId,
+    sale_date:new Date().toISOString().slice(0,10)
+  });
+  closeModal('saleModal');toast('Sale created — '+recNo,'success');loadMySales();
+}
+async function loadMySales(){
+  var rows=await sbGet('sales_records','salesperson=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc');
+  if(!rows.length){document.getElementById('mySalesList').innerHTML='<div class="empty-state"><div class="icon">🏍️</div><p>No sales records yet</p></div>';return;}
+  var sc={pending:'#fbbf24',confirmed:'#60a5fa',delivered:'#34d399',cancelled:'#f87171'};
+  document.getElementById('mySalesList').innerHTML=rows.map(function(r){
+    return '<div class="card" style="margin-bottom:.7rem">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+      +'<div><div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.vehicle_brand)+' '+esc(r.vehicle_model)+(r.vehicle_year?' ('+r.vehicle_year+')':'')+'</div>'
+      +'<div style="font-size:12px;color:#6b8ab0">👤 '+esc(r.customer_name)+' · '+(r.customer_phone||'—')+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5">'+esc(r.record_no)+' · '+fmtDate(r.sale_date)+'</div></div>'
+      +'<div style="text-align:right">'
+      +'<div style="font-size:13px;font-weight:700;color:#34d399">'+(r.sale_price?'RM '+r.sale_price.toLocaleString():'—')+'</div>'
+      +'<select onchange="updateSaleStatus('+r.id+',this.value)" class="btn" style="padding:2px 5px;font-size:10px;margin-top:4px">'
+      +['pending','confirmed','delivered','cancelled'].map(function(s){return '<option value="'+s+'"'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join('')
+      +'</select></div></div>'
+      +(r.notes?'<div style="font-size:11px;color:#4a6fa5;margin-top:6px;padding-top:6px;border-top:1px solid #1e2d45">'+esc(r.notes)+'</div>':'')
+      +'</div>';
+  }).join('');
+}
+async function updateSaleStatus(id,status){
+  await sbPatch('sales_records',{id:id},{status:status});toast('Updated: '+status,'success');
+}
+
+/* ══ SELF CHECK-IN ══ */
+var checkinGPSCoords=null;var checkinClock=null;
+function startCheckinClock(){
+  clearInterval(checkinClock);
+  checkinClock=setInterval(function(){
+    var n=new Date();var el=document.getElementById('checkinClock');
+    if(el)el.textContent=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0')+':'+n.getSeconds().toString().padStart(2,'0');
+  },1000);
+}
+async function loadCheckin(){
+  startCheckinClock();
+  var today=new Date().toISOString().slice(0,10);
+  document.getElementById('checkinDate').textContent=fmtDate(today);
+  var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
+  var r=rec.length?rec[0]:{};
+  var sessions=[{l:'S1',i:r.check_in,o:r.check_out},{l:'S2',i:r.check_in_2,o:r.check_out_2},{l:'S3',i:r.check_in_3,o:r.check_out_3}];
+  document.getElementById('checkinSessions').innerHTML=sessions.map(function(s){
+    return '<div style="background:#0d1626;border:1px solid #1e2d45;border-radius:8px;padding:8px;text-align:center">'
+      +'<div style="font-size:10px;color:#4a6fa5;margin-bottom:3px">'+s.l+'</div>'
+      +'<div style="font-size:11px;color:#34d399">'+(s.i?fmtTime(s.i):'—')+'</div>'
+      +'<div style="font-size:11px;color:#f87171">'+(s.o?fmtTime(s.o):'—')+'</div>'
+      +'</div>';
+  }).join('');
+  var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
+  var btn=document.getElementById('checkinBtn');
+  var sn=field?(['check_in','check_out'].indexOf(field)>=0?1:['check_in_2','check_out_2'].indexOf(field)>=0?2:3):0;
+  var tp=field&&field.indexOf('out')>=0?'Out':'In';
+  if(!field){btn.disabled=true;btn.textContent='✓ All sessions done';}
+  else{btn.disabled=false;btn.textContent='Check '+tp+' (S'+sn+')';}
+  document.getElementById('checkinStatus').textContent=field?'Next: Check '+tp+' Session '+sn:'All done for today';
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(function(pos){
+      checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
+      var el=document.getElementById('checkinGPS');
+      if(el)el.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
+    },function(){
+      var el=document.getElementById('checkinGPS');if(el)el.textContent='📍 GPS unavailable';
+    },{enableHighAccuracy:true,timeout:8000});
+  }
+}
+async function doCheckIn(){
+  var today=new Date().toISOString().slice(0,10);
+  var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
+  var r=rec.length?rec[0]:{};
+  var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
+  if(!field){toast('All sessions recorded today','success');return;}
+  var data={};data[field]=new Date().toISOString();data.self_checkin=true;data.status='present';
+  if(checkinGPSCoords){var isIn=field.indexOf('out')<0;data[isIn?'checkin_lat':'checkout_lat']=checkinGPSCoords.lat;data[isIn?'checkin_lng':'checkout_lng']=checkinGPSCoords.lng;}
+  if(rec.length){await sbPatch('attendance',{username:currentUser.username,date:today},data);}
+  else{data.username=currentUser.username;data.date=today;await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});}
+  toast('Recorded ✓','success');await loadCheckin();
+}
+
+/* ══ TASK VISIBILITY ══ */
+function isTaskVisible(task){
+  if(!task.visibility||task.visibility==='all')return true;
+  var users=task.visibility_users||[];
+  if(task.visibility==='include')return users.indexOf(currentUser.username)>=0||task.assigned_by===currentUser.username;
+  if(task.visibility==='exclude')return users.indexOf(currentUser.username)<0||task.assigned_by===currentUser.username;
+  return true;
 }
 
 (async function(){
