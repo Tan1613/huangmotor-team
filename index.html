@@ -346,21 +346,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div style="font-size:11px;color:#4a6fa5;margin-bottom:10px">A task will be automatically created for all staff to track.</div>
       <div class="form-row">
         <div class="form-field"><label>Customer Name</label><input type="text" id="sl_cust_name" placeholder="Full name"></div>
-        <div class="form-field"><label>Customer Phone</label><input type="text" id="sl_cust_phone" placeholder="01X-XXX XXXX"></div>
+        <div class="form-field"><label>Customer Phone</label><input type="text" id="sl_cust_phone" placeholder="01X-XXXXXXX"></div>
       </div>
       <div class="form-row">
-        <div class="form-field"><label>Customer IC</label><input type="text" id="sl_cust_ic" placeholder="XXXXXX-XX-XXXX"></div>
+        <div class="form-field">
+          <label>Customer IC <span style="font-size:10px;color:#4a6fa5">(auto-format)</span></label>
+          <input type="text" id="sl_cust_ic" placeholder="000000-00-0000" maxlength="14" oninput="formatIC(this)">
+        </div>
         <div class="form-field"><label>Sale Type</label>
           <select id="sl_type"><option value="new">New</option><option value="used">Used</option><option value="trade_in">Trade-in</option></select>
         </div>
       </div>
       <div class="form-row">
-        <div class="form-field"><label>Brand</label><input type="text" id="sl_brand" placeholder="e.g. Honda"></div>
-        <div class="form-field"><label>Model</label><input type="text" id="sl_model" placeholder="e.g. Wave 125"></div>
-      </div>
-      <div class="form-row">
-        <div class="form-field"><label>Year</label><input type="number" id="sl_year" placeholder="2024"></div>
-        <div class="form-field"><label>Color</label><input type="text" id="sl_color" placeholder="e.g. Red/Black"></div>
+        <div class="form-field">
+          <label>Brand</label>
+          <input type="text" id="sl_brand" placeholder="Select or type..." list="sl_brand_list" oninput="updateSaleModelList()">
+          <datalist id="sl_brand_list"></datalist>
+        </div>
+        <div class="form-field">
+          <label>Model</label>
+          <input type="text" id="sl_model" placeholder="Select or type..." list="sl_model_list">
+          <datalist id="sl_model_list"></datalist>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-field"><label>Cash OTR (RM)</label><input type="number" id="sl_price"></div>
@@ -369,10 +376,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="form-row">
         <div class="form-field"><label>HP Company</label><input type="text" id="sl_hp_co" placeholder="e.g. CIMB Bank"></div>
         <div class="form-field">
-          <label>HP: Monthly (RM) × Months</label>
+          <label>HP Monthly (RM) × Months</label>
           <div style="display:flex;gap:6px;align-items:center">
             <input type="number" id="sl_hp_monthly" placeholder="Monthly" style="flex:1">
-            <span style="color:#4a6fa5;font-size:12px">×</span>
+            <span style="color:#4a6fa5">×</span>
             <input type="number" id="sl_hp_tenure" placeholder="Months" style="flex:1">
           </div>
         </div>
@@ -380,14 +387,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="form-field"><label>Notes</label><textarea id="sl_notes" rows="2"></textarea></div>
       <div class="form-field">
         <label>Task Visibility</label>
-        <select id="sl_visibility" onchange="toggleSaleVisibility(this.value)" style="width:100%;padding:8px;border:1px solid #1e2d45;border-radius:7px;background:#0d1626;color:#e0e6f0">
-          <option value="all">All staff can see this task</option>
-          <option value="include">Only specific staff</option>
-          <option value="exclude">Exclude specific staff</option>
+        <select id="sl_visibility" onchange="toggleSaleVisibility(this.value)" style="width:100%;padding:8px;border:1px solid #1e2d45;border-radius:7px;background:#0d1626;color:#e0e6f0;margin-bottom:8px">
+          <option value="all">👥 All staff</option>
+          <option value="include">🔒 Only selected staff</option>
+          <option value="exclude">🚫 All except selected</option>
         </select>
-        <div id="sl_visibility_users" style="display:none;margin-top:6px">
-          <div style="font-size:10px;color:#4a6fa5;margin-bottom:4px" id="sl_vis_label">Select staff:</div>
-          <div id="sl_user_checkboxes" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:120px;overflow-y:auto;padding:6px;border:1px solid #1e2d45;border-radius:6px"></div>
+        <div id="sl_visibility_users" style="display:none">
+          <div style="font-size:11px;color:#4a6fa5;margin-bottom:6px" id="sl_vis_label">Select staff:</div>
+          <div id="sl_user_checkboxes" style="display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid #1e2d45;border-radius:6px;max-height:150px;overflow-y:auto"></div>
         </div>
       </div>
       <div class="form-actions">
@@ -1300,6 +1307,36 @@ async function loadAllUsersCache(){
 
 /* ══ NAVIGATION ══ */
 var currentPage='dashboard';
+/* ══ MOBILE NAV ══ */
+function toggleMobileMore(){
+  var drawer=document.getElementById('mobileMoreDrawer');
+  var overlay=document.getElementById('drawerOverlay');
+  var isOpen=drawer.classList.contains('open');
+  if(isOpen){closeMobileMore();}
+  else{drawer.classList.add('open');overlay.classList.add('open');document.getElementById('mn-more').classList.add('active');}
+}
+function closeMobileMore(){
+  var drawer=document.getElementById('mobileMoreDrawer');
+  var overlay=document.getElementById('drawerOverlay');
+  if(drawer)drawer.classList.remove('open');
+  if(overlay)overlay.classList.remove('open');
+  var btn=document.getElementById('mn-more');if(btn)btn.classList.remove('active');
+}
+function updateMobileNav(page){
+  ['mn-dashboard','mn-tasks','mn-mycheckin','mn-chat','mn-more'].forEach(function(id){
+    var el=document.getElementById(id);if(el)el.classList.remove('active');
+  });
+  var map={dashboard:'mn-dashboard',tasks:'mn-tasks',mycheckin:'mn-mycheckin',chat:'mn-chat'};
+  if(map[page])document.getElementById(map[page]).classList.add('active');
+  else document.getElementById('mn-more').classList.add('active');
+}
+function showAdminMobileNav(){
+  var sec=document.getElementById('mnAdminSection');if(sec)sec.style.display='';
+  ['mn-admin-tasks','mn-admin-attendance','mn-admin-leave','mn-performance','mn-admin-dept','mn-admin-users'].forEach(function(id){
+    var el=document.getElementById(id);if(el)el.style.display='';
+  });
+}
+
 function openPage(name){
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});
@@ -1462,23 +1499,23 @@ async function deleteDept(id,name){
 var taskFilter='all';
 async function loadMyTasks(){
   document.getElementById('taskList').innerHTML='<div class="skeleton"></div>';
+  // Highlight active filter
+  document.querySelectorAll('[id^="tf-"]').forEach(function(b){b.classList.remove('primary');});
+  var ab=document.getElementById('tf-'+taskFilter);if(ab)ab.classList.add('primary');
   var q='order=created_at.desc&select=*';
   if(taskFilter!=='all')q+='&status=eq.'+taskFilter;
-  // Load all relevant tasks (own + dept + sale/all-staff tasks)
   var all=await sbGet('tasks',q);
-  // Filter by visibility and relevance
   var tasks=all.filter(function(t){
-    // Directly assigned to me
     var mine=t.assigned_to===currentUser.username;
-    // Dept task for my dept
     var deptMine=t.assigned_dept&&t.assigned_dept===currentUser.department;
-    // All-staff task (no specific assignee, visibility=all or includes me)
     var allStaff=!t.assigned_to&&!t.assigned_dept;
     if(!(mine||deptMine||allStaff))return false;
-    // Apply visibility filter
     return isTaskVisible(t);
   });
   renderTaskList(tasks,document.getElementById('taskList'),false);
+}
+function filterTasks(f){
+  taskFilter=f;loadMyTasks();
 }
 function filterTasks(f){
   taskFilter=f;
@@ -1524,12 +1561,16 @@ async function openTaskDetail(id){
   var tasks=await sbGet('tasks','id=eq.'+id);
   if(!tasks.length)return;
   var t=tasks[0];var notes=t.progress_notes||[];
-  var canAct=t.assigned_to===currentUser.username;
+  var isSaleTask=t.task_type==='sale';
+  // Anyone who can see the task can act on it if it's a sale task
+  // For regular tasks: only assigned person can act
+  var canAct=t.assigned_to===currentUser.username||t.assigned_dept===currentUser.department||
+    (isSaleTask&&isTaskVisible(t))||isAdminOrSuper();
   var statusBtns='';
   if(canAct){
-    if(t.status==='pending')statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button><button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
-    else if(t.status==='accepted')statusBtns='<button class="btn sm primary" onclick="updateTaskStatus('+id+',\'in_progress\')">Start Work</button>';
-    else if(t.status==='in_progress')statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'completed\')">Mark Complete</button>';
+    if(t.status==='pending'&&!isSaleTask)statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button><button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
+    else if(t.status==='accepted'||t.status==='pending')statusBtns='<button class="btn sm primary" onclick="updateTaskStatus('+id+',\'in_progress\')">▶ Start Work</button>';
+    else if(t.status==='in_progress')statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'completed\')">✅ Mark Complete</button>';
   }
   var body='<div style="margin-bottom:10px">'
     +'<div style="font-size:15px;font-weight:700;color:#f0f6fc;margin-bottom:6px">'+esc(t.title)+'</div>'
@@ -2521,16 +2562,50 @@ function clearChatImg(){pendingChatImg=null;document.getElementById('chatImgPrev
 function viewFullImg(src){var w=window.open('','_blank');w.document.write('<img src="'+src+'" style="max-width:100%;display:block;margin:auto">');}
 
 /* ══ FIXES ══ */
+/* IC auto-format */
+function formatIC(input){
+  var v=input.value.replace(/\D/g,'').slice(0,12);
+  if(v.length>6&&v.length<=8)v=v.slice(0,6)+'-'+v.slice(6);
+  else if(v.length>8)v=v.slice(0,6)+'-'+v.slice(6,8)+'-'+v.slice(8);
+  input.value=v;
+}
+
+/* Brand/model datalist from pricelist */
+var plDataCache=[];
+async function loadPLData(){
+  if(plDataCache.length)return;
+  try{
+    var rows=await sbGet('pricelist','select=brand,model&order=brand.asc,model.asc');
+    plDataCache=rows;
+  }catch(e){}
+}
+function populateBrandList(){
+  var brands=[...new Set(plDataCache.map(function(r){return r.brand;}).filter(Boolean))];
+  var dl=document.getElementById('sl_brand_list');
+  if(dl)dl.innerHTML=brands.map(function(b){return '<option value="'+esc(b)+'"></option>';}).join('');
+}
+function updateSaleModelList(){
+  var brand=document.getElementById('sl_brand').value.trim();
+  var models=plDataCache.filter(function(r){return r.brand===brand;}).map(function(r){return r.model;});
+  var dl=document.getElementById('sl_model_list');
+  if(dl)dl.innerHTML=models.map(function(m){return '<option value="'+esc(m)+'"></option>';}).join('');
+}
+
 async function openSaleModal(){
-  ['sl_cust_name','sl_cust_phone','sl_cust_ic','sl_brand','sl_model','sl_color','sl_hp_co','sl_notes'].forEach(function(id){document.getElementById(id).value='';});
-  ['sl_price','sl_dp','sl_hp_monthly','sl_hp_tenure','sl_year'].forEach(function(id){document.getElementById(id).value='';});
+  await loadAllUsersCache();await loadPLData();
+  ['sl_cust_name','sl_cust_phone','sl_cust_ic','sl_brand','sl_model','sl_hp_co','sl_notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  ['sl_price','sl_dp','sl_hp_monthly','sl_hp_tenure'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('sl_type').value='new';
   document.getElementById('sl_visibility').value='all';
   document.getElementById('sl_visibility_users').style.display='none';
-  // Populate visibility users — exclude admin (always included automatically)
+  populateBrandList();
+  // Populate staff (exclude admin — auto-included)
   var wrap=document.getElementById('sl_user_checkboxes');
   wrap.innerHTML=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='admin';}).map(function(u){
-    return '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#c9d1d9"><input type="checkbox" value="'+esc(u.username)+'" class="sl_user_ck"> '+(esc(u.display_name)||esc(u.username))+'</label>';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;font-size:12px;color:#c9d1d9;cursor:pointer;background:#0a0f1a">'
+      +'<input type="checkbox" value="'+esc(u.username)+'" class="sl_user_ck" style="flex-shrink:0"> '
+      +'<span>'+(esc(u.display_name)||esc(u.username))+(u.department?'<br><span style="font-size:10px;color:#4a6fa5">'+esc(u.department)+'</span>':'')+'</span>'
+      +'</label>';
   }).join('');
   openModal('saleModal');
 }
@@ -2542,7 +2617,9 @@ async function saveSale(){
   var cust=document.getElementById('sl_cust_name').value.trim();
   var brand=document.getElementById('sl_brand').value.trim();
   var model=document.getElementById('sl_model').value.trim();
+  var ic=document.getElementById('sl_cust_ic').value.trim();
   if(!cust||!brand||!model){toast('Customer name, brand and model required','error');return;}
+  if(ic&&ic.replace(/-/g,'').length!==12){toast('IC must be 12 digits (000000-00-0000)','error');return;}
   var recNo='HM-'+new Date().getFullYear()+'-'+Date.now().toString().slice(-5);
   var monthly=parseFloat(document.getElementById('sl_hp_monthly').value)||null;
   var tenure=parseInt(document.getElementById('sl_hp_tenure').value)||null;
@@ -2550,13 +2627,12 @@ async function saveSale(){
   var vis=document.getElementById('sl_visibility').value;
   var selUsers=Array.from(document.querySelectorAll('.sl_user_ck:checked')).map(function(el){return el.value;});
   allUsers.filter(function(u){return u.role==='admin';}).forEach(function(u){if(selUsers.indexOf(u.username)<0)selUsers.push(u.username);});
-  var taskDesc='Customer: '+cust+'\nPhone: '+document.getElementById('sl_cust_phone').value+'\nIC: '+document.getElementById('sl_cust_ic').value;
+  var taskDesc='Customer: '+cust+'\nPhone: '+document.getElementById('sl_cust_phone').value+'\nIC: '+ic;
   var task=await sbPost('tasks',{
     title:'Sale: '+brand+' '+model+' — '+cust,
     task_type:'sale',assigned_by:currentUser.username,
-    status:'accepted', // Auto-accepted — sale tasks are collective
-    priority:'normal',
-    vehicle_info:{brand:brand,model:model,color:document.getElementById('sl_color').value},
+    status:'accepted',priority:'normal',
+    vehicle_info:{brand:brand,model:model},
     visibility:vis,visibility_users:selUsers,
     description:taskDesc
   });
@@ -2564,10 +2640,8 @@ async function saveSale(){
   await sbPost('sales_records',{
     record_no:recNo,customer_name:cust,
     customer_phone:document.getElementById('sl_cust_phone').value,
-    customer_ic:document.getElementById('sl_cust_ic').value,
+    customer_ic:ic,
     vehicle_brand:brand,vehicle_model:model,
-    vehicle_year:parseInt(document.getElementById('sl_year').value)||null,
-    vehicle_color:document.getElementById('sl_color').value,
     sale_type:document.getElementById('sl_type').value,
     sale_price:parseFloat(document.getElementById('sl_price').value)||null,
     dp_amount:parseFloat(document.getElementById('sl_dp').value)||null,
