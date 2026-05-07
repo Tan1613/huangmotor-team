@@ -286,6 +286,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 
+<!-- Room Manage Modal -->
+<div class="modal-overlay" id="roomManageModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3>⚙ Room Settings</h3>
+      <button class="btn sm" onclick="closeModal('roomManageModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="roomManageBody"></div>
+    </div>
+  </div>
+</div>
+
 <!-- New Chat Room Modal -->
 <div class="modal-overlay" id="newRoomModal">
   <div class="modal">
@@ -719,11 +732,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <h3 id="calTitle"></h3>
             <button class="btn sm" onclick="calNext()">›</button>
           </div>
-          <div style="display:flex;gap:12px;font-size:11px;color:var(--color-text-secondary);margin-bottom:8px;flex-wrap:wrap">
-            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#0d2d1a;display:inline-block"></span>Task due</span>
-            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1a0d2d;display:inline-block"></span>Approved leave</span>
-            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#2d1a0d;display:inline-block"></span>Public holiday</span>
-            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#1a1a2d;display:inline-block"></span>Rest day</span>
+          <div style="display:flex;gap:10px;font-size:11px;margin-bottom:8px;flex-wrap:wrap">
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:3px;height:14px;background:#22c55e;border-radius:2px;display:inline-block"></span><span style="color:#4ade80">Task due</span></span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:3px;height:14px;background:#f97316;border-radius:2px;display:inline-block"></span><span style="color:#fb923c">Approved leave</span></span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:3px;height:14px;background:#d946ef;border-radius:2px;display:inline-block"></span><span style="color:#e879f9">Public holiday</span></span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:3px;height:14px;background:#8b5cf6;border-radius:2px;display:inline-block"></span><span style="color:#a78bfa">Rest day</span></span>
+            <span style="display:flex;align-items:center;gap:4px"><span style="width:3px;height:14px;background:#3b82f6;border-radius:2px;display:inline-block"></span><span style="color:#93c5fd">Announcement</span></span>
           </div>
           <div class="cal-grid" id="calGrid"></div>
         </div>
@@ -817,17 +831,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="page-sub">Review and approve leave requests</div>
         <div class="card" style="margin-bottom:1rem" id="leaveConfigCard">
           <div class="card-title">⚙ Leave Settings</div>
-          <div class="form-row" style="align-items:flex-end">
-            <div class="form-field">
+          <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+            <div class="form-field" style="margin:0">
               <label>Minimum advance notice (days)</label>
               <input type="number" id="leaveMinDays" min="0" max="30" value="1" style="width:120px">
             </div>
-            <div class="form-field">
-              <label>Annual leave entitlement (days/year)</label>
-              <input type="number" id="leaveAnnualDays" min="0" max="60" value="14" style="width:120px">
-            </div>
-            <div class="form-field" style="padding-bottom:1rem">
-              <button class="btn primary" onclick="saveLeaveConfig()">Save Settings</button>
+            <div class="form-field" style="margin:0;padding-bottom:.1rem">
+              <button class="btn primary" onclick="saveLeaveConfig()">Save</button>
             </div>
           </div>
         </div>
@@ -1025,6 +1035,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
                 <div style="font-size:13px;font-weight:600;color:#f0f6fc" id="chatRoomName"></div>
                 <div style="font-size:10px;color:#4a6fa5" id="chatRoomMembers"></div>
               </div>
+              <button class="btn sm" id="chatManageBtn" onclick="openRoomManage()" style="display:none">⚙</button>
             </div>
             <div class="chat-msgs" id="chatMsgs"></div>
             <div id="chatImgPreviewWrap" style="padding:0 .7rem;background:#0d1626;border-left:1px solid #1e2d45;border-right:1px solid #1e2d45;display:none">
@@ -1579,12 +1590,12 @@ async function loadMyLeave(){
   var joinedDate=uRows.length&&uRows[0].joined_date?new Date(uRows[0].joined_date):null;
   var tenureYears=joinedDate?((Date.now()-joinedDate.getTime())/(365.25*24*3600*1000)):0;
 
-  // Malaysia EA 1955 — prorated for < 1 year
+  // Malaysia EA 1955
   var alTotal,mcTotal;
   if(tenureYears<1){
-    var monthsWorked=Math.floor(tenureYears*12);
-    alTotal=Math.floor(8*monthsWorked/12); // prorated monthly
-    mcTotal=Math.floor(14*monthsWorked/12);
+    var monthsWorked=Math.max(0,Math.floor(tenureYears*12));
+    alTotal=Math.floor(8*monthsWorked/12); // AL prorated monthly
+    mcTotal=14; // MC always 14 days for < 2 years
   } else if(tenureYears<2){alTotal=8;mcTotal=14;}
   else if(tenureYears<5){alTotal=12;mcTotal=18;}
   else{alTotal=16;mcTotal=22;}
@@ -1765,9 +1776,8 @@ async function loadLeaveConfig(){
 }
 async function saveLeaveConfig(){
   var min=parseInt(document.getElementById('leaveMinDays').value)||1;
-  var ann=parseInt(document.getElementById('leaveAnnualDays').value)||14;
-  await fetch(SB_URL+'/rest/v1/leave_config',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify([{key:'min_advance_days',value:min},{key:'annual_leave_days',value:ann}])});
-  leaveConfigCache.min_advance_days=min;leaveConfigCache.annual_leave_days=ann;
+  await fetch(SB_URL+'/rest/v1/leave_config',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify([{key:'min_advance_days',value:min}])});
+  leaveConfigCache.min_advance_days=min;
   toast('Leave settings saved','success');
 }
 function setAttToday(){
@@ -2096,10 +2106,14 @@ async function editUser(username){
   if(!rows.length)return;
   var u=rows[0];var isAdm=u.role==='admin';
   var ck=function(f){return u[f]?'checked':''};
-  var body='<div style="font-size:13px;font-weight:600;margin-bottom:12px">Edit: <span style="color:#60a5fa">@'+esc(username)+'</span>'+(isAdm?' <span style="font-size:10px;color:#fbbf24">(Admin — all permissions)</span>':'')+'</div>'
+  var body='<div style="font-size:13px;font-weight:600;margin-bottom:12px">Edit: <span style="color:#60a5fa">@'+esc(username)+'</span>'+(isAdm?' <span style="font-size:10px;color:#fbbf24">(Admin)</span>':'')+'</div>'
+    +'<div class="form-row" style="margin-bottom:8px">'
+    +'<div class="form-field"><label>Display Name</label><input type="text" id="eu_name" value="'+esc(u.display_name||'')+'"></div>'
+    +'<div class="form-field"><label>Position</label><input type="text" id="eu_pos" value="'+esc(u.position||'')+'" '+(currentUser.role==='admin'?'':'readonly style="opacity:.5"')+'></div>'
+    +'</div>'
     +'<div class="form-row" style="margin-bottom:10px">'
-    +'<div class="form-field"><label>Display Name</label><input type="text" id="eu_name" value="'+esc(u.display_name||'')+'" '+(isAdm?'':'')+'></div>'
-    +'<div class="form-field"><label>Position</label><input type="text" id="eu_pos" value="'+esc(u.position||'')+'" '+(currentUser.role==='admin'?'':'readonly')+' style="opacity:'+(currentUser.role==='admin'?'1':'.5')+'"></div>'
+    +'<div class="form-field"><label>Date Joined</label><input type="date" id="eu_joined" value="'+(u.joined_date||'')+'"></div>'
+    +'<div class="form-field"><label>Date Resigned</label><input type="date" id="eu_resigned" value="'+(u.resigned_date||'')+'"></div>'
     +'</div>';
   if(!isAdm){
     var mkSec=function(title,color,items){
@@ -2123,8 +2137,12 @@ async function editUser(username){
 async function saveEditUser(username,isAdm){
   var data={
     display_name:document.getElementById('eu_name').value.trim()||null,
-    position:(currentUser.role==='admin'?document.getElementById('eu_pos').value.trim():undefined)
+    joined_date:document.getElementById('eu_joined').value||null,
+    resigned_date:document.getElementById('eu_resigned').value||null
   };
+  if(currentUser.role==='admin'){
+    data.position=document.getElementById('eu_pos').value.trim()||null;
+  }
   if(!isAdm){
     ['can_access_tools','can_edit_pricelist','can_edit_generator','can_edit_mf','is_viewer_mode',
      'can_access_team','can_assign_task_dept','can_assign_task_cross','can_view_attendance',
@@ -2132,8 +2150,6 @@ async function saveEditUser(username,isAdm){
       var el=document.getElementById('eu_'+f);if(el)data[f]=el.checked;
     });
   }
-  // Remove undefined
-  Object.keys(data).forEach(function(k){if(data[k]===undefined)delete data[k];});
   await sbPatch('users',{username:username},data);
   closeModal('taskDetailModal');
   toast('Saved','success');
@@ -2261,17 +2277,82 @@ async function openChatRoom(roomId,roomName){
   document.getElementById('chatRoomList').style.display='none';
   document.getElementById('chatWindow').style.display='';
   document.getElementById('chatRoomName').textContent=roomName;
-  // Get member list
-  var rooms=await sbGet('chat_rooms','id=eq.'+roomId+'&select=members,is_public');
-  if(rooms.length){
-    var r=rooms[0];
-    var memberNames=r.is_public?'All staff':(r.members||[]).map(function(u){var usr=allUsers.find(function(x){return x.username===u;});return usr?(usr.display_name||usr.username):u;}).join(', ');
-    document.getElementById('chatRoomMembers').textContent=memberNames;
-  }
+  var rooms=await sbGet('chat_rooms','id=eq.'+roomId+'&select=*');
+  var room=rooms.length?rooms[0]:{};
+  var members=room.members||[];
+  var memberNames=room.is_public?'All staff':members.map(function(u){var usr=allUsers.find(function(x){return x.username===u;});return usr?(usr.display_name||usr.username):u;}).join(', ');
+  document.getElementById('chatRoomMembers').textContent=(room.is_closed?'🔒 Closed · ':'')+memberNames;
+  // Show manage btn for admin or room creator
+  var manBtn=document.getElementById('chatManageBtn');
+  if(manBtn)manBtn.style.display=(currentUser.role==='admin'||room.created_by===currentUser.username)?'':'none';
+  // Block input if room closed and not admin
+  var isBlocked=room.is_closed&&currentUser.role!=='admin';
+  document.getElementById('chatInput').disabled=isBlocked;
+  document.getElementById('chatInput').placeholder=isBlocked?'Room is closed':'Type a message...';
+  document.querySelector('.chat-send-btn').disabled=isBlocked;
+  document.querySelector('.chat-img-btn').disabled=isBlocked;
   await loadChatMessages(true);
-  // Poll for new messages every 5 seconds
   clearInterval(chatPollInterval);
   chatPollInterval=setInterval(function(){loadChatMessages(false);},5000);
+}
+
+async function openRoomManage(){
+  var rooms=await sbGet('chat_rooms','id=eq.'+currentRoomId+'&select=*');
+  if(!rooms.length)return;
+  var room=rooms[0];var members=room.members||[];
+  var memberList=members.map(function(u){
+    var usr=allUsers.find(function(x){return x.username===u;})||{};
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #1e2d45">'
+      +'<span style="flex:1;font-size:12px;color:#e0e6f0">'+(esc(usr.display_name)||esc(u))+'<span style="font-size:10px;color:#4a6fa5;margin-left:5px">@'+esc(u)+'</span></span>'
+      +(u!==currentUser.username?'<button class="btn sm danger" onclick="removeChatMember(\''+esc(u)+'\')">Remove</button>':'')
+      +'</div>';
+  }).join('');
+  var addOpts=allUsers.filter(function(u){return u.is_active!==false&&members.indexOf(u.username)<0;}).map(function(u){
+    return '<option value="'+esc(u.username)+'">'+(esc(u.display_name)||esc(u.username))+'</option>';
+  }).join('');
+  document.getElementById('roomManageBody').innerHTML=
+    '<div style="font-size:12px;font-weight:600;color:#93c5fd;margin-bottom:8px">'+esc(room.name)+'</div>'
+    +'<div style="margin-bottom:12px">'
+    +'<div style="font-size:11px;color:#4a6fa5;margin-bottom:6px">Members</div>'
+    +memberList
+    +'</div>'
+    +(addOpts?'<div style="display:flex;gap:6px;margin-bottom:12px"><select id="addMemberSel" class="btn" style="flex:1"><option value="">Add member...</option>'+addOpts+'</select><button class="btn primary sm" onclick="addChatMember()">Add</button></div>':'')
+    +'<div class="divider"></div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">'
+    +'<button class="btn '+(room.is_closed?'success':'warning')+'" onclick="toggleRoomClosed('+(room.is_closed?'false':'true')+')">'+(room.is_closed?'🔓 Reopen Room':'🔒 Close Room')+'</button>'
+    +'<button class="btn danger" onclick="deleteRoom()">🗑️ Delete Room</button>'
+    +'</div>';
+  openModal('roomManageModal');
+}
+
+async function addChatMember(){
+  var sel=document.getElementById('addMemberSel');var username=sel.value;if(!username)return;
+  var rooms=await sbGet('chat_rooms','id=eq.'+currentRoomId+'&select=members');
+  var members=rooms.length?(rooms[0].members||[]):[];
+  if(members.indexOf(username)<0)members.push(username);
+  await sbPatch('chat_rooms',{id:currentRoomId},{members:members});
+  toast(username+' added','success');closeModal('roomManageModal');
+  await openChatRoom(currentRoomId,document.getElementById('chatRoomName').textContent);
+  openRoomManage();
+}
+async function removeChatMember(username){
+  var rooms=await sbGet('chat_rooms','id=eq.'+currentRoomId+'&select=members');
+  var members=(rooms.length?(rooms[0].members||[]):[]).filter(function(u){return u!==username;});
+  await sbPatch('chat_rooms',{id:currentRoomId},{members:members});
+  toast(username+' removed','success');closeModal('roomManageModal');
+  await openChatRoom(currentRoomId,document.getElementById('chatRoomName').textContent);
+  openRoomManage();
+}
+async function toggleRoomClosed(closed){
+  await sbPatch('chat_rooms',{id:currentRoomId},{is_closed:closed});
+  toast(closed?'Room closed':'Room reopened','success');
+  closeModal('roomManageModal');
+  await openChatRoom(currentRoomId,document.getElementById('chatRoomName').textContent);
+}
+async function deleteRoom(){
+  if(!confirm('Delete this room and all messages? This cannot be undone.'))return;
+  await fetch(SB_URL+'/rest/v1/chat_rooms?id=eq.'+currentRoomId,{method:'DELETE',headers:sbH()});
+  closeModal('roomManageModal');backToRooms();toast('Room deleted','success');
 }
 
 function backToRooms(){
@@ -2317,15 +2398,24 @@ async function sendChatMsg(){
   var txt=document.getElementById('chatInput').value.trim();
   if(!txt&&!pendingChatImg)return;
   if(pendingChatImg){
-    await sbPost('chat_messages',{room_id:currentRoomId,username:currentUser.username,message:'[image]',message_type:'image',media_data:pendingChatImg});
+    await fetch(SB_URL+'/rest/v1/chat_messages',{
+      method:'POST',
+      headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify({room_id:currentRoomId,username:currentUser.username,message:'[image]',message_type:'image',media_data:pendingChatImg})
+    });
     clearChatImg();
   }
   if(txt){
-    await sbPost('chat_messages',{room_id:currentRoomId,username:currentUser.username,message:txt,message_type:'text'});
+    await fetch(SB_URL+'/rest/v1/chat_messages',{
+      method:'POST',
+      headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify({room_id:currentRoomId,username:currentUser.username,message:txt,message_type:'text'})
+    });
     document.getElementById('chatInput').value='';
     document.getElementById('chatInput').style.height='36px';
   }
   await loadChatMessages(false);
+  var c=document.getElementById('chatMsgs');c.scrollTop=c.scrollHeight;
 }
 
 function onChatImgSelected(input){
