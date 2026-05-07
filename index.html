@@ -1675,13 +1675,11 @@ async function openTaskDetail(id){
     if(t.status==='pending'&&!isSaleTask)
       statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button>'
         +'<button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
-    else if(t.status==='accepted'||t.status==='pending'){
-      if(!iAmWorker||!isSaleTask)
-        statusBtns='<button class="btn sm primary" onclick="startWork('+id+')">▶ Start Work</button>';
-      else statusBtns='<span style="font-size:11px;color:#34d399">✓ You are working on this</span>';
-    }
-    else if(t.status==='in_progress'&&(iAmWorker||!isSaleTask))
-      statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'completed\')">✅ Mark Complete</button>';
+    // Start Work: show to everyone who hasn't started yet, regardless of how many others started
+    if((t.status==='accepted'||t.status==='in_progress')&&!iAmWorker&&(isSaleTask||t.status==='accepted'))
+      statusBtns+='<button class="btn sm primary" onclick="startWork('+id+')">▶ Start Work</button>';
+    if(iAmWorker&&t.status==='in_progress')
+      statusBtns+='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'completed\')">✅ Mark Complete</button>';
   }
   // Sale owner can cancel
   if(isSaleTask&&(isSaleOwner||isAdmin)&&t.status!=='completed'&&t.status!=='cancelled')
@@ -1696,10 +1694,10 @@ async function openTaskDetail(id){
     var showFull=isSaleOwner||isAdmin;
     var phoneTxt=showFull?(saleRec.customer_phone||'—')
       :'<span style="color:#4a6fa5">•••••••</span> '
-      +(iAmWorker?'<button class="btn sm" onclick="requestDataView('+saleRec.id+',\'phone\',\''+esc(saleRec.salesperson)+'\')">Request</button>':'<span style="font-size:10px;color:#2a4a6a">Start work to request</span>');
+      +(iAmWorker?'<button class="btn sm" style="font-size:10px;padding:2px 7px" onclick="requestDataView('+saleRec.id+',\'phone\',\''+esc(saleRec.salesperson)+'\',\''+esc(saleRec.record_no)+'\')">Request</button>':'<span style="font-size:10px;color:#2a4a6a">Start work first</span>');
     var icTxt=showFull?(saleRec.customer_ic||'—')
       :'<span style="color:#4a6fa5">••••••-••-••••</span> '
-      +(iAmWorker?'<button class="btn sm" onclick="requestDataView('+saleRec.id+',\'ic\',\''+esc(saleRec.salesperson)+'\')">Request</button>':'<span style="font-size:10px;color:#2a4a6a">Start work to request</span>');
+      +(iAmWorker?'<button class="btn sm" style="font-size:10px;padding:2px 7px" onclick="requestDataView('+saleRec.id+',\'ic\',\''+esc(saleRec.salesperson)+'\',\''+esc(saleRec.record_no)+'\')">Request</button>':'<span style="font-size:10px;color:#2a4a6a">Start work first</span>');
     saleHtml='<div style="background:#0a0f1a;border:1px solid #1e2d45;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px">'
       +'<div style="font-weight:600;color:#60a5fa;margin-bottom:6px">Sale Details — '+esc(saleRec.record_no)+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
@@ -1726,13 +1724,24 @@ async function openTaskDetail(id){
     +(notes.length?notes.map(function(n){
       return '<div class="progress-note"><span class="pn-user">'+esc(n.username)+'</span> <span class="pn-time">'+fmtRelative(n.ts)+'</span><div style="color:#e0e6f0;margin-top:2px">'+esc(n.note)+'</div></div>';
     }).join(''):'<div style="font-size:11px;color:#2a4a6a;margin-bottom:8px">No notes yet</div>')
-    +((canAct||isAdmin)?'<div style="display:flex;gap:6px;margin-top:10px"><input type="text" id="noteInp" placeholder="Add progress note..." style="flex:1;padding:7px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px;outline:none"><button class="btn sm primary" onclick="addProgressNote('+id+')">Add</button></div>':'')
+    +((canAct||isAdmin)?'<div style="display:flex;gap:6px;margin-top:10px"><input type="text" id="noteInp_'+id+'" placeholder="Add progress note..." style="flex:1;padding:7px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px;outline:none" onkeydown="if(event.key===\'Enter\')addProgressNote('+id+')"><button class="btn sm primary" onclick="addProgressNote('+id+')">Add</button></div>':'')
     +'<div class="divider"></div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap">'+statusBtns+'</div>';
   document.getElementById('taskDetailBody').innerHTML=body;
   openModal('taskDetailModal');
 }
 
+async function addProgressNote(taskId){
+  var inp=document.getElementById('noteInp_'+taskId);
+  if(!inp)return;
+  var note=inp.value.trim();if(!note){toast('Please type a note','error');return;}
+  var tasks=await sbGet('tasks','id=eq.'+taskId+'&select=progress_notes');
+  var notes=(tasks.length&&tasks[0].progress_notes)||[];
+  notes.push({username:currentUser.username,note:note,ts:new Date().toISOString()});
+  await sbPatch('tasks',{id:taskId},{progress_notes:notes,updated_at:new Date().toISOString()});
+  toast('Note added','success');closeModal('taskDetailModal');
+  if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
+}
 async function startWork(taskId){
   // Add user to workers list (individual tracking, not changing task status for everyone)
   var tasks=await sbGet('tasks','id=eq.'+taskId+'&select=workers,progress_notes,status');
@@ -2499,9 +2508,9 @@ function updateLeaveDays(){
 var currentRoomId=null;var chatPollInterval=null;var chatLastMsgId=0;var pendingChatImg=null;
 
 async function loadChatRooms(){
-  if(currentUser.role==='admin'||currentUser.can_assign_task_cross){
-    document.getElementById('newChatRoomBtn').style.display='';
-  }
+  // Allow admin OR anyone with cross-dept task permission to create rooms
+  var canCreate=currentUser.role==='admin'||currentUser.can_assign_task_cross||currentUser.can_view_perf_all;
+  if(canCreate)document.getElementById('newChatRoomBtn').style.display='';
   var rooms=await sbGet('chat_rooms','order=created_at.desc');
   // Filter rooms user is member of or is public
   var myRooms=rooms.filter(function(r){
@@ -2785,7 +2794,16 @@ async function saveEditSale(){
     updated_at:new Date().toISOString()
   };
   if(hpAmt)data.hp_amount=hpAmt;
+  // Log the change
+  var before=await sbGet('sales_records','id=eq.'+id+'&select=customer_name,customer_phone,sale_price');
   await sbPatch('sales_records',{id:id},data);
+  // Write change log
+  await sbPost('change_log',{
+    username:currentUser.username,action:'edit_sale',table_name:'sales_records',
+    record_id:String(id),
+    before_data:before.length?before[0]:null,
+    after_data:{customer_name:data.customer_name,customer_phone:data.customer_phone,sale_price:data.sale_price}
+  });
   closeModal('editSaleModal');
   toast('Sale updated','success');
   loadMySales();
@@ -2794,29 +2812,32 @@ async function saveEditSale(){
 async function openDataRequests(){
   var reqs=await sbGet('data_view_requests','owner=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc');
   if(!reqs.length){document.getElementById('dataReqBody').innerHTML='<div class="empty-state"><p>No pending requests</p></div>';openModal('dataReqModal');return;}
+  // Enrich with sale record info
+  var saleIds=[...new Set(reqs.map(function(r){return r.record_id;}))];
+  var sales=saleIds.length?await sbGet('sales_records','id=in.('+saleIds.join(',')+')'+'&select=id,record_no,customer_name,vehicle_brand,vehicle_model,customer_phone,customer_ic'):[];
+  var saleMap={};sales.forEach(function(s){saleMap[s.id]=s;});
   document.getElementById('dataReqBody').innerHTML=reqs.map(function(r){
+    var s=saleMap[r.record_id]||{};
     var isPending=r.status==='pending';
-    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1e2d45;flex-wrap:wrap">'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:12px;color:#f0f6fc;font-weight:500">'+esc(r.requester)+' requests to view <span style="color:#60a5fa">'+esc(r.field_name)+'</span></div>'
-      +'<div style="font-size:11px;color:#4a6fa5">Sale #'+r.record_id+' · '+fmtRelative(r.created_at)+'</div>'
-      +'</div>'
+    var fieldVal=r.field_name==='phone'?s.customer_phone:s.customer_ic;
+    return '<div style="background:#0d1626;border:1px solid #1e2d45;border-radius:8px;padding:10px;margin-bottom:8px">'
+      +'<div style="font-size:12px;font-weight:600;color:#f0f6fc;margin-bottom:3px">'+esc(r.requester)+' requests: <span style="color:#60a5fa">'+esc(r.field_name)+'</span></div>'
+      +'<div style="font-size:11px;color:#4a6fa5;margin-bottom:3px">Sale: '+esc(s.record_no||'#'+r.record_id)+' · '+(esc(s.vehicle_brand)||'')+(esc(s.vehicle_model)?' '+esc(s.vehicle_model):'')+'</div>'
+      +'<div style="font-size:11px;color:#6b8ab0;margin-bottom:6px">Customer: '+esc(s.customer_name||'—')+'</div>'
       +(isPending
-        ?'<button class="btn sm success" onclick="approveDataReq('+r.id+','+r.record_id+',\''+esc(r.field_name)+'\',\''+esc(r.requester)+'\')">Approve</button>'
-         +'<button class="btn sm danger" onclick="rejectDataReq('+r.id+')">Reject</button>'
+        ?'<div style="display:flex;gap:6px;align-items:center"><button class="btn sm success" onclick="approveDataReq('+r.id+','+r.record_id+',\''+esc(r.field_name)+'\',\''+esc(r.requester)+'\')">✓ Approve &amp; Share</button><button class="btn sm danger" onclick="rejectDataReq('+r.id+')">Reject</button></div>'
         :'<span style="font-size:11px;color:'+(r.status==='approved'?'#34d399':'#f87171')+'">'+r.status+'</span>')
       +'</div>';
   }).join('');
   openModal('dataReqModal');
 }
 async function approveDataReq(reqId,saleId,field,requester){
-  // Mark approved
   await sbPatch('data_view_requests',{id:reqId},{status:'approved',approved_at:new Date().toISOString()});
-  // Send a notification via announcement or chat — for now show toast with data
-  var rows=await sbGet('sales_records','id=eq.'+saleId+'&select=customer_phone,customer_ic');
-  var data=rows.length?rows[0]:{};
-  var value=field==='phone'?data.customer_phone:data.customer_ic;
-  toast('Approved. '+requester+' can now view the '+field,'success');
+  var rows=await sbGet('sales_records','id=eq.'+saleId+'&select=customer_phone,customer_ic,record_no');
+  var s=rows.length?rows[0]:{};
+  var value=field==='phone'?s.customer_phone:s.customer_ic;
+  // Show value for owner to share manually, and note who was approved
+  alert('Approved ✓\n\nShare with '+requester+':\n'+field.toUpperCase()+': '+( value||'—')+'\n\nSale: '+(s.record_no||'#'+saleId));
   closeModal('dataReqModal');
   openDataRequests();
 }
@@ -2843,17 +2864,25 @@ async function openSaleModal(){
 }
 function populateVisUsers(deptFilter){
   var wrap=document.getElementById('sl_user_checkboxes');
+  if(!wrap)return;
   var users=allUsers.filter(function(u){
     if(u.role==='admin'||u.is_active===false)return false;
     if(deptFilter&&u.department!==deptFilter)return false;
     return true;
   });
-  wrap.innerHTML=users.map(function(u){
-    return '<label style="display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:5px;background:#0a0f1a;cursor:pointer;min-width:0">'
-      +'<input type="checkbox" value="'+esc(u.username)+'" class="sl_user_ck" style="flex-shrink:0">'
-      +'<span style="font-size:11px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(esc(u.display_name)||esc(u.username))+'</span>'
-      +'</label>';
-  }).join('');
+  if(!users.length){wrap.innerHTML='<div style="font-size:11px;color:#4a6fa5;padding:6px">No staff found</div>';return;}
+  wrap.innerHTML='';
+  users.forEach(function(u){
+    var label=document.createElement('label');
+    label.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:5px;background:#0a0f1a;cursor:pointer';
+    var cb=document.createElement('input');
+    cb.type='checkbox';cb.value=u.username;cb.className='sl_user_ck';cb.style.flexShrink='0';
+    var span=document.createElement('span');
+    span.style.cssText='font-size:12px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    span.textContent=(u.display_name||u.username)+(u.department?' · '+u.department:'');
+    label.appendChild(cb);label.appendChild(span);
+    wrap.appendChild(label);
+  });
 }
 function filterVisibilityByDept(){
   var dept=document.getElementById('sl_dept_filter').value;
@@ -2880,7 +2909,8 @@ async function saveSale(){
   var vis=document.getElementById('sl_visibility').value;
   var selUsers=Array.from(document.querySelectorAll('.sl_user_ck:checked')).map(function(el){return el.value;});
   allUsers.filter(function(u){return u.role==='admin';}).forEach(function(u){if(selUsers.indexOf(u.username)<0)selUsers.push(u.username);});
-  var taskDesc='Customer: '+cust+'\nPhone: '+document.getElementById('sl_cust_phone').value+'\nIC: '+ic;
+  var taskDesc='Vehicle: '+brand+' '+model+'\nSale Type: '+document.getElementById('sl_type').value;
+  // Do NOT include phone/IC in task description — protect sensitive data
   var task=await sbPost('tasks',{
     title:'Sale: '+brand+' '+model+' — '+cust,
     task_type:'sale',assigned_by:currentUser.username,
@@ -2995,8 +3025,11 @@ async function setSaleStatus(id,status,e){
 // Close menus on click outside
 document.addEventListener('click',function(){document.querySelectorAll('[id^="ssm-"]').forEach(function(el){el.style.display='none';});});
 
-async function requestDataView(recordId,field,owner){
-  if(!confirm('Request to view '+field+' from '+owner+'?'))return;
+async function requestDataView(recordId,field,owner,recordNo){
+  if(!confirm('Request to view '+field+' from sale '+( recordNo||'#'+recordId)+'?'))return;
+  // Check if already requested
+  var existing=await sbGet('data_view_requests','requester=eq.'+encodeURIComponent(currentUser.username)+'&record_id=eq.'+recordId+'&field_name=eq.'+field+'&status=eq.pending');
+  if(existing.length){toast('Request already sent, awaiting approval','success');return;}
   await sbPost('data_view_requests',{requester:currentUser.username,owner:owner,record_type:'sale',record_id:recordId,field_name:field,status:'pending'});
   toast('Request sent to '+owner,'success');
 }
