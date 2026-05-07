@@ -169,10 +169,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .cal-day.other-month{opacity:.3}
 .cal-day-num{font-size:12px;color:#6b8ab0;font-weight:600;margin-bottom:2px}
 .cal-day.today .cal-day-num{color:#60a5fa}
-.cal-event{font-size:9px;padding:1px 4px;border-radius:3px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cal-event.task{background:#0d2d1a;color:#34d399}
-.cal-event.leave{background:#2d1a0d;color:#fbbf24}
-.cal-event.announce{background:#0d1a2d;color:#60a5fa}
+.cal-event{font-size:9px;padding:2px 5px;border-radius:3px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid;font-weight:500}
+.cal-event.task{background:#0a2a15;color:#4ade80;border-left-color:#22c55e}
+.cal-event.leave{background:#2a1505;color:#fb923c;border-left-color:#f97316}
+.cal-event.announce{background:#0a1a35;color:#93c5fd;border-left-color:#3b82f6}
+.cal-event.holiday{background:#2a0a2a;color:#e879f9;border-left-color:#d946ef}
+.cal-event.rest{background:#1a1a2a;color:#a78bfa;border-left-color:#8b5cf6}
 .cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem}
 .cal-nav h3{font-size:14px;font-weight:600;color:#f0f6fc}
 
@@ -217,7 +219,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .toast.error{background:#991b1b}
 .divider{height:1px;background:#1e2d45;margin:.8rem 0}
 
-@media(max-width:768px){
+/* ── CHAT ── */
+.chat-room-item{background:#0d1626;border:1px solid #1e2d45;border-radius:10px;padding:.9rem 1rem;margin-bottom:.6rem;cursor:pointer;transition:border-color .15s;display:flex;align-items:center;gap:10px}
+.chat-room-item:hover{border-color:#3b82f640}
+.chat-room-icon{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1d4ed8,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.chat-room-name{font-size:13px;font-weight:600;color:#f0f6fc}
+.chat-room-sub{font-size:11px;color:#4a6fa5;margin-top:2px}
+.chat-unread{margin-left:auto;background:#ef4444;color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700}
+.chat-window{display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:400px}
+.chat-hdr{display:flex;align-items:center;gap:10px;padding:.8rem 1rem;background:#0d1626;border:1px solid #1e2d45;border-radius:10px 10px 0 0}
+.chat-back{background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px;padding:4px 8px;border-radius:5px}
+.chat-back:hover{background:#1e2d45}
+.chat-msgs{flex:1;overflow-y:auto;padding:.8rem;background:#070d16;border-left:1px solid #1e2d45;border-right:1px solid #1e2d45;display:flex;flex-direction:column;gap:8px}
+.chat-msg{display:flex;gap:8px;align-items:flex-end}
+.chat-msg.mine{flex-direction:row-reverse}
+.chat-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#1d4ed8,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.chat-bubble{max-width:70%;background:#111827;border:1px solid #1e2d45;border-radius:12px 12px 12px 4px;padding:7px 10px}
+.chat-msg.mine .chat-bubble{background:#0d2d4a;border-color:#1e4a6a;border-radius:12px 12px 4px 12px}
+.chat-bubble-name{font-size:10px;color:#4a6fa5;margin-bottom:3px;font-weight:600}
+.chat-bubble-text{font-size:12px;color:#e0e6f0;line-height:1.5;word-break:break-word}
+.chat-bubble-img{max-width:200px;max-height:200px;border-radius:6px;cursor:pointer;display:block;margin-top:4px}
+.chat-bubble-time{font-size:9px;color:#2a4a6a;margin-top:3px;text-align:right}
+.chat-input-row{display:flex;gap:6px;padding:.7rem;background:#0d1626;border:1px solid #1e2d45;border-radius:0 0 10px 10px;align-items:flex-end}
+.chat-input{flex:1;padding:8px 10px;border:1px solid #1e2d45;border-radius:8px;background:#070d16;color:#e0e6f0;font-size:12px;outline:none;resize:none;max-height:80px;min-height:36px;font-family:inherit}
+.chat-input:focus{border-color:#3b82f6}
+.chat-send-btn{padding:8px 14px;background:#1d4ed8;border:none;border-radius:8px;color:#fff;font-size:13px;cursor:pointer;flex-shrink:0}
+.chat-img-btn{padding:8px;background:#1e2d45;border:none;border-radius:8px;color:#93c5fd;font-size:14px;cursor:pointer;flex-shrink:0}
+.chat-img-preview{max-width:120px;max-height:80px;border-radius:6px;margin-bottom:4px;display:block}
   .main{flex-direction:column}
   .sidebar{width:100%;height:auto;flex-direction:row;overflow-x:auto;padding:.4rem .5rem;border-right:none;border-bottom:1px solid #1e2d45;flex-shrink:0}
   .nav-section{display:none}
@@ -258,6 +286,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 
+<!-- New Chat Room Modal -->
+<div class="modal-overlay" id="newRoomModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3>💬 New Chat Room</h3>
+      <button class="btn sm" onclick="closeModal('newRoomModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-field"><label>Room Name</label><input type="text" id="rm_name" placeholder="e.g. Sales Team"></div>
+      <div class="form-field"><label>Description (optional)</label><input type="text" id="rm_desc" placeholder="What is this room for?"></div>
+      <div class="form-field">
+        <label>Type</label>
+        <select id="rm_public">
+          <option value="false">Private — select members below</option>
+          <option value="true">Public — all staff</option>
+        </select>
+      </div>
+      <div class="form-field" id="rm_members_wrap">
+        <label>Members</label>
+        <div id="rm_member_list" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:160px;overflow-y:auto;padding:6px;border:1px solid #1e2d45;border-radius:6px"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('newRoomModal')">Cancel</button>
+        <button class="btn primary" onclick="createChatRoom()">Create Room</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Sale Modal -->
 <div class="modal-overlay" id="saleModal">
   <div class="modal">
@@ -286,12 +343,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="form-field"><label>Color</label><input type="text" id="sl_color" placeholder="e.g. Red/Black"></div>
       </div>
       <div class="form-row">
-        <div class="form-field"><label>Sale Price (RM)</label><input type="number" id="sl_price"></div>
+        <div class="form-field"><label>Cash OTR (RM)</label><input type="number" id="sl_price"></div>
         <div class="form-field"><label>Down Payment (RM)</label><input type="number" id="sl_dp"></div>
       </div>
       <div class="form-row">
         <div class="form-field"><label>HP Company</label><input type="text" id="sl_hp_co" placeholder="e.g. CIMB Bank"></div>
-        <div class="form-field"><label>HP Amount (RM)</label><input type="number" id="sl_hp_amt"></div>
+        <div class="form-field">
+          <label>HP: Monthly (RM) × Months</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="number" id="sl_hp_monthly" placeholder="Monthly" style="flex:1">
+            <span style="color:#4a6fa5;font-size:12px">×</span>
+            <input type="number" id="sl_hp_tenure" placeholder="Months" style="flex:1">
+          </div>
+        </div>
       </div>
       <div class="form-field"><label>Notes</label><textarea id="sl_notes" rows="2"></textarea></div>
       <div class="form-field">
@@ -488,8 +552,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           </select>
         </div>
         <div class="form-field">
-          <label>&nbsp;</label>
-          <div style="font-size:11px;color:#4a6fa5;padding:8px 0" id="leaveDaysCount">—</div>
+          <label>Half Day?</label>
+          <select id="leave_half" onchange="toggleHalfDay(this.value)">
+            <option value="no">Full Day</option>
+            <option value="am">Half Day — Morning (AM)</option>
+            <option value="pm">Half Day — Afternoon (PM)</option>
+          </select>
         </div>
       </div>
       <div class="form-row">
@@ -497,11 +565,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <label>From Date</label>
           <input type="date" id="leave_start" oninput="updateLeaveDays()">
         </div>
-        <div class="form-field">
+        <div class="form-field" id="leave_end_wrap">
           <label>To Date</label>
           <input type="date" id="leave_end" oninput="updateLeaveDays()">
         </div>
       </div>
+      <div style="font-size:11px;color:#4a6fa5;margin-bottom:8px" id="leaveDaysCount">—</div>
       <div class="form-field">
         <label>Reason</label>
         <textarea id="leave_reason" placeholder="Reason for leave..." rows="2"></textarea>
@@ -540,6 +609,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <div class="nav-item" onclick="openPage('mysales')" id="nav-mysales">
         <span class="nav-icon">🏍️</span>My Sales
+      </div>
+      <div class="nav-item" onclick="openPage('chat')" id="nav-chat">
+        <span class="nav-icon">💬</span>Chat
+        <span class="nav-badge" id="chatUnreadBadge" style="display:none">0</span>
       </div>
       <div class="nav-item" onclick="openPage('mycheckin')" id="nav-mycheckin">
         <span class="nav-icon">📍</span>Check In
@@ -932,6 +1005,46 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="adminUserList"></div>
       </div>
 
+      <!-- CHAT -->
+      <div class="page" id="page-chat">
+        <div id="chatRoomList">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem">
+            <div>
+              <div class="page-title">💬 Chat</div>
+              <div class="page-sub">Group conversations</div>
+            </div>
+            <button class="btn primary" id="newChatRoomBtn" onclick="openNewRoomModal()" style="display:none">+ New Room</button>
+          </div>
+          <div id="chatRoomItems"></div>
+        </div>
+        <div id="chatWindow" style="display:none">
+          <div class="chat-window">
+            <div class="chat-hdr">
+              <button class="chat-back" onclick="backToRooms()">← Back</button>
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:600;color:#f0f6fc" id="chatRoomName"></div>
+                <div style="font-size:10px;color:#4a6fa5" id="chatRoomMembers"></div>
+              </div>
+            </div>
+            <div class="chat-msgs" id="chatMsgs"></div>
+            <div id="chatImgPreviewWrap" style="padding:0 .7rem;background:#0d1626;border-left:1px solid #1e2d45;border-right:1px solid #1e2d45;display:none">
+              <div style="position:relative;display:inline-block">
+                <img id="chatImgPreview" class="chat-img-preview">
+                <button onclick="clearChatImg()" style="position:absolute;top:-4px;right:-4px;background:#ef4444;border:none;border-radius:50%;width:16px;height:16px;color:#fff;font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+              </div>
+            </div>
+            <div class="chat-input-row">
+              <button class="chat-img-btn" onclick="document.getElementById('chatImgInput').click()" title="Send image">📷</button>
+              <input type="file" id="chatImgInput" accept="image/*" style="display:none" onchange="onChatImgSelected(this)">
+              <textarea class="chat-input" id="chatInput" placeholder="Type a message..." rows="1"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMsg();}"
+                oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'"></textarea>
+              <button class="chat-send-btn" onclick="sendChatMsg()">➤</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- MY SALES -->
       <div class="page" id="page-mysales">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem">
@@ -974,8 +1087,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <div style="font-size:14px;font-weight:600;color:#f0f6fc" id="profileName">—</div>
             <div style="font-size:11px;color:#4a6fa5" id="profileRole">—</div>
           </div>
-          <div class="form-field">
-            <label>Username (cannot change)</label>
+          <div style="font-size:12px;color:#4a6fa5;margin-top:-4px;margin-bottom:1rem" id="pf_joined_display">—</div>
             <input type="text" id="pf_username" disabled style="opacity:.5">
           </div>
           <div class="form-field">
@@ -1140,6 +1252,7 @@ function openPage(name){
   // Lazy load
   if(name==='announcements')loadAnnouncements();
   else if(name==='tasks')loadMyTasks();
+  else if(name==='chat'){loadChatRooms();}
   else if(name==='mysales')loadMySales();
   else if(name==='mycheckin')loadCheckin();
   else if(name==='calendar')renderCalendar();
@@ -1466,9 +1579,15 @@ async function loadMyLeave(){
   var joinedDate=uRows.length&&uRows[0].joined_date?new Date(uRows[0].joined_date):null;
   var tenureYears=joinedDate?((Date.now()-joinedDate.getTime())/(365.25*24*3600*1000)):0;
 
-  // Malaysia Employment Act 1955 entitlements
-  var alTotal=tenureYears<2?8:tenureYears<5?12:16;
-  var mcTotal=tenureYears<2?14:tenureYears<5?18:22;
+  // Malaysia EA 1955 — prorated for < 1 year
+  var alTotal,mcTotal;
+  if(tenureYears<1){
+    var monthsWorked=Math.floor(tenureYears*12);
+    alTotal=Math.floor(8*monthsWorked/12); // prorated monthly
+    mcTotal=Math.floor(14*monthsWorked/12);
+  } else if(tenureYears<2){alTotal=8;mcTotal=14;}
+  else if(tenureYears<5){alTotal=12;mcTotal=18;}
+  else{alTotal=16;mcTotal=22;}
 
   // Leave used this year
   var year=new Date().getFullYear();
@@ -1511,16 +1630,27 @@ async function loadMyLeave(){
 }
 
 async function submitLeave(){
-  var s=document.getElementById('leave_start').value,e=document.getElementById('leave_end').value;
-  if(!s||!e){toast('Please select dates','error');return;}
-  // Check min advance days (admin can bypass)
+  var s=document.getElementById('leave_start').value;
+  var half=document.getElementById('leave_half').value;
+  var e=half!=='no'?s:document.getElementById('leave_end').value;
+  if(!s){toast('Please select a date','error');return;}
+  if(half==='no'&&!e){toast('Please select end date','error');return;}
+  // Check min advance days
   if(currentUser.role!=='admin'){
     var cfg=await sbGet('leave_config','key=eq.min_advance_days&select=value');
     var minAdv=cfg.length?parseInt(cfg[0].value):1;
     var daysAhead=Math.round((new Date(s)-new Date())/86400000);
-    if(daysAhead<minAdv){toast('Leave must be applied at least '+minAdv+' day'+(minAdv>1?'s':'')+' in advance','error');return;}
+    if(daysAhead<minAdv){toast('Must apply at least '+minAdv+' day'+(minAdv>1?'s':'')+' in advance','error');return;}
   }
-  await sbPost('leave_requests',{username:currentUser.username,leave_type:document.getElementById('leave_type').value,start_date:s,end_date:e,reason:document.getElementById('leave_reason').value.trim(),status:'pending'});
+  await sbPost('leave_requests',{
+    username:currentUser.username,
+    leave_type:document.getElementById('leave_type').value,
+    start_date:s,end_date:e,
+    reason:document.getElementById('leave_reason').value.trim(),
+    status:'pending',
+    is_half_day:half!=='no',
+    half_day_session:half!=='no'?half:null
+  });
   closeModal('leaveModal');loadMyLeave();toast('Leave application submitted','success');
 }
 
@@ -1558,6 +1688,8 @@ function openLeaveModal(){
   document.getElementById('leave_start').value='';
   document.getElementById('leave_end').value='';
   document.getElementById('leave_reason').value='';
+  document.getElementById('leave_half').value='no';
+  var ew=document.getElementById('leave_end_wrap');if(ew)ew.style.display='';
   document.getElementById('leaveDaysCount').textContent='—';
   openModal('leaveModal');
 }
@@ -1864,7 +1996,7 @@ async function createUser(){
   var p=document.getElementById('nu_password').value;
   var r=document.getElementById('nu_role').value;
   if(!u||!p){toast('Username and password required','error');return;}
-  if(p.length<6){toast('Password too short (min 6 chars)','error');return;}
+  if(p.length<4){toast('Password too short (min 4 chars)','error');return;}
   var hash=await sha256(p);
   var isAdmin=r==='admin';
   var dept=document.getElementById('nu_dept').value;
@@ -1946,8 +2078,8 @@ async function toggleActive(username,active){
   await loadAdminUsers();
 }
 async function resetPw(username){
-  var np=prompt('New password for "'+username+'":');
-  if(!np||np.length<6){if(np!==null)toast('Password too short','error');return;}
+  var np=prompt('New password for "'+username+'" (min 4 chars):');
+  if(!np||np.length<4){if(np!==null)toast('Password too short (min 4 chars)','error');return;}
   var hash=await sha256(np);
   await sbPatch('users',{username:username},{password_hash:hash,failed_attempts:0,locked_until:null});
   toast('Password reset for "'+username+'"','success');
@@ -2028,6 +2160,14 @@ function loadProfilePage(){
   document.getElementById('profileAvatar').textContent=n.charAt(0).toUpperCase();
   document.getElementById('profileName').textContent=n;
   document.getElementById('profileRole').textContent=(currentUser.role||'staff')+(currentUser.department?' · '+currentUser.department:'');
+  // Fetch and show joined date
+  sbGet('users','username=eq.'+encodeURIComponent(currentUser.username)+'&select=joined_date,resigned_date').then(function(rows){
+    var el=document.getElementById('pf_joined_display');
+    if(el&&rows.length){
+      var j=rows[0].joined_date;var r=rows[0].resigned_date;
+      el.textContent=j?'📅 Joined: '+fmtDate(j)+(r?' · Resigned: '+fmtDate(r):''):'—';
+    }
+  });
 }
 async function saveProfile(){
   var fields={display_name:document.getElementById('pf_display_name').value.trim(),position:document.getElementById('pf_position').value.trim(),phone:document.getElementById('pf_phone').value.trim(),email:document.getElementById('pf_email').value.trim()};
@@ -2040,15 +2180,190 @@ async function saveProfile(){
   toast('Profile saved','success');
 }
 
-/* ══ MY SALES ══ */
+/* ══ HALF DAY LEAVE ══ */
+function toggleHalfDay(val){
+  var endWrap=document.getElementById('leave_end_wrap');
+  var startLabel=document.querySelector('label[for="leave_start"]')||document.querySelector('#leave_start').previousElementSibling;
+  if(val==='am'||val==='pm'){
+    endWrap.style.display='none';
+    document.getElementById('leave_end').value='';
+    document.getElementById('leaveDaysCount').textContent='½ day ('+( val==='am'?'Morning':'Afternoon')+')';
+  } else {
+    endWrap.style.display='';
+    updateLeaveDays();
+  }
+}
+function updateLeaveDays(){
+  var s=document.getElementById('leave_start').value;
+  var e=document.getElementById('leave_end').value;
+  var half=document.getElementById('leave_half').value;
+  if(half!=='no'){document.getElementById('leaveDaysCount').textContent='½ day ('+( half==='am'?'Morning':'Afternoon')+')';return;}
+  if(s&&e){
+    var d=Math.round((new Date(e)-new Date(s))/86400000)+1;
+    document.getElementById('leaveDaysCount').textContent=d>0?d+' day'+(d>1?'s':''):'Invalid dates';
+  }
+}
+
+/* ══ CHAT ══ */
+var currentRoomId=null;var chatPollInterval=null;var chatLastMsgId=0;var pendingChatImg=null;
+
+async function loadChatRooms(){
+  if(currentUser.role==='admin'||currentUser.can_assign_task_cross){
+    document.getElementById('newChatRoomBtn').style.display='';
+  }
+  var rooms=await sbGet('chat_rooms','order=created_at.desc');
+  // Filter rooms user is member of or is public
+  var myRooms=rooms.filter(function(r){
+    if(r.is_public)return true;
+    var members=r.members||[];
+    return members.indexOf(currentUser.username)>=0||r.created_by===currentUser.username||currentUser.role==='admin';
+  });
+  if(!myRooms.length){
+    document.getElementById('chatRoomItems').innerHTML='<div class="empty-state"><div class="icon">💬</div><p>No chat rooms yet.'+(currentUser.role==='admin'?' Create one above.':'')+'</p></div>';
+    return;
+  }
+  document.getElementById('chatRoomItems').innerHTML=myRooms.map(function(r){
+    var members=r.members||[];
+    return '<div class="chat-room-item" onclick="openChatRoom('+r.id+',\''+esc(r.name)+'\')">'
+      +'<div class="chat-room-icon">'+(r.name.charAt(0).toUpperCase())+'</div>'
+      +'<div><div class="chat-room-name">'+esc(r.name)+'</div>'
+      +'<div class="chat-room-sub">'+(r.is_public?'Public · All staff':'Private · '+members.length+' members')+'</div></div>'
+      +'</div>';
+  }).join('');
+}
+
+async function openNewRoomModal(){
+  document.getElementById('rm_name').value='';
+  document.getElementById('rm_desc').value='';
+  document.getElementById('rm_public').value='false';
+  // Populate members (exclude self and admin — admin auto-included)
+  var list=document.getElementById('rm_member_list');
+  list.innerHTML=allUsers.filter(function(u){return u.username!==currentUser.username&&u.role!=='admin'&&u.is_active!==false;}).map(function(u){
+    return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#c9d1d9"><input type="checkbox" value="'+esc(u.username)+'" class="rm_ck"> '+(esc(u.display_name)||esc(u.username))+'</label>';
+  }).join('');
+  openModal('newRoomModal');
+}
+
+async function createChatRoom(){
+  var name=document.getElementById('rm_name').value.trim();
+  if(!name){toast('Room name required','error');return;}
+  var isPublic=document.getElementById('rm_public').value==='true';
+  var members=Array.from(document.querySelectorAll('.rm_ck:checked')).map(function(el){return el.value;});
+  // Always include creator and all admins
+  members.push(currentUser.username);
+  allUsers.filter(function(u){return u.role==='admin'&&u.username!==currentUser.username;}).forEach(function(u){if(members.indexOf(u.username)<0)members.push(u.username);});
+  await sbPost('chat_rooms',{name:name,description:document.getElementById('rm_desc').value.trim()||null,created_by:currentUser.username,members:members,is_public:isPublic});
+  closeModal('newRoomModal');toast('Room created','success');loadChatRooms();
+}
+
+async function openChatRoom(roomId,roomName){
+  currentRoomId=roomId;chatLastMsgId=0;
+  document.getElementById('chatRoomList').style.display='none';
+  document.getElementById('chatWindow').style.display='';
+  document.getElementById('chatRoomName').textContent=roomName;
+  // Get member list
+  var rooms=await sbGet('chat_rooms','id=eq.'+roomId+'&select=members,is_public');
+  if(rooms.length){
+    var r=rooms[0];
+    var memberNames=r.is_public?'All staff':(r.members||[]).map(function(u){var usr=allUsers.find(function(x){return x.username===u;});return usr?(usr.display_name||usr.username):u;}).join(', ');
+    document.getElementById('chatRoomMembers').textContent=memberNames;
+  }
+  await loadChatMessages(true);
+  // Poll for new messages every 5 seconds
+  clearInterval(chatPollInterval);
+  chatPollInterval=setInterval(function(){loadChatMessages(false);},5000);
+}
+
+function backToRooms(){
+  clearInterval(chatPollInterval);
+  currentRoomId=null;pendingChatImg=null;
+  document.getElementById('chatWindow').style.display='none';
+  document.getElementById('chatRoomList').style.display='';
+  document.getElementById('chatImgPreviewWrap').style.display='none';
+  loadChatRooms();
+}
+
+async function loadChatMessages(scroll){
+  if(!currentRoomId)return;
+  var q='room_id=eq.'+currentRoomId+'&order=created_at.asc&limit=100';
+  if(!scroll&&chatLastMsgId>0)q+='&id=gt.'+chatLastMsgId;
+  var msgs=await sbGet('chat_messages',q);
+  if(!msgs.length&&!scroll)return;
+  var container=document.getElementById('chatMsgs');
+  if(scroll)container.innerHTML='';
+  msgs.forEach(function(m){
+    if(m.id>chatLastMsgId)chatLastMsgId=m.id;
+    var isMine=m.username===currentUser.username;
+    var user=allUsers.find(function(u){return u.username===m.username;})||{};
+    var initial=(user.display_name||m.username||'?').charAt(0).toUpperCase();
+    var name=isMine?'You':(user.display_name||m.username);
+    var content=m.message_type==='image'&&m.media_data
+      ?'<img src="'+m.media_data+'" class="chat-bubble-img" onclick="viewFullImg(this.src)">'
+      :'<div class="chat-bubble-text">'+esc(m.message)+'</div>';
+    var bubble='<div class="chat-msg'+(isMine?' mine':'')+'">'
+      +'<div class="chat-avatar">'+initial+'</div>'
+      +'<div class="chat-bubble">'
+      +(isMine?'':'<div class="chat-bubble-name">'+esc(name)+'</div>')
+      +content
+      +'<div class="chat-bubble-time">'+fmtRelative(m.created_at)+'</div>'
+      +'</div></div>';
+    container.insertAdjacentHTML('beforeend',bubble);
+  });
+  if(scroll||msgs.length)container.scrollTop=container.scrollHeight;
+}
+
+async function sendChatMsg(){
+  if(!currentRoomId)return;
+  var txt=document.getElementById('chatInput').value.trim();
+  if(!txt&&!pendingChatImg)return;
+  if(pendingChatImg){
+    await sbPost('chat_messages',{room_id:currentRoomId,username:currentUser.username,message:'[image]',message_type:'image',media_data:pendingChatImg});
+    clearChatImg();
+  }
+  if(txt){
+    await sbPost('chat_messages',{room_id:currentRoomId,username:currentUser.username,message:txt,message_type:'text'});
+    document.getElementById('chatInput').value='';
+    document.getElementById('chatInput').style.height='36px';
+  }
+  await loadChatMessages(false);
+}
+
+function onChatImgSelected(input){
+  var file=input.files[0];
+  if(!file)return;
+  if(!file.type.startsWith('image/')){toast('Images only — no videos','error');input.value='';return;}
+  if(file.size>10*1024*1024){toast('Image too large (max 10MB)','error');input.value='';return;}
+  // Compress image
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var canvas=document.createElement('canvas');
+      var maxW=800;var scale=Math.min(1,maxW/img.width);
+      canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      pendingChatImg=canvas.toDataURL('image/jpeg',0.7);
+      document.getElementById('chatImgPreview').src=pendingChatImg;
+      document.getElementById('chatImgPreviewWrap').style.display='block';
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value='';
+}
+function clearChatImg(){pendingChatImg=null;document.getElementById('chatImgPreviewWrap').style.display='none';document.getElementById('chatImgPreview').src='';}
+function viewFullImg(src){var w=window.open('','_blank');w.document.write('<img src="'+src+'" style="max-width:100%;display:block;margin:auto">');}
+
+/* ══ FIXES ══ */
 async function openSaleModal(){
   ['sl_cust_name','sl_cust_phone','sl_cust_ic','sl_brand','sl_model','sl_color','sl_hp_co','sl_notes'].forEach(function(id){document.getElementById(id).value='';});
-  ['sl_price','sl_dp','sl_hp_amt','sl_year'].forEach(function(id){document.getElementById(id).value='';});
+  ['sl_price','sl_dp','sl_hp_monthly','sl_hp_tenure','sl_year'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('sl_type').value='new';
   document.getElementById('sl_visibility').value='all';
   document.getElementById('sl_visibility_users').style.display='none';
+  // Populate visibility users — exclude admin (always included automatically)
   var wrap=document.getElementById('sl_user_checkboxes');
-  wrap.innerHTML=allUsers.filter(function(u){return u.is_active!==false;}).map(function(u){
+  wrap.innerHTML=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='admin';}).map(function(u){
     return '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#c9d1d9"><input type="checkbox" value="'+esc(u.username)+'" class="sl_user_ck"> '+(esc(u.display_name)||esc(u.username))+'</label>';
   }).join('');
   openModal('saleModal');
@@ -2063,8 +2378,13 @@ async function saveSale(){
   var model=document.getElementById('sl_model').value.trim();
   if(!cust||!brand||!model){toast('Customer name, brand and model required','error');return;}
   var recNo='HM-'+new Date().getFullYear()+'-'+Date.now().toString().slice(-5);
+  var monthly=parseFloat(document.getElementById('sl_hp_monthly').value)||null;
+  var tenure=parseInt(document.getElementById('sl_hp_tenure').value)||null;
+  var hpAmt=monthly&&tenure?monthly*tenure:null;
   var vis=document.getElementById('sl_visibility').value;
   var selUsers=Array.from(document.querySelectorAll('.sl_user_ck:checked')).map(function(el){return el.value;});
+  // Always include all admins in visibility
+  allUsers.filter(function(u){return u.role==='admin';}).forEach(function(u){if(selUsers.indexOf(u.username)<0)selUsers.push(u.username);});
   var task=await sbPost('tasks',{
     title:'Sale: '+brand+' '+model+' — '+cust,
     task_type:'sale',assigned_by:currentUser.username,status:'pending',priority:'normal',
@@ -2084,7 +2404,7 @@ async function saveSale(){
     sale_price:parseFloat(document.getElementById('sl_price').value)||null,
     dp_amount:parseFloat(document.getElementById('sl_dp').value)||null,
     hp_company:document.getElementById('sl_hp_co').value,
-    hp_amount:parseFloat(document.getElementById('sl_hp_amt').value)||null,
+    hp_amount:hpAmt,
     notes:document.getElementById('sl_notes').value,
     salesperson:currentUser.username,task_id:taskId,
     sale_date:new Date().toISOString().slice(0,10)
@@ -2156,7 +2476,21 @@ async function loadCheckin(){
 }
 async function doCheckIn(){
   var today=new Date().toISOString().slice(0,10);
-  var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
+  var photoFile=document.getElementById('checkinPhoto').files[0];
+  // Require GPS if no photo
+  if(!photoFile&&!checkinGPSCoords){
+    toast('GPS location required. Please allow location access or attach a photo.','error');
+    // Retry GPS
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(function(pos){
+        checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
+        var el=document.getElementById('checkinGPS');
+        if(el)el.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
+        toast('GPS acquired — tap Check In again','success');
+      },null,{enableHighAccuracy:true,timeout:8000});
+    }
+    return;
+  }
   var r=rec.length?rec[0]:{};
   var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
   if(!field){toast('All sessions recorded today','success');return;}
