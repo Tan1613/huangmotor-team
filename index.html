@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>HuangMotor Team</title>
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <meta name="theme-color" content="#0a0f1a">
@@ -250,7 +250,7 @@ body{position:relative}
 @media(max-width:768px){
   .main{flex-direction:column}
   .sidebar{display:none!important}
-  .content{padding:.7rem;padding-bottom:72px}
+  .content{padding:.7rem;padding-bottom:calc(80px + env(safe-area-inset-bottom, 0px))}
   .cards-grid{grid-template-columns:1fr 1fr}
   .form-row{grid-template-columns:1fr}
   .topbar{padding:0 .8rem;gap:6px;height:48px}
@@ -275,17 +275,37 @@ body{position:relative}
   .cards-grid{grid-template-columns:1fr}
   .page-title{font-size:15px}
 }
-#mobileNav{display:none;position:fixed;bottom:0;left:0;right:0;height:60px;background:#111827;border-top:1px solid #1e2d45;z-index:1000;justify-content:space-around;align-items:center;padding:0 4px;box-shadow:0 -4px 20px rgba(0,0,0,.3)}
-.mob-nav-btn{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;cursor:pointer;color:#4a6fa5;border-radius:8px;min-width:52px;border:none;background:none;font-size:9px;transition:color .15s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#mobileNav{
+  display:none;position:fixed;bottom:0;left:0;right:0;
+  height:calc(60px + env(safe-area-inset-bottom, 0px));
+  min-height:70px;
+  background:#111827;border-top:1px solid #1e2d45;z-index:1000;
+  justify-content:space-around;align-items:flex-start;
+  padding:8px 4px env(safe-area-inset-bottom, 8px);
+  box-shadow:0 -4px 20px rgba(0,0,0,.3)
+}
+.mob-nav-btn{
+  position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:6px 10px;cursor:pointer;color:#4a6fa5;border-radius:8px;min-width:52px;
+  border:none;background:none;font-size:9px;transition:color .15s;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  min-height:48px;justify-content:center
+}
 .mob-nav-btn.active{color:#60a5fa}
 .mob-nav-btn .mn-icon{font-size:22px;line-height:1}
 .mob-nav-btn .mn-badge{position:absolute;top:2px;right:6px;background:#ef4444;color:#fff;font-size:9px;border-radius:8px;padding:0 4px;font-weight:700}
-#mobileMoreDrawer{display:none;position:fixed;bottom:60px;left:0;right:0;background:#111827;border-top:1px solid #1e2d45;z-index:999;flex-direction:column;padding:.5rem .7rem;max-height:65vh;overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,.5)}
-.more-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;color:#6b8ab0;font-size:13px;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#mobileMoreDrawer{
+  display:none;position:fixed;
+  bottom:calc(60px + env(safe-area-inset-bottom, 0px));
+  left:0;right:0;background:#111827;border-top:1px solid #1e2d45;z-index:999;
+  flex-direction:column;padding:.5rem .7rem;max-height:60vh;overflow-y:auto;
+  box-shadow:0 -8px 30px rgba(0,0,0,.5)
+}
+.more-item{display:flex;align-items:center;gap:10px;padding:12px 12px;border-radius:8px;cursor:pointer;color:#6b8ab0;font-size:13px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:44px}
 .more-item:active,.more-item.active{background:#1e2d45;color:#f0f6fc}
 .more-item .mi-icon{font-size:18px;width:24px;text-align:center}
 .more-section{font-size:10px;color:#2a4a6a;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:8px 12px 2px}
-.drawer-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:60px;z-index:998;background:rgba(0,0,0,.3)}
+.drawer-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:calc(60px + env(safe-area-inset-bottom, 0px));z-index:998;background:rgba(0,0,0,.3)}
 .drawer-overlay.open{display:block}
 </style>
 </head>
@@ -3160,12 +3180,11 @@ async function doCheckIn(){
   var btn=document.getElementById('checkinBtn');
   btn.disabled=true;btn.textContent='⏳ Processing...';
   try{
-    // Get GPS
+    // Get GPS silently (don't block if fails)
     if(!checkinGPSCoords){
       var gpsEl=document.getElementById('checkinGPS');
-      if(gpsEl)gpsEl.textContent='📍 Getting GPS...';
-      await new Promise(function(resolve,reject){
-        if(!navigator.geolocation){resolve();return;}// GPS optional if photo provided
+      await new Promise(function(resolve){
+        if(!navigator.geolocation){resolve();return;}
         navigator.geolocation.getCurrentPosition(function(pos){
           checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
           if(gpsEl)gpsEl.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
@@ -3173,14 +3192,29 @@ async function doCheckIn(){
         },function(){resolve();},{enableHighAccuracy:true,timeout:8000,maximumAge:0});
       });
     }
-    if(!photoFile&&!checkinGPSCoords){toast('GPS or photo required','error');await loadCheckin();return;}
+    if(!photoFile&&!checkinGPSCoords){toast('📍 GPS or 📷 photo required','error');await loadCheckin();return;}
+    // Load approved attendance record for today
     var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
     var r=rec.length?rec[0]:{};
-    var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
-    if(!field){toast('All sessions recorded today','success');await loadCheckin();return;}
+    // Also load pending approvals to know which sessions are already submitted
+    var pendingRecs=await sbGet('checkin_approvals','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&status=eq.pending&select=session_field');
+    var pendingFields=pendingRecs.map(function(p){return p.session_field;});
+    // Determine next available field (not yet approved AND not pending)
+    var allFields=['check_in','check_out','check_in_2','check_out_2','check_in_3','check_out_3'];
+    var field=null;
+    for(var i=0;i<allFields.length;i++){
+      var f=allFields[i];
+      if(!r[f]&&pendingFields.indexOf(f)<0){field=f;break;}
+    }
+    if(!field){
+      // Check if just pending
+      var anyPending=pendingFields.length>0;
+      toast(anyPending?'⏳ Pending admin approval for current session':'✓ All sessions completed today','success');
+      await loadCheckin();return;
+    }
     // Build pending data
     var data={field:field,timestamp:new Date().toISOString(),gps:checkinGPSCoords,photo:null};
-    if(photoFile){data.photo=await compressPhoto(photoFile);}
+    if(photoFile)data.photo=await compressPhoto(photoFile);
     pendingCheckinData=data;
     // Show confirmation modal
     var isIn=field.indexOf('out')<0;
@@ -3189,14 +3223,13 @@ async function doCheckIn(){
     document.getElementById('checkinConfirmInfo').innerHTML=
       '<strong style="color:#f0f6fc">'+tp+' Session '+sn+'</strong><br>'
       +(checkinGPSCoords?'📍 '+checkinGPSCoords.lat.toFixed(4)+', '+checkinGPSCoords.lng.toFixed(4)+'<br>':'')
-      +'<span style="color:#f59e0b">Time: '+new Date().toLocaleTimeString()+'</span>';
+      +'<span style="color:#f59e0b">'+new Date().toLocaleTimeString()+'</span>';
     if(data.photo){document.getElementById('checkinConfirmImg').src=data.photo;document.getElementById('checkinConfirmImg').style.display='';}
     else{document.getElementById('checkinConfirmImg').style.display='none';}
     openModal('checkinConfirmModal');
     await loadCheckin();
   }catch(err){
-    var msg=err&&err.code===1?'❌ Location permission denied':err&&err.code===3?'❌ GPS timed out — attach a photo':'❌ '+(err&&err.message||'Error');
-    toast(msg,'error');await loadCheckin();
+    toast('❌ '+(err&&err.message||'Error occurred'),'error');await loadCheckin();
   }
 }
 async function confirmAndSubmitCheckin(){
@@ -3795,38 +3828,58 @@ async function loadCheckin(){
   document.getElementById('checkinDate').textContent=fmtDate(today);
   var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
   var r=rec.length?rec[0]:{};
+  // Load pending approvals
+  var pendingRecs=await sbGet('checkin_approvals','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=session_field,status,photo');
+  var pendingMap={};pendingRecs.forEach(function(p){pendingMap[p.session_field]=p;});
   var sessions=[
-    {l:'S1',i:r.check_in,o:r.check_out,photo:r.checkin_photo},
-    {l:'S2',i:r.check_in_2,o:r.check_out_2,photo:r.checkin_photo_2},
-    {l:'S3',i:r.check_in_3,o:r.check_out_3,photo:r.checkin_photo_3}
+    {l:'S1 In',f:'check_in',v:r.check_in,photo:r.checkin_photo},
+    {l:'S1 Out',f:'check_out',v:r.check_out,photo:null},
+    {l:'S2 In',f:'check_in_2',v:r.check_in_2,photo:r.checkin_photo_2},
+    {l:'S2 Out',f:'check_out_2',v:r.check_out_2,photo:null},
+    {l:'S3 In',f:'check_in_3',v:r.check_in_3,photo:r.checkin_photo_3},
+    {l:'S3 Out',f:'check_out_3',v:r.check_out_3,photo:null}
   ];
-  document.getElementById('checkinSessions').innerHTML=sessions.map(function(s){
+  // Group into 3 session pairs
+  var pairs=[[sessions[0],sessions[1]],[sessions[2],sessions[3]],[sessions[4],sessions[5]]];
+  document.getElementById('checkinSessions').innerHTML=pairs.map(function(pair,i){
     return '<div style="background:#0d1626;border:1px solid #1e2d45;border-radius:8px;padding:8px;text-align:center">'
-      +'<div style="font-size:10px;color:#4a6fa5;margin-bottom:3px">'+s.l+'</div>'
-      +'<div style="font-size:11px;color:#34d399">'+(s.i?fmtTime(s.i):'—')+'</div>'
-      +'<div style="font-size:11px;color:#f87171">'+(s.o?fmtTime(s.o):'—')+'</div>'
-      +(s.photo?'<img src="'+s.photo+'" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-top:3px;cursor:pointer;border:1px solid #2a4a6a" onclick="viewFullImg(this.src)" title="Tap to view">':'')
+      +'<div style="font-size:10px;color:#4a6fa5;margin-bottom:4px;font-weight:600">Session '+(i+1)+'</div>'
+      +pair.map(function(s){
+        var pend=pendingMap[s.f];
+        var isPending=pend&&pend.status==='pending';
+        var color=s.v?'#34d399':isPending?'#f59e0b':'#4a6fa5';
+        return '<div style="font-size:11px;color:'+color+';margin:1px 0">'
+          +s.l+': '+(s.v?fmtTime(s.v):isPending?'⏳ Pending':'—')+'</div>'
+          +(s.photo||( isPending&&pend.photo)?'<img src="'+(s.photo||pend.photo)+'" style="width:32px;height:32px;object-fit:cover;border-radius:3px;margin-top:2px;cursor:pointer" onclick="viewFullImg(this.src)">':'');
+      }).join('')
       +'</div>';
   }).join('');
-  // Show approval status
-  var statusEl=document.getElementById('checkinStatus');
-  if(r.status==='pending')statusEl.textContent='⏳ Submitted — awaiting admin approval';
-  else if(r.status==='present')statusEl.textContent='✅ Attendance confirmed by admin';
-  else statusEl.textContent='No check-in today';
-  var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
+  // Determine button state
+  var allFields=['check_in','check_out','check_in_2','check_out_2','check_in_3','check_out_3'];
+  var nextField=null;
+  for(var i=0;i<allFields.length;i++){
+    var f=allFields[i];
+    if(!r[f]&&!(pendingMap[f]&&pendingMap[f].status==='pending')){nextField=f;break;}
+  }
   var btn=document.getElementById('checkinBtn');
-  var sn=field?(['check_in','check_out'].indexOf(field)>=0?1:['check_in_2','check_out_2'].indexOf(field)>=0?2:3):0;
-  var tp=field&&field.indexOf('out')>=0?'Out':'In';
-  if(!field){btn.disabled=true;btn.textContent='✓ All sessions done';}
-  else{btn.disabled=false;btn.textContent='Check '+tp+' (S'+sn+')';}
-  // Try GPS silently
-  if(navigator.geolocation){
+  var statusEl=document.getElementById('checkinStatus');
+  if(!nextField){
+    btn.disabled=true;btn.textContent='✓ All done for today';
+    statusEl.textContent=Object.keys(pendingMap).length>0?'⏳ Some sessions awaiting admin approval':'✅ All sessions confirmed';
+  } else {
+    btn.disabled=false;
+    var isIn=nextField.indexOf('out')<0;
+    var sn=(['check_in','check_out'].indexOf(nextField)>=0?1:['check_in_2','check_out_2'].indexOf(nextField)>=0?2:3);
+    btn.textContent=(isIn?'Check In':'Check Out')+' (Session '+sn+')';
+    statusEl.textContent='Next: '+(isIn?'Check In':'Check Out')+' Session '+sn;
+  }
+  // GPS silently
+  if(navigator.geolocation&&!checkinGPSCoords){
     navigator.geolocation.getCurrentPosition(function(pos){
       checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
       var el=document.getElementById('checkinGPS');
       if(el)el.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
     },function(){
-      checkinGPSCoords=null;
       var el=document.getElementById('checkinGPS');if(el)el.textContent='📍 GPS unavailable — use photo';
     },{enableHighAccuracy:true,timeout:8000,maximumAge:30000});
   }
