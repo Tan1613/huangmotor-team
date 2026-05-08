@@ -1074,13 +1074,12 @@ body{position:relative}
               <input type="text" id="nu_username" placeholder="e.g. ahmad">
             </div>
             <div class="form-field">
-              <label>Password</label>
-              <input type="password" id="nu_password" placeholder="Min. 8 characters">
-            </div>
-            <div class="form-field">
               <label>Display Name</label>
               <input type="text" id="nu_dispname" placeholder="Full name">
             </div>
+          </div>
+          <div style="font-size:11px;color:#34d399;background:#0d2318;border:1px solid #1a3a1a;border-radius:6px;padding:7px 10px;margin-bottom:10px">
+            🔑 A random temporary password will be auto-generated. Share it with the staff via the invite message shown after creation.
           </div>
           <div class="form-row">
             <div class="form-field">
@@ -1309,6 +1308,16 @@ body{position:relative}
             <button class="btn primary" onclick="saveProfile()">Save Profile</button>
           </div>
           <div id="profileMsg" style="text-align:center;font-size:11px;color:#34d399;margin-top:6px;min-height:16px"></div>
+          <!-- Change Password -->
+          <div style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid #1e2d45">
+            <div style="font-size:12px;font-weight:600;color:#93c5fd;margin-bottom:8px">🔑 Change Password</div>
+            <div class="form-field"><label>Current Password</label><input type="password" id="pw_current" placeholder="Your current password"></div>
+            <div class="form-row">
+              <div class="form-field"><label>New Password <span style="font-size:10px;color:#4a6fa5">(min 4 chars)</span></label><input type="password" id="pw_new" placeholder="New password"></div>
+              <div class="form-field"><label>Confirm New Password</label><input type="password" id="pw_confirm" placeholder="Repeat new password"></div>
+            </div>
+            <button class="btn primary" onclick="changePassword()">Update Password</button>
+          </div>
         </div>
       </div>
 
@@ -2457,14 +2466,20 @@ function toggleNuPerms(mod,checked){
   if(el)el.style.display=checked?'flex':'none';
 }
 
+function generateTempPassword(){
+  var chars='abcdefghjkmnpqrstuvwxyz23456789';
+  var pw='';for(var i=0;i<8;i++)pw+=chars[Math.floor(Math.random()*chars.length)];
+  return pw;
+}
+
 async function createUser(){
   var u=document.getElementById('nu_username').value.trim();
-  var p=document.getElementById('nu_password').value;
+  if(!u){toast('Username required','error');return;}
   var r=document.getElementById('nu_role').value;
-  if(!u||!p){toast('Username and password required','error');return;}
-  if(p.length<4){toast('Password too short (min 4 chars)','error');return;}
-  var hash=await sha256(p);
   var isAdmin=r==='admin';
+  // Generate random temp password
+  var tempPw=generateTempPassword();
+  var hash=await sha256(tempPw);
   var dept=document.getElementById('nu_dept').value;
   var data={
     username:u,password_hash:hash,role:r,is_active:true,
@@ -2491,17 +2506,43 @@ async function createUser(){
   var res=await sbPost('users',data);
   if(res){
     // Reset form
-    ['nu_username','nu_password','nu_dispname','nu_position'].forEach(function(id){document.getElementById(id).value='';});
+    ['nu_username','nu_dispname','nu_position'].forEach(function(id){document.getElementById(id).value='';});
     ['nu_tools','nu_team','nu_pl','nu_gen','nu_mf','nu_viewer','nu_task_dept','nu_task_cross','nu_attendance','nu_leave','nu_perf_dept','nu_perf_all'].forEach(function(id){document.getElementById(id).checked=false;});
     document.getElementById('nu_perf_own').checked=true;
-    document.getElementById('nu_tools_perms').style.display='none';
-    document.getElementById('nu_team_perms').style.display='none';
     document.getElementById('nu_role').value='staff';
     document.getElementById('nu_modules').style.display='grid';
-    toast('Account "'+u+'" created','success');
+    // Show invite link
+    var loginUrl='https://login.huangmotor.com';
+    var msg='🎉 Account created!\n\n'
+      +'Username: '+u+'\n'
+      +'Temporary password: '+tempPw+'\n\n'
+      +'Share this with the staff member:\n'
+      +'─────────────────────────\n'
+      +'Welcome to HuangMotor M Sdn Bhd! 🏍️\n\n'
+      +'Your account is ready. Sign in at:\n'
+      +loginUrl+'\n\n'
+      +'Username: '+u+'\n'
+      +'Password: '+tempPw+'\n\n'
+      +'Please change your password after first login in Settings.\n'
+      +'─────────────────────────';
+    // Show in a copyable modal
+    showInviteModal(u,tempPw,loginUrl);
     await loadAllUsersCache();
     await loadAdminUsers();
   } else {toast('Failed — username may already exist','error');}
+}
+
+function showInviteModal(username,tempPw,loginUrl){
+  var inviteText='Welcome to HuangMotor M Sdn Bhd! 🏍️\n\nYour account is ready. Sign in at:\n'+loginUrl+'\n\nUsername: '+username+'\nPassword: '+tempPw+'\n\nPlease change your password in Settings after first login.';
+  document.getElementById('taskDetailBody').innerHTML=
+    '<div style="font-size:13px;font-weight:600;color:#f0f6fc;margin-bottom:12px">✅ Account Created — '+esc(username)+'</div>'
+    +'<div style="font-size:11px;color:#4a6fa5;margin-bottom:8px">Copy and send this to the new staff member:</div>'
+    +'<textarea readonly style="width:100%;min-height:160px;padding:10px;background:#0a0f1a;border:1px solid #1e2d45;border-radius:8px;color:#e0e6f0;font-size:12px;font-family:monospace;resize:none;line-height:1.6" onclick="this.select()">'+inviteText+'</textarea>'
+    +'<div style="display:flex;gap:6px;margin-top:10px">'
+    +'<button class="btn primary" onclick="navigator.clipboard.writeText(document.querySelector(\'#taskDetailBody textarea\').value);toast(\'Copied!\',\'success\')">📋 Copy Message</button>'
+    +'<button class="btn" onclick="closeModal(\'taskDetailModal\')">Close</button>'
+    +'</div>';
+  openModal('taskDetailModal');
 }
 
 async function loadAdminUsers(){
@@ -2709,23 +2750,46 @@ async function loadProfilePage(){
   document.getElementById('profileRole').textContent=(u.role||'staff')+(u.department?' · '+u.department:'');
   var jEl=document.getElementById('pf_joined_display');
   if(jEl)jEl.textContent=u.joined_date?'📅 Joined: '+fmtDate(u.joined_date)+(u.resigned_date?' · Resigned: '+fmtDate(u.resigned_date):''):'';
+  // Lock sensitive fields if already set (IC, DOB, gender, ethnicity, worker type)
+  var sensitiveFields=['pf_ic','pf_dob','pf_gender','pf_ethnicity','pf_worker_type'];
+  sensitiveFields.forEach(function(id){
+    var el=document.getElementById(id);if(!el)return;
+    var isSet=el.value&&el.value.trim();
+    if(isSet&&currentUser.role!=='admin'){el.disabled=true;el.style.opacity='0.5';el.title='Contact admin to change';}
+    else{el.disabled=false;el.style.opacity='';}
+  });
   if(u.ic_number)autoFillFromIC(u.ic_number);
-  else if(u.date_of_birth){
-    var d=new Date(u.date_of_birth);
-    updateAgeDisplay(d.getFullYear(),d.getMonth(),d.getDate());
-  }
+  else if(u.date_of_birth){var d=new Date(u.date_of_birth);updateAgeDisplay(d.getFullYear(),d.getMonth(),d.getDate());}
+}
+
+async function changePassword(){
+  var cur=document.getElementById('pw_current').value;
+  var nw=document.getElementById('pw_new').value;
+  var cf=document.getElementById('pw_confirm').value;
+  if(!cur||!nw){toast('Fill in all password fields','error');return;}
+  if(nw.length<4){toast('New password too short (min 4 chars)','error');return;}
+  if(nw!==cf){toast('Passwords do not match','error');return;}
+  // Verify current password
+  var curHash=await sha256(cur);
+  var rows=await sbGet('users','username=eq.'+encodeURIComponent(currentUser.username)+'&password_hash=eq.'+curHash+'&select=username');
+  if(!rows.length){toast('Current password incorrect','error');return;}
+  var newHash=await sha256(nw);
+  await sbPatch('users',{username:currentUser.username},{password_hash:newHash,failed_attempts:0});
+  document.getElementById('pw_current').value='';document.getElementById('pw_new').value='';document.getElementById('pw_confirm').value='';
+  toast('Password updated successfully ✓','success');
 }
 
 /* ══ ATTENDANCE TABS ══ */
 function switchAttTab(tab){
-  ['day','pending','report'].forEach(function(t){
-    var d=document.getElementById('attDayTab'.replace('day',t==='day'?'Day':t==='pending'?'Pending':'Report'));
-    var b=document.getElementById('attTab'+( t==='day'?'Day':t==='pending'?'Pending':'Report'));
+  var tabs={day:'attDayTab',pending:'attPendingTab',report:'attReportTab'};
+  var btns={day:'attTabDay',pending:'attTabPending',report:'attTabReport'};
+  Object.keys(tabs).forEach(function(t){
+    var d=document.getElementById(tabs[t]);var b=document.getElementById(btns[t]);
     var show=t===tab;
     if(d)d.style.display=show?'':'none';
-    if(b){b.classList.toggle('primary',show);}
+    if(b){b.className=b.className.replace(/\bprimary\b/,'').trim()+(show?' primary':'');}
   });
-  if(tab==='day'&&!document.getElementById('attDate').value)setAttToday();
+  if(tab==='day'){if(!document.getElementById('attDate').value)setAttToday();else loadAttendance();}
   if(tab==='pending')loadPendingCheckins();
   if(tab==='report')populateReportUserList();
 }
@@ -2758,8 +2822,12 @@ async function approveCheckinItem(id){
   // Update attendance record
   var data={self_checkin:true,status:'present'};
   data[r.session_field]=r.recorded_at;
-  if(r.gps_lat){var isIn=r.session_field.indexOf('out')<0;data[isIn?'checkin_lat':'checkout_lat']=r.gps_lat;data[isIn?'checkin_lng':'checkout_lng']=r.gps_lng;}
-  if(r.photo){var pf={check_in:'checkin_photo',check_in_2:'checkin_photo_2',check_in_3:'checkin_photo_3'}[r.session_field];if(pf)data[pf]=r.photo;}
+  if(r.gps_lat){var isIn2=r.session_field.indexOf('out')<0;data[isIn2?'checkin_lat':'checkout_lat']=r.gps_lat;data[isIn2?'checkin_lng':'checkout_lng']=r.gps_lng;}
+  // Save photo for all sessions (in and out)
+  if(r.photo){
+    var photoFieldMap={check_in:'checkin_photo',check_in_2:'checkin_photo_2',check_in_3:'checkin_photo_3',check_out:'checkin_photo',check_out_2:'checkin_photo_2',check_out_3:'checkin_photo_3'};
+    var pf=photoFieldMap[r.session_field];if(pf)data[pf]=r.photo;
+  }
   var existing=await sbGet('attendance','username=eq.'+encodeURIComponent(r.username)+'&date=eq.'+r.date+'&select=id');
   if(existing.length){await sbPatch('attendance',{username:r.username,date:r.date},data);}
   else{data.username=r.username;data.date=r.date;await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});}
@@ -3040,14 +3108,13 @@ async function doCheckIn(){
 async function confirmAndSubmitCheckin(){
   if(!pendingCheckinData){closeModal('checkinConfirmModal');return;}
   var d=pendingCheckinData;pendingCheckinData=null;
-  // Save to checkin_approvals table (admin reviews)
   var approvalData={
     username:currentUser.username,
-    date:new Date().toISOString().slice(0,10),
+    date:new Date(d.timestamp).toISOString().slice(0,10),
     session_field:d.field,
     recorded_at:d.timestamp,
     status:'pending',
-    photo:d.photo||null,
+    photo:d.photo||null, // save photo for ALL sessions including checkout
     gps_lat:d.gps?d.gps.lat:null,
     gps_lng:d.gps?d.gps.lng:null
   };
@@ -3670,54 +3737,6 @@ async function loadCheckin(){
     },{enableHighAccuracy:true,timeout:8000,maximumAge:30000});
   }
 }
-async function doCheckIn(){
-  var today=new Date().toISOString().slice(0,10);
-  var photoFile=document.getElementById('checkinPhoto').files[0];
-  var btn=document.getElementById('checkinBtn');
-  btn.disabled=true;btn.textContent='⏳ Processing...';
-  try{
-    if(!photoFile&&!checkinGPSCoords){
-      var gpsEl=document.getElementById('checkinGPS');
-      if(gpsEl)gpsEl.textContent='📍 Getting GPS...';
-      await new Promise(function(resolve,reject){
-        if(!navigator.geolocation){reject({code:99,message:'GPS not supported on this device'});return;}
-        navigator.geolocation.getCurrentPosition(function(pos){
-          checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
-          if(gpsEl)gpsEl.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
-          resolve();
-        },function(err){reject(err);},{enableHighAccuracy:true,timeout:15000,maximumAge:0});
-      });
-    }
-    var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
-    var r=rec.length?rec[0]:{};
-    var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
-    if(!field){toast('All sessions recorded today','success');await loadCheckin();return;}
-    var data={};data[field]=new Date().toISOString();data.self_checkin=true;
-    // Status stays 'pending' until admin approves — only set present if already approved
-    var currentStatus=r.status;
-    if(!currentStatus||currentStatus==='absent')data.status='pending';
-    var isIn=field.indexOf('out')<0;
-    if(checkinGPSCoords){data[isIn?'checkin_lat':'checkout_lat']=checkinGPSCoords.lat;data[isIn?'checkin_lng':'checkout_lng']=checkinGPSCoords.lng;}
-    if(photoFile&&isIn){
-      var b64=await compressPhoto(photoFile);
-      var pf=field==='check_in'?'checkin_photo':field==='check_in_2'?'checkin_photo_2':field==='check_in_3'?'checkin_photo_3':null;
-      if(pf)data[pf]=b64;
-    }
-    if(rec.length){await sbPatch('attendance',{username:currentUser.username,date:today},data);}
-    else{data.username=currentUser.username;data.date=today;await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});}
-    document.getElementById('checkinPhoto').value='';
-    toast('Recorded ✓','success');
-    await loadCheckin();
-  }catch(err){
-    var msg=err&&err.code===1?'❌ Location permission denied — enable GPS in browser settings':
-            err&&err.code===2?'❌ GPS signal unavailable — move outdoors or attach a photo':
-            err&&err.code===3?'❌ GPS timed out — try again or attach a photo':
-            '❌ '+(err&&err.message||'Error occurred');
-    toast(msg,'error');
-    await loadCheckin();
-  }
-}
-
 function compressPhoto(file){
   return new Promise(function(resolve){
     var reader=new FileReader();
