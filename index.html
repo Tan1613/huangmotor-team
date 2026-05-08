@@ -765,9 +765,13 @@ body{position:relative}
       </div>
       <div class="nav-item" onclick="openPage('tasks')" id="nav-tasks">
         <span class="nav-icon">✅</span>My Tasks
+        <span class="nav-badge" id="tasksBadge" style="display:none">0</span>
       </div>
       <div class="nav-item" onclick="openPage('mysales')" id="nav-mysales">
         <span class="nav-icon">🏍️</span>My Sales
+      </div>
+      <div class="nav-item" onclick="openPage('benefit')" id="nav-benefit">
+        <span class="nav-icon">🎁</span>Benefits
       </div>
       <div class="nav-item" onclick="openPage('chat')" id="nav-chat">
         <span class="nav-icon">💬</span>Chat
@@ -794,9 +798,11 @@ body{position:relative}
       </div>
       <div class="nav-item" onclick="openPage('admin-leave')" id="nav-admin-leave" style="display:none">
         <span class="nav-icon">📋</span>Leave Approvals
+        <span class="nav-badge" id="leaveBadge" style="display:none">0</span>
       </div>
       <div class="nav-item" onclick="openPage('admin-attendance')" id="nav-admin-attendance" style="display:none">
         <span class="nav-icon">🕐</span>Attendance
+        <span class="nav-badge" id="attBadge" style="display:none">0</span>
       </div>
       <div class="nav-item" onclick="openPage('admin-att-rules')" id="nav-admin-att-rules" style="display:none">
         <span class="nav-icon">⚙</span>Att. Rules
@@ -910,6 +916,17 @@ body{position:relative}
               <button class="btn primary" onclick="saveHoliday()">Save</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- BENEFIT -->
+      <div class="page" id="page-benefit">
+        <div class="page-title">🎁 Benefits</div>
+        <div class="page-sub">Staff benefits and claims</div>
+        <div class="card" style="text-align:center;padding:3rem 2rem;margin-top:2rem">
+          <div style="font-size:48px;margin-bottom:1rem">🎁</div>
+          <div style="font-size:16px;font-weight:600;color:#f0f6fc;margin-bottom:.5rem">Coming Soon</div>
+          <div style="font-size:13px;color:#4a6fa5">Staff benefits, claims and entitlements will be available here.</div>
         </div>
       </div>
 
@@ -1545,6 +1562,9 @@ async function afterLogin(){
   await loadAllUsersCache();
   await loadDashboard();
   await checkUnread();
+  // Start badge refresh (every 60s)
+  refreshBadges();
+  setInterval(refreshBadges,60000);
 }
 
 function doLogout(){
@@ -1618,6 +1638,7 @@ function openPage(name){
   else if(name==='admin-dept')loadDeptPage();
   else if(name==='admin-leave'){loadAllLeave();loadLeaveConfig();}
   else if(name==='admin-attendance'){setAttToday();switchAttTab('day');}
+  else if(name==='benefit'){}// placeholder, nothing to load
   else if(name==='admin-media')loadMediaManager();
   else if(name==='performance')loadPerformance();
   else if(name==='admin-users')loadAdminUsers();
@@ -1656,7 +1677,7 @@ async function loadDashboard(){
 /* ══ ANNOUNCEMENTS ══ */
 async function loadAnnouncements(){
   document.getElementById('annList').innerHTML='<div class="skeleton"></div><div class="skeleton"></div>';
-  var anns=await sbGet('announcements','or=(target_role.eq.all,target_role.eq.'+encodeURIComponent(currentUser.role)+',target_role.eq.'+encodeURIComponent(currentUser.username)+')&order=is_pinned.desc,created_at.desc');
+  var anns=await sbGet('announcements','or=(target_role.eq.all,target_role.eq.'+encodeURIComponent(currentUser.role)+',target_role.eq.'+encodeURIComponent(currentUser.username)+')&deleted_at=is.null&order=is_pinned.desc,created_at.desc');
   var reads=await sbGet('announcement_reads','username=eq.'+encodeURIComponent(currentUser.username)+'&select=announcement_id,confirmed');
   var readMap={};reads.forEach(function(r){readMap[r.announcement_id]={read:true,confirmed:r.confirmed};});
   if(!anns.length){document.getElementById('annList').innerHTML='<div class="empty-state"><div class="icon">📭</div><p>No announcements yet</p></div>';return;}
@@ -1730,9 +1751,14 @@ async function checkUnread(){
   var n=anns.length-reads.length;updateUnreadCount(Math.max(0,n));
 }
 function updateUnreadCount(n){
-  var b=document.getElementById('unreadBadge');b.style.display=n>0?'':'none';b.textContent=n;
+  setBadge('unreadBadge',n);setBadge('mnUnreadBadge',n);
 }
-async function deleteAnn(id,e){e.stopPropagation();if(!confirm('Delete this announcement?'))return;await sbDelete('announcements',{id:id});loadAnnouncements();toast('Announcement deleted','success');}
+async function deleteAnn(id,e){
+  e.stopPropagation();
+  if(!confirm('Delete this announcement?'))return;
+  await sbPatch('announcements',{id:id},{deleted_at:new Date().toISOString()});
+  loadAnnouncements();toast('Announcement deleted','success');
+}
 
 function openAnnModal(id){
   document.getElementById('ann_title').value='';document.getElementById('ann_content').value='';
@@ -2873,7 +2899,71 @@ async function changePassword(){
   toast('Password updated successfully ✓','success');
 }
 
-/* ══ ATTENDANCE TABS ══ */
+function getDeviceInfo(){
+  var ua=navigator.userAgent;
+  var device='Unknown';
+  if(/iPhone/.test(ua))device='iPhone';
+  else if(/iPad/.test(ua))device='iPad';
+  else if(/Android/.test(ua)){
+    var m=ua.match(/Android [^;]+; ([^)]+)\)/);
+    device=m?'Android: '+m[1].trim():'Android';
+  } else if(/Windows/.test(ua))device='Windows PC';
+  else if(/Mac/.test(ua))device='Mac';
+  var browser='';
+  if(/Chrome\//.test(ua)&&!/Chromium|Edge|OPR/.test(ua))browser='Chrome';
+  else if(/Firefox\//.test(ua))browser='Firefox';
+  else if(/Safari\//.test(ua)&&!/Chrome/.test(ua))browser='Safari';
+  else if(/Edge\/|Edg\//.test(ua))browser='Edge';
+  return device+(browser?' · '+browser:'');
+}
+
+/* ══ GLOBAL BADGE REFRESH ══ */
+async function refreshBadges(){
+  // Announcements unread
+  try{
+    var anns=await sbGet('announcements','or=(target_role.eq.all,target_role.eq.'+encodeURIComponent(currentUser.role)+',target_role.eq.'+encodeURIComponent(currentUser.username)+')&select=id');
+    var reads=await sbGet('announcement_reads','username=eq.'+encodeURIComponent(currentUser.username)+'&select=announcement_id');
+    var readIds=new Set(reads.map(function(r){return r.announcement_id;}));
+    var unread=anns.filter(function(a){return !readIds.has(a.id);}).length;
+    setBadge('unreadBadge',unread);setBadge('mnUnreadBadge',unread);
+  }catch(e){}
+  // Active tasks (pending/accepted/in_progress)
+  try{
+    var allT=await sbGet('tasks','deleted_at=is.null&status=in.(pending,accepted,in_progress)&select=id,assigned_to,assigned_dept,task_type,visibility,visibility_users');
+    var myTasks=allT.filter(function(t){
+      var mine=t.assigned_to===currentUser.username;
+      var dept=t.assigned_dept&&t.assigned_dept===currentUser.department;
+      var all=!t.assigned_to&&!t.assigned_dept;
+      return (mine||dept||all)&&isTaskVisible(t);
+    });
+    setBadge('tasksBadge',myTasks.length);
+  }catch(e){}
+  // Chat unread (messages since last visit — use simple count of rooms with new msgs)
+  // Already handled by chat poll
+  // Admin: pending leave approvals
+  if(currentUser.role==='admin'||currentUser.can_approve_leave){
+    try{
+      var pendingLeave=await sbGet('leave_requests','status=eq.pending&select=id');
+      setBadge('leaveBadge',pendingLeave.length);
+      // Also update more drawer
+      var mnLeave=document.getElementById('mn-admin-leave');
+      if(mnLeave){var existing=mnLeave.querySelector('.mi-badge');if(existing)existing.remove();if(pendingLeave.length>0){var b=document.createElement('span');b.className='mi-badge';b.style.cssText='margin-left:auto;background:#ef4444;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px';b.textContent=pendingLeave.length;mnLeave.appendChild(b);}}
+    }catch(e){}
+  }
+  // Admin: pending attendance approvals
+  if(currentUser.role==='admin'||currentUser.can_view_attendance){
+    try{
+      var pendingAtt=await sbGet('checkin_approvals','status=eq.pending&select=id');
+      setBadge('attBadge',pendingAtt.length);
+    }catch(e){}
+  }
+}
+
+function setBadge(id,count){
+  var el=document.getElementById(id);if(!el)return;
+  if(count>0){el.textContent=count>99?'99+':String(count);el.style.display='';}
+  else{el.style.display='none';}
+}
 function switchAttTab(tab){
   var tabs={day:'attDayTab',pending:'attPendingTab',report:'attReportTab'};
   var btns={day:'attTabDay',pending:'attTabPending',report:'attTabReport'};
@@ -2889,21 +2979,24 @@ function switchAttTab(tab){
 }
 
 async function loadPendingCheckins(){
-  var rows=await sbGet('checkin_approvals','status=eq.pending&order=created_at.desc');
-  if(!rows.length){document.getElementById('attPendingList').innerHTML='<div class="empty-state"><p>No pending check-ins</p></div>';return;}
+  // Oldest first so admin processes in chronological order
+  var rows=await sbGet('checkin_approvals','status=eq.pending&order=created_at.asc');
+  if(!rows.length){document.getElementById('attPendingList').innerHTML='<div class="empty-state"><p>No pending check-ins ✓</p></div>';return;}
   document.getElementById('attPendingList').innerHTML=rows.map(function(r){
     var usr=allUsers.find(function(u){return u.username===r.username;})||{};
     var fieldLabel={check_in:'S1 In',check_out:'S1 Out',check_in_2:'S2 In',check_out_2:'S2 Out',check_in_3:'S3 In',check_out_3:'S3 Out'}[r.session_field]||r.session_field;
+    var deviceInfo=r.device_info?'<div style="font-size:10px;color:#2a4a6a;margin-top:2px">📱 '+esc(r.device_info)+'</div>':'';
     return '<div class="card" style="margin-bottom:.6rem;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">'
-      +(r.photo?'<img src="'+r.photo+'" onclick="viewFullImg(this.src)" style="width:56px;height:56px;object-fit:cover;border-radius:6px;cursor:pointer;flex-shrink:0">':'<div style="width:56px;height:56px;background:#1e2d45;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#4a6fa5;font-size:10px">No photo</div>')
+      +(r.photo?'<img src="'+r.photo+'" onclick="viewFullImg(this.src)" style="width:64px;height:64px;object-fit:cover;border-radius:6px;cursor:pointer;flex-shrink:0;border:1px solid #1e2d45">':'<div style="width:64px;height:64px;background:#1e2d45;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#4a6fa5;font-size:10px;text-align:center;flex-shrink:0">No<br>photo</div>')
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+(esc(usr.display_name)||esc(r.username))+'</div>'
-      +'<div style="font-size:11px;color:#4a6fa5">'+fmtDate(r.date)+' · <span style="color:#60a5fa">'+fieldLabel+'</span> · '+fmtTime(r.recorded_at)+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5">'+fmtDate(r.date)+' · <span style="color:#60a5fa;font-weight:600">'+fieldLabel+'</span> · '+fmtTime(r.recorded_at)+'</div>'
       +(r.gps_lat?'<div style="font-size:10px;color:#2a4a6a">📍 '+r.gps_lat.toFixed(4)+', '+r.gps_lng.toFixed(4)+'</div>':'')
+      +deviceInfo
       +'</div>'
-      +'<div style="display:flex;gap:5px">'
-      +'<button class="btn sm success" onclick="approveCheckinItem('+r.id+')">✓</button>'
-      +'<button class="btn sm danger" onclick="rejectCheckinItem('+r.id+')">✕</button>'
+      +'<div style="display:flex;gap:5px;flex-shrink:0">'
+      +'<button class="btn sm success" onclick="approveCheckinItem('+r.id+')">✓ Approve</button>'
+      +'<button class="btn sm danger" onclick="rejectCheckinItem('+r.id+')">✕ Reject</button>'
       +'</div></div>';
   }).join('');
 }
@@ -3274,9 +3367,10 @@ async function confirmAndSubmitCheckin(){
     session_field:d.field,
     recorded_at:d.timestamp,
     status:'pending',
-    photo:d.photo||null, // save photo for ALL sessions including checkout
+    photo:d.photo||null,
     gps_lat:d.gps?d.gps.lat:null,
-    gps_lng:d.gps?d.gps.lng:null
+    gps_lng:d.gps?d.gps.lng:null,
+    device_info:getDeviceInfo()
   };
   await sbPost('checkin_approvals',approvalData);
   document.getElementById('checkinPhoto').value='';
