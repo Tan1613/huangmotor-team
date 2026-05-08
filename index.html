@@ -1103,6 +1103,26 @@ body{position:relative}
           </div>
           <div class="form-row">
             <div class="form-field">
+              <label>Gender</label>
+              <select id="nu_gender">
+                <option value="">— Select —</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label>Ethnicity</label>
+              <select id="nu_ethnicity">
+                <option value="">— Select —</option>
+                <option value="malay">Malay</option>
+                <option value="chinese">Chinese</option>
+                <option value="indian">Indian</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
               <label>Date Joined</label>
               <input type="date" id="nu_joined">
             </div>
@@ -1426,9 +1446,9 @@ async function doLogin(){
       btn.disabled=false;btn.textContent='Sign In';return;
     }
     currentUser=rows[0];
+    if(currentUser.must_change_password){showForceChangePassword();return;}
     await afterLogin();
   }catch(e){
-    console.error('Login error:',e);
     document.getElementById('loginErr').textContent='Error: '+(e.message||'Connection failed. Check network.');
     btn.disabled=false;btn.textContent='Sign In';
   }
@@ -1500,15 +1520,23 @@ var currentPage='dashboard';
 function toggleMobileMore(){
   var drawer=document.getElementById('mobileMoreDrawer');
   var overlay=document.getElementById('drawerOverlay');
-  var isOpen=drawer.classList.contains('open');
-  if(isOpen){closeMobileMore();}
-  else{drawer.classList.add('open');overlay.classList.add('open');document.getElementById('mn-more').classList.add('active');}
+  var btn=document.getElementById('mn-more');
+  var isOpen=drawer.style.display==='flex';
+  if(isOpen){
+    drawer.style.display='none';
+    overlay.style.display='none';
+    if(btn)btn.classList.remove('active');
+  } else {
+    drawer.style.display='flex';
+    overlay.style.display='block';
+    if(btn)btn.classList.add('active');
+  }
 }
 function closeMobileMore(){
   var drawer=document.getElementById('mobileMoreDrawer');
   var overlay=document.getElementById('drawerOverlay');
-  if(drawer)drawer.classList.remove('open');
-  if(overlay)overlay.classList.remove('open');
+  if(drawer)drawer.style.display='none';
+  if(overlay)overlay.style.display='none';
   var btn=document.getElementById('mn-more');if(btn)btn.classList.remove('active');
 }
 function updateMobileNav(page){
@@ -1584,7 +1612,7 @@ async function loadDashboard(){
 /* ══ ANNOUNCEMENTS ══ */
 async function loadAnnouncements(){
   document.getElementById('annList').innerHTML='<div class="skeleton"></div><div class="skeleton"></div>';
-  var anns=await sbGet('announcements','order=is_pinned.desc,created_at.desc');
+  var anns=await sbGet('announcements','or=(target_role.eq.all,target_role.eq.'+encodeURIComponent(currentUser.role)+',target_role.eq.'+encodeURIComponent(currentUser.username)+')&order=is_pinned.desc,created_at.desc');
   var reads=await sbGet('announcement_reads','username=eq.'+encodeURIComponent(currentUser.username)+'&select=announcement_id,confirmed');
   var readMap={};reads.forEach(function(r){readMap[r.announcement_id]={read:true,confirmed:r.confirmed};});
   if(!anns.length){document.getElementById('annList').innerHTML='<div class="empty-state"><div class="icon">📭</div><p>No announcements yet</p></div>';return;}
@@ -2483,9 +2511,13 @@ async function createUser(){
   var dept=document.getElementById('nu_dept').value;
   var data={
     username:u,password_hash:hash,role:r,is_active:true,
+    must_change_password:true, // force staff to set own password on first login
     display_name:document.getElementById('nu_dispname').value.trim()||null,
     position:document.getElementById('nu_position').value.trim()||null,
     department:dept||null,
+    gender:document.getElementById('nu_gender').value||null,
+    ethnicity:document.getElementById('nu_ethnicity').value||null,
+    worker_type:'local',
     joined_date:document.getElementById('nu_joined').value||null,
     resigned_date:document.getElementById('nu_resigned').value||null,
     can_access_tools:isAdmin||document.getElementById('nu_tools').checked,
@@ -2709,15 +2741,18 @@ async function saveProfile(){
   if(ic&&ic.replace(/-/g,'').length!==12){toast('IC must be 12 digits','error');return;}
   var fields={
     display_name:document.getElementById('pf_display_name').value.trim(),
-    position:document.getElementById('pf_position').value.trim(),
+    position:currentUser.role==='admin'?document.getElementById('pf_position').value.trim():currentUser.position,
     phone:document.getElementById('pf_phone').value.trim(),
     email:document.getElementById('pf_email').value.trim(),
     ic_number:ic||null,
     date_of_birth:document.getElementById('pf_dob').value||null,
-    gender:document.getElementById('pf_gender').value||null,
-    ethnicity:document.getElementById('pf_ethnicity').value||null,
     worker_type:document.getElementById('pf_worker_type').value||'local'
   };
+  // Gender and ethnicity only editable by admin
+  if(currentUser.role==='admin'){
+    fields.gender=document.getElementById('pf_gender').value||null;
+    fields.ethnicity=document.getElementById('pf_ethnicity').value||null;
+  }
   await sbPatch('users',{username:currentUser.username},fields);
   Object.assign(currentUser,fields);
   document.getElementById('tbUser').textContent=fields.display_name||currentUser.username;
@@ -2750,12 +2785,18 @@ async function loadProfilePage(){
   document.getElementById('profileRole').textContent=(u.role||'staff')+(u.department?' · '+u.department:'');
   var jEl=document.getElementById('pf_joined_display');
   if(jEl)jEl.textContent=u.joined_date?'📅 Joined: '+fmtDate(u.joined_date)+(u.resigned_date?' · Resigned: '+fmtDate(u.resigned_date):''):'';
-  // Lock sensitive fields if already set (IC, DOB, gender, ethnicity, worker type)
-  var sensitiveFields=['pf_ic','pf_dob','pf_gender','pf_ethnicity','pf_worker_type'];
-  sensitiveFields.forEach(function(id){
+  // Lock sensitive fields for non-admin
+  // IC, DOB, worker_type: locked if already set
+  // Gender, ethnicity: ALWAYS locked for staff (admin sets at creation)
+  ['pf_ic','pf_dob','pf_worker_type'].forEach(function(id){
     var el=document.getElementById(id);if(!el)return;
     var isSet=el.value&&el.value.trim();
     if(isSet&&currentUser.role!=='admin'){el.disabled=true;el.style.opacity='0.5';el.title='Contact admin to change';}
+    else{el.disabled=false;el.style.opacity='';}
+  });
+  ['pf_gender','pf_ethnicity'].forEach(function(id){
+    var el=document.getElementById(id);if(!el)return;
+    if(currentUser.role!=='admin'){el.disabled=true;el.style.opacity='0.5';el.title='Set by admin — contact admin to change';}
     else{el.disabled=false;el.style.opacity='';}
   });
   if(u.ic_number)autoFillFromIC(u.ic_number);
@@ -2833,10 +2874,63 @@ async function approveCheckinItem(id){
   else{data.username=r.username;data.date=r.date;await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});}
   toast('Approved ✓','success');loadPendingCheckins();
 }
+function showForceChangePassword(){
+  document.getElementById('loginScreen').innerHTML=
+    '<div style="background:#111827;border:1px solid #1e2d45;border-radius:12px;padding:2rem;max-width:360px;width:90%">'
+    +'<div style="text-align:center;margin-bottom:1.2rem">'
+    +'<div style="font-size:32px;margin-bottom:.5rem">🔑</div>'
+    +'<div style="font-size:16px;font-weight:700;color:#f0f6fc;margin-bottom:.3rem">Set Your Password</div>'
+    +'<div style="font-size:12px;color:#4a6fa5">This is your first login. Please set a new password to continue.</div>'
+    +'</div>'
+    +'<div style="margin-bottom:12px">'
+    +'<label style="font-size:11px;color:#6b8ab0;display:block;margin-bottom:4px">New Password <span style="color:#4a6fa5">(min 4 chars)</span></label>'
+    +'<input type="password" id="fc_new" placeholder="Enter new password" style="width:100%;padding:10px;border:1px solid #1e2d45;border-radius:7px;background:#0d1626;color:#e0e6f0;font-size:13px;box-sizing:border-box">'
+    +'</div>'
+    +'<div style="margin-bottom:16px">'
+    +'<label style="font-size:11px;color:#6b8ab0;display:block;margin-bottom:4px">Confirm Password</label>'
+    +'<input type="password" id="fc_confirm" placeholder="Repeat new password" style="width:100%;padding:10px;border:1px solid #1e2d45;border-radius:7px;background:#0d1626;color:#e0e6f0;font-size:13px;box-sizing:border-box">'
+    +'</div>'
+    +'<div id="fc_err" style="font-size:11px;color:#f87171;margin-bottom:8px;text-align:center;min-height:16px"></div>'
+    +'<button onclick="submitForceChangePw()" style="width:100%;padding:11px;background:#1d4ed8;border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;border-radius:8px">Set Password & Continue</button>'
+    +'</div>';
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('loginScreen').style.alignItems='center';
+  document.getElementById('loginScreen').style.justifyContent='center';
+}
+
+async function submitForceChangePw(){
+  var nw=document.getElementById('fc_new').value;
+  var cf=document.getElementById('fc_confirm').value;
+  var err=document.getElementById('fc_err');
+  if(nw.length<4){err.textContent='Password must be at least 4 characters';return;}
+  if(nw!==cf){err.textContent='Passwords do not match';return;}
+  err.textContent='';
+  var hash=await sha256(nw);
+  await sbPatch('users',{username:currentUser.username},{password_hash:hash,must_change_password:false,failed_attempts:0});
+  currentUser.must_change_password=false;
+  document.getElementById('loginScreen').style.display='none';
+  toast('Password set! Welcome 🎉','success');
+  await afterLogin();
+}
+
 async function rejectCheckinItem(id){
-  var reason=prompt('Reason for rejection (optional):');
-  await sbPatch('checkin_approvals',{id:id},{status:'rejected',reviewed_by:currentUser.username,reviewed_at:new Date().toISOString(),notes:reason||null});
-  toast('Rejected','success');loadPendingCheckins();
+  var reason=prompt('Reason for rejection (shown to staff):');
+  if(reason===null)return;
+  var rows=await sbGet('checkin_approvals','id=eq.'+id+'&select=username,session_field,date');
+  await sbPatch('checkin_approvals',{id:id},{status:'rejected',reviewed_by:currentUser.username,reviewed_at:new Date().toISOString(),notes:reason||'Rejected'});
+  // Create announcement targeted at the specific user as notification
+  if(rows.length){
+    var r=rows[0];
+    var fieldLabel={check_in:'S1 Check-In',check_out:'S1 Check-Out',check_in_2:'S2 Check-In',check_out_2:'S2 Check-Out',check_in_3:'S3 Check-In',check_out_3:'S3 Check-Out'}[r.session_field]||r.session_field;
+    await sbPost('announcements',{
+      title:'⚠️ Your check-in was rejected — '+fmtDate(r.date),
+      content:'Your '+fieldLabel+' on '+fmtDate(r.date)+' was rejected.\nReason: '+(reason||'No reason given')+'\n\nPlease contact your manager if you have questions.',
+      target_role:r.username,// use username as target so only they see it
+      is_pinned:false,
+      created_by:'system'
+    });
+  }
+  toast('Rejected — staff notified','success');loadPendingCheckins();
 }
 
 function populateReportUserList(){
@@ -3789,15 +3883,15 @@ function isTaskVisible(task){
   try{
     var s=JSON.parse(sess);
     if(s.module!=='team'&&s.role!=='admin'){sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;}
-    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,is_active,display_name,position,phone,email,department',{headers:sbH()});
+    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity',{headers:sbH()});
     var rows=await r.json();
     if(!rows.length||rows[0].is_active===false||(!rows[0].can_access_team&&rows[0].role!=='admin')){
       sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;
     }
     currentUser=rows[0];
+    if(currentUser.must_change_password){showForceChangePassword();return;}
     await afterLogin();
-  }catch(e){sessionStorage.removeItem('hm_session');showTeamLoginPrompt();}
-})();
+  }catch(e){sessionStorage.removeItem('hm_session');showTeamLoginPrompt();}})();
 
 function showTeamLoginPrompt(){
   document.getElementById('loginScreen').innerHTML=
