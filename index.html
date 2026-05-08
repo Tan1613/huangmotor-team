@@ -455,6 +455,68 @@ body{position:relative}
   </div>
 </div>
 
+<!-- Attendance Rule Modal -->
+<div class="modal-overlay" id="attRuleModal">
+  <div class="modal">
+    <div class="modal-hdr"><h3>⚙ Attendance Rule</h3><button class="btn sm" onclick="closeModal('attRuleModal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="ar_id">
+      <div class="form-row">
+        <div class="form-field"><label>Rule Name</label><input type="text" id="ar_name" placeholder="e.g. Sales Dept Hours"></div>
+        <div class="form-field">
+          <label>Applies To</label>
+          <select id="ar_scope" onchange="toggleRuleScope()">
+            <option value="global">Global (All Staff)</option>
+            <option value="department">Department</option>
+            <option value="user">Specific Employee</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-field" id="ar_scope_target_wrap" style="display:none">
+        <label id="ar_scope_label">Target</label>
+        <select id="ar_scope_target"></select>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:#60a5fa;margin:10px 0 6px">Session 1 — Morning</div>
+      <div class="form-row">
+        <div class="form-field"><label>Early arrival before</label><input type="time" id="ar_in1_early" value="08:00"></div>
+        <div class="form-field"><label>Late arrival after</label><input type="time" id="ar_in1_late" value="09:00"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>Early checkout before (S1 out)</label><input type="time" id="ar_out1_early" value="13:00"></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:#60a5fa;margin:10px 0 6px">Break / Session 2 — Afternoon</div>
+      <div class="form-row">
+        <div class="form-field"><label>Late back from break after</label><input type="time" id="ar_in2_late" value="14:00"></div>
+        <div class="form-field"><label>Friday Muslim break extra (min)</label><input type="number" id="ar_friday_extra" value="30" min="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label>Early end of day before (S2 out)</label><input type="time" id="ar_out2_early" value="17:30"></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('attRuleModal')">Cancel</button>
+        <button class="btn primary" onclick="saveAttRule()">Save Rule</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Checkin Photo Confirm Modal -->
+<div class="modal-overlay" id="checkinConfirmModal">
+  <div class="modal" style="max-width:340px">
+    <div class="modal-hdr"><h3>📷 Confirm Check In/Out</h3><button class="btn sm" onclick="closeModal('checkinConfirmModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="text-align:center;margin-bottom:12px">
+        <img id="checkinConfirmImg" style="max-width:100%;border-radius:8px;border:1px solid #1e2d45;max-height:200px;object-fit:cover">
+      </div>
+      <div id="checkinConfirmInfo" style="font-size:12px;color:#6b8ab0;margin-bottom:12px;text-align:center"></div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('checkinConfirmModal')">Retake</button>
+        <button class="btn primary" onclick="confirmAndSubmitCheckin()">✓ Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- LOGIN -->
 <div id="loginScreen">
   <div class="login-card">
@@ -716,6 +778,9 @@ body{position:relative}
       <div class="nav-item" onclick="openPage('admin-attendance')" id="nav-admin-attendance" style="display:none">
         <span class="nav-icon">🕐</span>Attendance
       </div>
+      <div class="nav-item" onclick="openPage('admin-att-rules')" id="nav-admin-att-rules" style="display:none">
+        <span class="nav-icon">⚙</span>Att. Rules
+      </div>
       <div class="nav-item" onclick="openPage('performance')" id="nav-performance" style="display:none">
         <span class="nav-icon">📈</span>Performance
       </div>
@@ -834,7 +899,6 @@ body{position:relative}
           </div>
           <button class="btn primary" onclick="openLeaveModal()">+ Apply Leave</button>
         </div>
-        <div id="leaveBalanceBar" style="margin-bottom:1rem"></div>
         <div id="leaveList"></div>
       </div>
 
@@ -911,17 +975,40 @@ body{position:relative}
 
       <!-- ADMIN: ATTENDANCE -->
       <div class="page" id="page-admin-attendance">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-          <div>
-            <div class="page-title">🕐 Attendance</div>
-            <div class="page-sub" id="attDateLabel"></div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input type="date" id="attDate" class="btn" style="padding:5px 10px" oninput="loadAttendance()">
-            <button class="btn sm primary" onclick="setAttToday()">Today</button>
-          </div>
+        <div class="page-title">🕐 Attendance</div>
+        <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
+          <button class="btn primary" id="attTabDay" onclick="switchAttTab('day')">📅 Daily</button>
+          <button class="btn" id="attTabPending" onclick="switchAttTab('pending')">⏳ Pending</button>
+          <button class="btn" id="attTabReport" onclick="switchAttTab('report')">📊 Report</button>
+          <button class="btn" id="attTabRules" onclick="openPage('admin-att-rules')" style="margin-left:auto">⚙ Rules</button>
         </div>
-        <div id="attList"></div>
+        <div id="attDayTab">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:.8rem;flex-wrap:wrap">
+            <input type="date" id="attDate" class="btn" style="padding:5px 10px" oninput="loadAttendance()">
+            <button class="btn" onclick="setAttToday()">Today</button>
+          </div>
+          <div class="page-sub" id="attDateLabel" style="margin-bottom:.8rem"></div>
+          <div id="attList"></div>
+        </div>
+        <div id="attPendingTab" style="display:none"><div id="attPendingList"></div></div>
+        <div id="attReportTab" style="display:none">
+          <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+            <select id="reportUser" class="btn" style="padding:5px 10px;min-width:140px"></select>
+            <input type="month" id="reportMonth" class="btn" style="padding:5px 10px">
+            <button class="btn primary" onclick="loadStaffReport()">Generate</button>
+          </div>
+          <div id="staffReportContent"></div>
+        </div>
+      </div>
+
+      <!-- ADMIN: ATTENDANCE RULES -->
+      <div class="page" id="page-admin-att-rules">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <div><div class="page-title">⚙ Attendance Rules</div>
+          <div class="page-sub">Work hours & late/early thresholds by dept or employee</div></div>
+          <button class="btn primary" onclick="openNewRuleModal()">+ Add Rule</button>
+        </div>
+        <div id="attRulesContent"></div>
       </div>
 
       <!-- PERFORMANCE -->
@@ -1123,13 +1210,22 @@ body{position:relative}
 
       <!-- MY SALES -->
       <div class="page" id="page-mysales">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;flex-wrap:wrap;gap:6px">
           <div>
             <div class="page-title">🏍️ My Sales</div>
             <div class="page-sub">Motorcycle sales records</div>
           </div>
-          <button class="btn primary" onclick="openSaleModal()">+ New Sale</button>
-          <button class="btn" onclick="openDataRequests()" id="dataReqBtn">🔍 Requests</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn primary" onclick="openSaleModal()">+ New Sale</button>
+            <button class="btn" onclick="openDataRequests()">🔍 Requests</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
+          <button class="btn sm primary" id="sf-all" onclick="filterSales('all')">All</button>
+          <button class="btn sm" id="sf-pending" onclick="filterSales('pending')">Pending</button>
+          <button class="btn sm" id="sf-confirmed" onclick="filterSales('confirmed')">Confirmed</button>
+          <button class="btn sm" id="sf-delivered" onclick="filterSales('delivered')">Delivered</button>
+          <button class="btn sm" id="sf-cancelled" onclick="filterSales('cancelled')">Cancelled</button>
         </div>
         <div id="mySalesList"></div>
       </div>
@@ -1157,33 +1253,57 @@ body{position:relative}
       <!-- PROFILE -->
       <div class="page" id="page-profile">
         <div class="page-title">👤 My Profile</div>
-        <div class="page-sub">Update your contact information</div>
-        <div class="card" style="max-width:480px">
+        <div class="page-sub">Update your information</div>
+        <div class="card" style="max-width:520px">
           <div style="text-align:center;margin-bottom:1.2rem">
             <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#1d4ed8,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#fff;margin:0 auto 8px" id="profileAvatar">?</div>
             <div style="font-size:14px;font-weight:600;color:#f0f6fc" id="profileName">—</div>
             <div style="font-size:11px;color:#4a6fa5" id="profileRole">—</div>
+            <div style="font-size:12px;color:#4a6fa5;margin-top:4px" id="pf_joined_display">—</div>
+            <div style="font-size:12px;color:#60a5fa;margin-top:2px" id="pf_age_display">—</div>
           </div>
-          <div style="font-size:12px;color:#4a6fa5;margin-top:-4px;margin-bottom:1rem" id="pf_joined_display">—</div>
-            <input type="text" id="pf_username" disabled style="opacity:.5">
+          <div class="form-field"><label>Username</label><input type="text" id="pf_username" disabled style="opacity:.5"></div>
+          <div class="form-row">
+            <div class="form-field"><label>Display Name</label><input type="text" id="pf_display_name" placeholder="Full name"></div>
+            <div class="form-field"><label>Position</label><input type="text" id="pf_position" placeholder="e.g. Sales Executive"></div>
           </div>
-          <div class="form-field">
-            <label>Display Name</label>
-            <input type="text" id="pf_display_name" placeholder="Your full name">
-          </div>
-          <div class="form-field">
-            <label>Position / Title</label>
-            <input type="text" id="pf_position" placeholder="e.g. Sales Executive">
+          <div class="form-row">
+            <div class="form-field"><label>Phone</label><input type="text" id="pf_phone" placeholder="012-345 6789"></div>
+            <div class="form-field"><label>Email</label><input type="text" id="pf_email" placeholder="you@example.com"></div>
           </div>
           <div class="form-row">
             <div class="form-field">
-              <label>Phone</label>
-              <input type="text" id="pf_phone" placeholder="012-345 6789">
+              <label>IC Number <span style="font-size:10px;color:#4a6fa5">(auto-detects DOB & age)</span></label>
+              <input type="text" id="pf_ic" placeholder="XXXXXX-XX-XXXX" maxlength="14" oninput="formatIC(this);autoFillFromIC(this.value)">
+            </div>
+            <div class="form-field"><label>Date of Birth</label><input type="date" id="pf_dob"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-field">
+              <label>Gender</label>
+              <select id="pf_gender">
+                <option value="">— Select —</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
             </div>
             <div class="form-field">
-              <label>Email</label>
-              <input type="text" id="pf_email" placeholder="you@example.com">
+              <label>Ethnicity</label>
+              <select id="pf_ethnicity">
+                <option value="">— Select —</option>
+                <option value="malay">Malay</option>
+                <option value="chinese">Chinese</option>
+                <option value="indian">Indian</option>
+                <option value="other">Other</option>
+              </select>
             </div>
+          </div>
+          <div class="form-field">
+            <label>Worker Type</label>
+            <select id="pf_worker_type">
+              <option value="local">Local 🇲🇾</option>
+              <option value="foreign">Foreign Worker</option>
+            </select>
           </div>
           <div class="form-actions">
             <button class="btn primary" onclick="saveProfile()">Save Profile</button>
@@ -1416,7 +1536,8 @@ function openPage(name){
   else if(name==='admin-tasks')loadAllTasks();
   else if(name==='admin-dept')loadDeptPage();
   else if(name==='admin-leave'){loadAllLeave();loadLeaveConfig();}
-  else if(name==='admin-attendance'){setAttToday();}
+  else if(name==='admin-attendance'){setAttToday();switchAttTab('day');}
+  else if(name==='admin-att-rules')loadAttRules();
   else if(name==='performance')loadPerformance();
   else if(name==='admin-users')loadAdminUsers();
   else if(name==='profile')loadProfilePage();
@@ -1934,11 +2055,16 @@ async function loadMyLeave(){
   var listHtml=rows.length?rows.map(function(r){
     var d2=r.is_half_day?0.5:Math.round((new Date(r.end_date)-new Date(r.start_date))/86400000)+1;
     var halfLabel=r.is_half_day?(' <span style="background:#1e2d45;color:#93c5fd;font-size:10px;padding:1px 6px;border-radius:4px">'+(r.half_day_session==='am'?'½ Morning AM':'½ Afternoon PM')+'</span>'):'';
+    var canCancel=r.status==='pending'||(r.status==='approved'&&!r.cancelled_at);
     return '<div class="leave-item">'
       +'<div class="leave-info">'
       +'<div class="leave-title"><span class="leave-type-badge '+r.leave_type+'">'+r.leave_type+'</span> '+fmtDate(r.start_date)+(r.is_half_day?'':' → '+fmtDate(r.end_date))+halfLabel+' <span style="font-size:11px;color:#4a6fa5">('+d2+' day'+(d2>1?'s':'')+')</span></div>'
       +'<div class="leave-dates">'+(r.reason?esc(r.reason):'-')+'</div>'
-      +'</div><div class="leave-status '+r.status+'">'+r.status+'</div></div>';
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
+      +'<div class="leave-status '+( r.cancelled_at?'cancelled':r.status)+'">'+( r.cancelled_at?'cancelled':r.status)+'</div>'
+      +(canCancel&&!r.cancelled_at?'<button class="btn sm danger" onclick="cancelLeave('+r.id+',\''+r.status+'\')">Cancel</button>':'')
+      +'</div></div>';
   }).join(''):'<div class="empty-state"><div class="icon">🌴</div><p>No leave applications yet</p></div>';
 
   document.getElementById('leaveList').innerHTML=statsHtml+listHtml;
@@ -1994,7 +2120,10 @@ async function loadAllLeave(){
       +'<div class="leave-dates">'+(r.reason?esc(r.reason):'-')+'</div>'
       +'</div>'
       +'<div style="display:flex;gap:5px;align-items:center">'
-      +(isPending?'<button class="btn sm success" onclick="reviewLeave('+r.id+',\'approved\')">Approve</button><button class="btn sm danger" onclick="reviewLeave('+r.id+',\'rejected\')">Reject</button>':'<span class="leave-status '+r.status+'">'+r.status+'</span>')
+      +(isPending
+        ?'<button class="btn sm success" onclick="reviewLeave('+r.id+',\'approved\')">Approve</button><button class="btn sm danger" onclick="reviewLeave('+r.id+',\'rejected\')">Reject</button>'
+        :r.status==='approved'&&!r.cancelled_at?'<span class="leave-status approved">approved</span><button class="btn sm danger" style="margin-left:4px" onclick="adminCancelLeave('+r.id+')">Revoke</button>'
+        :'<span class="leave-status '+(r.cancelled_at?'cancelled':r.status)+'">'+( r.cancelled_at?'cancelled':r.status)+'</span>')
       +'</div></div>';
   }).join('');
 }
@@ -2512,18 +2641,422 @@ function loadProfilePage(){
     }
   });
 }
+function autoFillFromIC(val){
+  var digits=val.replace(/-/g,'');
+  if(digits.length>=6){
+    var y=digits.slice(0,2);var m=digits.slice(2,4);var d=digits.slice(4,6);
+    var year=parseInt(y);year=year>parseInt(new Date().getFullYear().toString().slice(2))?1900+year:2000+year;
+    var dob=year+'-'+m+'-'+d;
+    var dobEl=document.getElementById('pf_dob');if(dobEl&&!isNaN(new Date(dob)))dobEl.value=dob;
+    if(digits.length===12){
+      var genderDigit=parseInt(digits[11]);
+      var gEl=document.getElementById('pf_gender');
+      if(gEl)gEl.value=genderDigit%2===1?'male':'female';
+    }
+    updateAgeDisplay(year,parseInt(m)-1,parseInt(d));
+  }
+}
+function updateAgeDisplay(year,month,day){
+  var now=new Date();var age=now.getFullYear()-year;
+  if(now.getMonth()<month||(now.getMonth()===month&&now.getDate()<day))age--;
+  var el=document.getElementById('pf_age_display');
+  if(el&&age>0&&age<120)el.textContent='Age: '+age+' years old';
+}
+
 async function saveProfile(){
-  var fields={display_name:document.getElementById('pf_display_name').value.trim(),position:document.getElementById('pf_position').value.trim(),phone:document.getElementById('pf_phone').value.trim(),email:document.getElementById('pf_email').value.trim()};
+  var ic=document.getElementById('pf_ic').value.trim();
+  if(ic&&ic.replace(/-/g,'').length!==12){toast('IC must be 12 digits','error');return;}
+  var fields={
+    display_name:document.getElementById('pf_display_name').value.trim(),
+    position:document.getElementById('pf_position').value.trim(),
+    phone:document.getElementById('pf_phone').value.trim(),
+    email:document.getElementById('pf_email').value.trim(),
+    ic_number:ic||null,
+    date_of_birth:document.getElementById('pf_dob').value||null,
+    gender:document.getElementById('pf_gender').value||null,
+    ethnicity:document.getElementById('pf_ethnicity').value||null,
+    worker_type:document.getElementById('pf_worker_type').value||'local'
+  };
   await sbPatch('users',{username:currentUser.username},fields);
   Object.assign(currentUser,fields);
   document.getElementById('tbUser').textContent=fields.display_name||currentUser.username;
-  document.getElementById('profileMsg').textContent='✓ Profile saved';
   document.getElementById('profileAvatar').textContent=(fields.display_name||currentUser.username).charAt(0).toUpperCase();
+  document.getElementById('profileMsg').textContent='✓ Profile saved';
   setTimeout(function(){document.getElementById('profileMsg').textContent='';},2000);
   toast('Profile saved','success');
 }
 
-/* ══ HALF DAY LEAVE ══ */
+async function loadProfilePage(){
+  if(!currentUser)return;
+  var rows=await sbGet('users','username=eq.'+encodeURIComponent(currentUser.username)+'&select=*');
+  var u=rows.length?rows[0]:currentUser;
+  document.getElementById('pf_username').value=u.username||'';
+  document.getElementById('pf_display_name').value=u.display_name||'';
+  document.getElementById('pf_position').value=u.position||'';
+  document.getElementById('pf_phone').value=u.phone||'';
+  document.getElementById('pf_email').value=u.email||'';
+  document.getElementById('pf_ic').value=u.ic_number||'';
+  document.getElementById('pf_dob').value=u.date_of_birth||'';
+  document.getElementById('pf_gender').value=u.gender||'';
+  document.getElementById('pf_ethnicity').value=u.ethnicity||'';
+  document.getElementById('pf_worker_type').value=u.worker_type||'local';
+  var posEl=document.getElementById('pf_position');
+  if(currentUser.role!=='admin'){posEl.readOnly=true;posEl.style.opacity='0.5';}
+  else{posEl.readOnly=false;posEl.style.opacity='';}
+  var n=u.display_name||u.username||'?';
+  document.getElementById('profileAvatar').textContent=n.charAt(0).toUpperCase();
+  document.getElementById('profileName').textContent=n;
+  document.getElementById('profileRole').textContent=(u.role||'staff')+(u.department?' · '+u.department:'');
+  var jEl=document.getElementById('pf_joined_display');
+  if(jEl)jEl.textContent=u.joined_date?'📅 Joined: '+fmtDate(u.joined_date)+(u.resigned_date?' · Resigned: '+fmtDate(u.resigned_date):''):'';
+  if(u.ic_number)autoFillFromIC(u.ic_number);
+  else if(u.date_of_birth){
+    var d=new Date(u.date_of_birth);
+    updateAgeDisplay(d.getFullYear(),d.getMonth(),d.getDate());
+  }
+}
+
+/* ══ ATTENDANCE TABS ══ */
+function switchAttTab(tab){
+  ['day','pending','report'].forEach(function(t){
+    var d=document.getElementById('attDayTab'.replace('day',t==='day'?'Day':t==='pending'?'Pending':'Report'));
+    var b=document.getElementById('attTab'+( t==='day'?'Day':t==='pending'?'Pending':'Report'));
+    var show=t===tab;
+    if(d)d.style.display=show?'':'none';
+    if(b){b.classList.toggle('primary',show);}
+  });
+  if(tab==='day'&&!document.getElementById('attDate').value)setAttToday();
+  if(tab==='pending')loadPendingCheckins();
+  if(tab==='report')populateReportUserList();
+}
+
+async function loadPendingCheckins(){
+  var rows=await sbGet('checkin_approvals','status=eq.pending&order=created_at.desc');
+  if(!rows.length){document.getElementById('attPendingList').innerHTML='<div class="empty-state"><p>No pending check-ins</p></div>';return;}
+  document.getElementById('attPendingList').innerHTML=rows.map(function(r){
+    var usr=allUsers.find(function(u){return u.username===r.username;})||{};
+    var fieldLabel={check_in:'S1 In',check_out:'S1 Out',check_in_2:'S2 In',check_out_2:'S2 Out',check_in_3:'S3 In',check_out_3:'S3 Out'}[r.session_field]||r.session_field;
+    return '<div class="card" style="margin-bottom:.6rem;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">'
+      +(r.photo?'<img src="'+r.photo+'" onclick="viewFullImg(this.src)" style="width:56px;height:56px;object-fit:cover;border-radius:6px;cursor:pointer;flex-shrink:0">':'<div style="width:56px;height:56px;background:#1e2d45;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#4a6fa5;font-size:10px">No photo</div>')
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+(esc(usr.display_name)||esc(r.username))+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5">'+fmtDate(r.date)+' · <span style="color:#60a5fa">'+fieldLabel+'</span> · '+fmtTime(r.recorded_at)+'</div>'
+      +(r.gps_lat?'<div style="font-size:10px;color:#2a4a6a">📍 '+r.gps_lat.toFixed(4)+', '+r.gps_lng.toFixed(4)+'</div>':'')
+      +'</div>'
+      +'<div style="display:flex;gap:5px">'
+      +'<button class="btn sm success" onclick="approveCheckinItem('+r.id+')">✓</button>'
+      +'<button class="btn sm danger" onclick="rejectCheckinItem('+r.id+')">✕</button>'
+      +'</div></div>';
+  }).join('');
+}
+
+async function approveCheckinItem(id){
+  var rows=await sbGet('checkin_approvals','id=eq.'+id+'&select=*');
+  if(!rows.length)return;
+  var r=rows[0];
+  await sbPatch('checkin_approvals',{id:id},{status:'approved',reviewed_by:currentUser.username,reviewed_at:new Date().toISOString()});
+  // Update attendance record
+  var data={self_checkin:true,status:'present'};
+  data[r.session_field]=r.recorded_at;
+  if(r.gps_lat){var isIn=r.session_field.indexOf('out')<0;data[isIn?'checkin_lat':'checkout_lat']=r.gps_lat;data[isIn?'checkin_lng':'checkout_lng']=r.gps_lng;}
+  if(r.photo){var pf={check_in:'checkin_photo',check_in_2:'checkin_photo_2',check_in_3:'checkin_photo_3'}[r.session_field];if(pf)data[pf]=r.photo;}
+  var existing=await sbGet('attendance','username=eq.'+encodeURIComponent(r.username)+'&date=eq.'+r.date+'&select=id');
+  if(existing.length){await sbPatch('attendance',{username:r.username,date:r.date},data);}
+  else{data.username=r.username;data.date=r.date;await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});}
+  toast('Approved ✓','success');loadPendingCheckins();
+}
+async function rejectCheckinItem(id){
+  var reason=prompt('Reason for rejection (optional):');
+  await sbPatch('checkin_approvals',{id:id},{status:'rejected',reviewed_by:currentUser.username,reviewed_at:new Date().toISOString(),notes:reason||null});
+  toast('Rejected','success');loadPendingCheckins();
+}
+
+function populateReportUserList(){
+  var sel=document.getElementById('reportUser');
+  sel.innerHTML='';
+  allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';}).forEach(function(u){
+    var o=document.createElement('option');o.value=u.username;o.textContent=u.display_name||u.username;sel.appendChild(o);
+  });
+  var m=new Date();
+  document.getElementById('reportMonth').value=m.getFullYear()+'-'+String(m.getMonth()+1).padStart(2,'0');
+}
+
+async function loadStaffReport(){
+  var username=document.getElementById('reportUser').value;
+  var month=document.getElementById('reportMonth').value;
+  if(!username||!month){toast('Select staff and month','error');return;}
+  var from=month+'-01';
+  var lastDay=new Date(parseInt(month.split('-')[0]),parseInt(month.split('-')[1]),0).getDate();
+  var to=month+'-'+String(lastDay).padStart(2,'0');
+  var u=allUsers.find(function(x){return x.username===username;})||{};
+  // Get attendance records
+  var atts=await sbGet('attendance','username=eq.'+encodeURIComponent(username)+'&date=gte.'+from+'&date=lte.'+to+'&order=date.asc');
+  // Get leave records
+  var leaves=await sbGet('leave_requests','username=eq.'+encodeURIComponent(username)+'&status=eq.approved&start_date=lte.'+to+'&end_date=gte.'+from);
+  // Get attendance rule for this user
+  var rule=await getEffectiveRule(username,u.department);
+  var leaveSet=new Set();
+  leaves.forEach(function(l){
+    var d=new Date(l.start_date);var end=new Date(l.end_date);
+    while(d<=end){leaveSet.add(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}
+  });
+  // Calculate stats
+  var present=0,late=0,earlyOut=0,absent=0,onLeave=0,totalWorkMin=0;
+  var rows=[];
+  var d=new Date(from);
+  var isMuslimMale=u.gender==='male'&&u.ethnicity==='malay';
+  while(d<=new Date(to)){
+    var ds=d.toISOString().slice(0,10);
+    var dow=d.getDay();// 0=Sun
+    var isSunday=dow===0;
+    var rec=atts.find(function(a){return a.date===ds;})||null;
+    var isLeave=leaveSet.has(ds);
+    var status=isSunday?'rest':isLeave?'leave':rec?(rec.status||'absent'):'absent';
+    var late1=false,earlyOut1=false,lateBack=false,earlyEnd=false;
+    var workMin=0;
+    if(rec&&status==='present'&&rule){
+      // Check late S1 in
+      if(rec.check_in){var ci=new Date(rec.check_in);var ciT=ci.getHours()*60+ci.getMinutes();var lateT=timeStrToMin(rule.check_in_1_late_after);if(ciT>lateT)late1=true;}
+      // Check early S1 out
+      if(rec.check_out){var co=new Date(rec.check_out);var coT=co.getHours()*60+co.getMinutes();var earlyT=timeStrToMin(rule.check_out_1_early_before);if(coT<earlyT)earlyOut1=true;}
+      // Check late S2 in (with Friday Muslim extension)
+      if(rec.check_in_2){var ci2=new Date(rec.check_in_2);var ci2T=ci2.getHours()*60+ci2.getMinutes();var late2T=timeStrToMin(rule.check_in_2_late_after)+(isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0);if(ci2T>late2T)lateBack=true;}
+      // Check early S2 out
+      if(rec.check_out_2){var co2=new Date(rec.check_out_2);var co2T=co2.getHours()*60+co2.getMinutes();var earlyEnd2T=timeStrToMin(rule.check_out_2_early_before);if(co2T<earlyEnd2T)earlyEnd=true;}
+      // Total work minutes (S1 + S2 + S3)
+      if(rec.check_in&&rec.check_out)workMin+=Math.max(0,(new Date(rec.check_out)-new Date(rec.check_in))/60000);
+      if(rec.check_in_2&&rec.check_out_2)workMin+=Math.max(0,(new Date(rec.check_out_2)-new Date(rec.check_in_2))/60000);
+      if(rec.check_in_3&&rec.check_out_3)workMin+=Math.max(0,(new Date(rec.check_out_3)-new Date(rec.check_in_3))/60000);
+    }
+    if(status==='present'){present++;totalWorkMin+=workMin;}
+    if(status==='leave'){onLeave++;}
+    if(status==='absent'&&!isSunday){absent++;}
+    if(late1||lateBack)late++;
+    if(earlyOut1||earlyEnd)earlyOut++;
+    rows.push({date:ds,dow:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow],status:status,rec:rec,late:late1||lateBack,earlyOut:earlyOut1||earlyEnd,workMin:workMin});
+    d.setDate(d.getDate()+1);
+  }
+  var avgMin=present>0?Math.round(totalWorkMin/present):0;
+  var html='<div class="card" style="margin-bottom:1rem">'
+    +'<div style="font-size:13px;font-weight:600;color:#f0f6fc;margin-bottom:10px">'+esc(u.display_name||username)+' — '+month+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'
+    +'<div class="stat-card green"><div class="label">Present</div><div class="value">'+present+'</div></div>'
+    +'<div class="stat-card yellow"><div class="label">Late/Slow</div><div class="value">'+late+'</div></div>'
+    +'<div class="stat-card '+(earlyOut>0?'red':'blue')+'"><div class="label">Early Out</div><div class="value">'+earlyOut+'</div></div>'
+    +'<div class="stat-card blue"><div class="label">On Leave</div><div class="value">'+onLeave+'</div></div>'
+    +'<div class="stat-card '+(absent>3?'red':'blue')+'"><div class="label">Absent</div><div class="value">'+absent+'</div></div>'
+    +'<div class="stat-card blue"><div class="label">Avg Daily</div><div class="value">'+(avgMin?Math.floor(avgMin/60)+'h'+Math.round(avgMin%60)+'m':'—')+'</div></div>'
+    +'</div></div>'
+    +'<div class="card" style="overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">'
+    +'<thead><tr style="color:#4a6fa5"><th style="text-align:left;padding:4px 6px">Date</th><th>Status</th><th>S1 In</th><th>S1 Out</th><th>S2 In</th><th>S2 Out</th><th>S3</th><th>Hours</th><th>Flags</th></tr></thead>'
+    +'<tbody>'+rows.filter(function(r){return r.dow!=='Sun';}).map(function(r){
+      var rec=r.rec||{};var tc=r.status==='present'?'#34d399':r.status==='leave'?'#fbbf24':r.status==='rest'?'#4a6fa5':'#f87171';
+      var flags=(r.late?'<span style="color:#f59e0b;font-size:10px">LATE </span>':'')+(r.earlyOut?'<span style="color:#ef4444;font-size:10px">EARLY </span>':'');
+      return '<tr style="border-bottom:1px solid #1e2d45">'
+        +'<td style="padding:4px 6px">'+r.date+' <span style="color:#4a6fa5">'+r.dow+'</span></td>'
+        +'<td style="text-align:center;color:'+tc+'">'+r.status+'</td>'
+        +'<td style="text-align:center">'+(rec.check_in?fmtTime(rec.check_in):'—')+'</td>'
+        +'<td style="text-align:center">'+(rec.check_out?fmtTime(rec.check_out):'—')+'</td>'
+        +'<td style="text-align:center">'+(rec.check_in_2?fmtTime(rec.check_in_2):'—')+'</td>'
+        +'<td style="text-align:center">'+(rec.check_out_2?fmtTime(rec.check_out_2):'—')+'</td>'
+        +'<td style="text-align:center">'+(rec.check_in_3?fmtTime(rec.check_in_3)+'→'+(rec.check_out_3?fmtTime(rec.check_out_3):'?'):'—')+'</td>'
+        +'<td style="text-align:center">'+(r.workMin?Math.floor(r.workMin/60)+'h'+Math.round(r.workMin%60)+'m':'—')+'</td>'
+        +'<td>'+flags+'</td>'
+        +'</tr>';
+    }).join('')+'</tbody></table></div>';
+  document.getElementById('staffReportContent').innerHTML=html;
+}
+
+function timeStrToMin(ts){if(!ts)return 0;var p=ts.split(':');return parseInt(p[0])*60+parseInt(p[1]);}
+
+async function getEffectiveRule(username,dept){
+  // Priority: user-specific > department > global
+  var rules=await sbGet('attendance_rules','is_active=eq.true&order=created_at.desc');
+  // Check user-specific
+  var userRule=rules.find(function(r){return r.scope==='user'&&r.scope_target===username;});
+  if(userRule)return userRule;
+  // Check dept
+  if(dept){var deptRule=rules.find(function(r){return r.scope==='department'&&r.scope_target===dept;});if(deptRule)return deptRule;}
+  // Global
+  return rules.find(function(r){return r.scope==='global';})||null;
+}
+
+/* ══ ATTENDANCE RULES ══ */
+async function loadAttRules(){
+  var rules=await sbGet('attendance_rules','order=scope.asc,created_at.asc');
+  if(!rules.length){document.getElementById('attRulesContent').innerHTML='<div class="empty-state"><p>No rules yet. Add a global rule to get started.</p></div>';return;}
+  document.getElementById('attRulesContent').innerHTML=rules.map(function(r){
+    return '<div class="card" style="margin-bottom:.6rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.name)+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5">'+( r.scope==='global'?'🌐 Global':r.scope==='department'?'🏬 Dept: '+esc(r.scope_target):'👤 User: '+esc(r.scope_target))+'</div>'
+      +'<div style="font-size:10px;color:#2a4a6a;margin-top:2px">'
+      +'Late in: '+( r.check_in_1_late_after||'—')+' · Early out: '+(r.check_out_1_early_before||'—')+' · Late back: '+(r.check_in_2_late_after||'—')+' · End: '+(r.check_out_2_early_before||'—')+' · Fri+'+( r.break_overtime_friday_min||0)+'min'
+      +'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:5px">'
+      +'<button class="btn sm" onclick="editAttRule('+r.id+')">Edit</button>'
+      +'<button class="btn sm danger" onclick="deleteAttRule('+r.id+')">Del</button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+async function openNewRuleModal(){
+  await loadAllDepts();await loadAllUsersCache();
+  document.getElementById('ar_id').value='';
+  document.getElementById('ar_name').value='';
+  document.getElementById('ar_scope').value='global';
+  document.getElementById('ar_in1_early').value='08:00';document.getElementById('ar_in1_late').value='09:00';
+  document.getElementById('ar_out1_early').value='13:00';document.getElementById('ar_in2_late').value='14:00';
+  document.getElementById('ar_friday_extra').value='30';document.getElementById('ar_out2_early').value='17:30';
+  populateRuleScopeTarget();toggleRuleScope();
+  openModal('attRuleModal');
+}
+function toggleRuleScope(){
+  var scope=document.getElementById('ar_scope').value;
+  var wrap=document.getElementById('ar_scope_target_wrap');
+  wrap.style.display=scope==='global'?'none':'';
+  document.getElementById('ar_scope_label').textContent=scope==='department'?'Department':'Employee';
+  populateRuleScopeTarget();
+}
+function populateRuleScopeTarget(){
+  var scope=document.getElementById('ar_scope').value;
+  var sel=document.getElementById('ar_scope_target');sel.innerHTML='';
+  if(scope==='department'){allDepts.forEach(function(d){var o=document.createElement('option');o.value=d.name;o.textContent=d.name;sel.appendChild(o);});}
+  else if(scope==='user'){allUsers.forEach(function(u){var o=document.createElement('option');o.value=u.username;o.textContent=u.display_name||u.username;sel.appendChild(o);});}
+}
+async function editAttRule(id){
+  var rows=await sbGet('attendance_rules','id=eq.'+id+'&select=*');if(!rows.length)return;
+  var r=rows[0];
+  await loadAllDepts();await loadAllUsersCache();
+  document.getElementById('ar_id').value=id;document.getElementById('ar_name').value=r.name||'';
+  document.getElementById('ar_scope').value=r.scope||'global';populateRuleScopeTarget();toggleRuleScope();
+  document.getElementById('ar_scope_target').value=r.scope_target||'';
+  document.getElementById('ar_in1_early').value=r.check_in_1_early_before||'08:00';
+  document.getElementById('ar_in1_late').value=r.check_in_1_late_after||'09:00';
+  document.getElementById('ar_out1_early').value=r.check_out_1_early_before||'13:00';
+  document.getElementById('ar_in2_late').value=r.check_in_2_late_after||'14:00';
+  document.getElementById('ar_friday_extra').value=r.break_overtime_friday_min||30;
+  document.getElementById('ar_out2_early').value=r.check_out_2_early_before||'17:30';
+  openModal('attRuleModal');
+}
+async function saveAttRule(){
+  var id=document.getElementById('ar_id').value;
+  var scope=document.getElementById('ar_scope').value;
+  var data={
+    name:document.getElementById('ar_name').value.trim(),
+    scope:scope,
+    scope_target:scope!=='global'?document.getElementById('ar_scope_target').value:null,
+    check_in_1_early_before:document.getElementById('ar_in1_early').value,
+    check_in_1_late_after:document.getElementById('ar_in1_late').value,
+    check_out_1_early_before:document.getElementById('ar_out1_early').value,
+    check_in_2_late_after:document.getElementById('ar_in2_late').value,
+    break_overtime_friday_min:parseInt(document.getElementById('ar_friday_extra').value)||30,
+    check_out_2_early_before:document.getElementById('ar_out2_early').value,
+    is_active:true
+  };
+  if(id){await sbPatch('attendance_rules',{id:id},data);}
+  else{await sbPost('attendance_rules',data);}
+  closeModal('attRuleModal');toast('Rule saved','success');loadAttRules();
+}
+async function deleteAttRule(id){
+  if(!confirm('Delete this rule?'))return;
+  await fetch(SB_URL+'/rest/v1/attendance_rules?id=eq.'+id,{method:'DELETE',headers:sbH()});
+  loadAttRules();toast('Rule deleted','success');
+}
+
+/* ══ SALES FILTER ══ */
+var salesFilter='all';
+function filterSales(f){
+  salesFilter=f;
+  document.querySelectorAll('[id^="sf-"]').forEach(function(b){b.classList.remove('primary');});
+  var btn=document.getElementById('sf-'+f);if(btn)btn.classList.add('primary');
+  loadMySales();
+}
+
+/* ══ LEAVE CANCEL ══ */
+async function cancelLeave(id,status){
+  if(!confirm('Cancel this leave application?'))return;
+  var data={status:'cancelled',cancelled_by:currentUser.username,cancelled_at:new Date().toISOString()};
+  // If already approved, also update attendance
+  if(status==='approved'){var rows=await sbGet('leave_requests','id=eq.'+id+'&select=start_date,end_date,username');if(rows.length){var r=rows[0];// Could update attendance status here if needed
+  }}
+  await sbPatch('leave_requests',{id:id},data);
+  toast('Leave cancelled','success');loadMyLeave();
+}
+async function adminCancelLeave(id){
+  if(!confirm('Revoke this leave approval?'))return;
+  await sbPatch('leave_requests',{id:id},{status:'cancelled',cancelled_by:currentUser.username,cancelled_at:new Date().toISOString()});
+  toast('Leave revoked','success');loadAllLeave();
+}
+
+/* ══ CHECKIN PHOTO CONFIRM ══ */
+var pendingCheckinData=null;
+async function doCheckIn(){
+  var today=new Date().toISOString().slice(0,10);
+  var photoFile=document.getElementById('checkinPhoto').files[0];
+  var btn=document.getElementById('checkinBtn');
+  btn.disabled=true;btn.textContent='⏳ Processing...';
+  try{
+    // Get GPS
+    if(!checkinGPSCoords){
+      var gpsEl=document.getElementById('checkinGPS');
+      if(gpsEl)gpsEl.textContent='📍 Getting GPS...';
+      await new Promise(function(resolve,reject){
+        if(!navigator.geolocation){resolve();return;}// GPS optional if photo provided
+        navigator.geolocation.getCurrentPosition(function(pos){
+          checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
+          if(gpsEl)gpsEl.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
+          resolve();
+        },function(){resolve();},{enableHighAccuracy:true,timeout:8000,maximumAge:0});
+      });
+    }
+    if(!photoFile&&!checkinGPSCoords){toast('GPS or photo required','error');await loadCheckin();return;}
+    var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
+    var r=rec.length?rec[0]:{};
+    var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
+    if(!field){toast('All sessions recorded today','success');await loadCheckin();return;}
+    // Build pending data
+    var data={field:field,timestamp:new Date().toISOString(),gps:checkinGPSCoords,photo:null};
+    if(photoFile){data.photo=await compressPhoto(photoFile);}
+    pendingCheckinData=data;
+    // Show confirmation modal
+    var isIn=field.indexOf('out')<0;
+    var sn=(['check_in','check_out'].indexOf(field)>=0?1:['check_in_2','check_out_2'].indexOf(field)>=0?2:3);
+    var tp=isIn?'Check In':'Check Out';
+    document.getElementById('checkinConfirmInfo').innerHTML=
+      '<strong style="color:#f0f6fc">'+tp+' Session '+sn+'</strong><br>'
+      +(checkinGPSCoords?'📍 '+checkinGPSCoords.lat.toFixed(4)+', '+checkinGPSCoords.lng.toFixed(4)+'<br>':'')
+      +'<span style="color:#f59e0b">Time: '+new Date().toLocaleTimeString()+'</span>';
+    if(data.photo){document.getElementById('checkinConfirmImg').src=data.photo;document.getElementById('checkinConfirmImg').style.display='';}
+    else{document.getElementById('checkinConfirmImg').style.display='none';}
+    openModal('checkinConfirmModal');
+    await loadCheckin();
+  }catch(err){
+    var msg=err&&err.code===1?'❌ Location permission denied':err&&err.code===3?'❌ GPS timed out — attach a photo':'❌ '+(err&&err.message||'Error');
+    toast(msg,'error');await loadCheckin();
+  }
+}
+async function confirmAndSubmitCheckin(){
+  if(!pendingCheckinData){closeModal('checkinConfirmModal');return;}
+  var d=pendingCheckinData;pendingCheckinData=null;
+  // Save to checkin_approvals table (admin reviews)
+  var approvalData={
+    username:currentUser.username,
+    date:new Date().toISOString().slice(0,10),
+    session_field:d.field,
+    recorded_at:d.timestamp,
+    status:'pending',
+    photo:d.photo||null,
+    gps_lat:d.gps?d.gps.lat:null,
+    gps_lng:d.gps?d.gps.lng:null
+  };
+  await sbPost('checkin_approvals',approvalData);
+  document.getElementById('checkinPhoto').value='';
+  closeModal('checkinConfirmModal');
+  toast('Submitted — awaiting admin approval ✓','success');
+  await loadCheckin();
+}
 function toggleHalfDay(val){
   var endWrap=document.getElementById('leave_end_wrap');
   var startLabel=document.querySelector('label[for="leave_start"]')||document.querySelector('#leave_start').previousElementSibling;
@@ -2991,9 +3524,9 @@ async function loadMySales(){
   // Load all sales visible to current user
   var rows;
   if(currentUser.role==='admin'){
-    rows=await sbGet('sales_records','order=created_at.desc');
+    rows=await sbGet('sales_records',(salesFilter!=='all'?'status=eq.'+salesFilter+'&':'')+'order=created_at.desc');
   } else {
-    rows=await sbGet('sales_records','salesperson=eq.'+encodeURIComponent(currentUser.username)+'&order=created_at.desc');
+    rows=await sbGet('sales_records','salesperson=eq.'+encodeURIComponent(currentUser.username)+(salesFilter!=='all'?'&status=eq.'+salesFilter:'')+'&order=created_at.desc');
   }
   if(!rows.length){document.getElementById('mySalesList').innerHTML='<div class="empty-state"><div class="icon">🏍️</div><p>No sales records yet</p></div>';return;}
   var statusInfo={
@@ -3038,6 +3571,7 @@ async function loadMySales(){
       +'<div style="font-size:11px;color:#6b8ab0;margin-top:2px">📞 '+phoneDisplay+'</div>'
       +'<div style="font-size:11px;color:#6b8ab0">🪪 '+icDisplay+'</div>'
       +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+esc(r.record_no)+' · '+fmtDate(r.sale_date)+'</div>'
+      +(r.task_id?'<button class="btn sm" onclick="openTaskDetail('+r.task_id+')" style="font-size:10px">View Task</button>':'')
       +participantHtml
       +'</div>'
       +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'
