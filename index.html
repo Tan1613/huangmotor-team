@@ -1259,12 +1259,13 @@ body{position:relative}
             <button class="btn" onclick="openDataRequests()">🔍 Requests</button>
           </div>
         </div>
-        <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
           <button class="btn sm primary" id="sf-all" onclick="filterSales('all')">All</button>
           <button class="btn sm" id="sf-pending" onclick="filterSales('pending')">Pending</button>
           <button class="btn sm" id="sf-confirmed" onclick="filterSales('confirmed')">Confirmed</button>
           <button class="btn sm" id="sf-delivered" onclick="filterSales('delivered')">Delivered</button>
           <button class="btn sm" id="sf-cancelled" onclick="filterSales('cancelled')">Cancelled</button>
+          <button class="btn sm" id="sf-trash" onclick="filterSales('trash')" style="margin-left:auto">🗑️ Trash</button>
         </div>
         <div id="mySalesList"></div>
       </div>
@@ -1281,8 +1282,17 @@ body{position:relative}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem" id="checkinSessions"></div>
           <div id="checkinGPS" style="font-size:11px;color:#4a6fa5;text-align:center;margin-bottom:8px">📍 Getting location...</div>
           <div id="checkinPhotoWrap" style="margin-bottom:8px">
-            <label style="font-size:11px;color:#4a6fa5;display:block;margin-bottom:4px">📷 Photo (optional)</label>
-            <input type="file" id="checkinPhoto" accept="image/*" capture="user" style="font-size:11px;color:#c9d1d9;width:100%">
+            <label style="font-size:11px;color:#4a6fa5;display:block;margin-bottom:4px">📷 Photo <span style="color:#2a4a6a">(camera only — album not allowed)</span></label>
+            <input type="file" id="checkinPhoto" accept="image/*" capture="environment" style="display:none" onchange="onCheckinPhotoSelected(this)">
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn" onclick="document.getElementById('checkinPhoto').click()" style="font-size:12px">📷 Take Photo</button>
+              <span id="checkinPhotoName" style="font-size:11px;color:#4a6fa5"></span>
+              <button id="checkinPhotoRemove" onclick="clearCheckinPhoto()" style="display:none;background:none;border:none;color:#f87171;cursor:pointer;font-size:14px">✕</button>
+            </div>
+            <div id="checkinPhotoPreviewWrap" style="margin-top:6px;display:none">
+              <canvas id="checkinWatermarkCanvas" style="max-width:100%;border-radius:6px;border:1px solid #1e2d45;display:block"></canvas>
+              <button class="btn sm" onclick="saveWatermarkedPhoto()" style="margin-top:5px;font-size:11px">💾 Save watermarked photo</button>
+            </div>
           </div>
           <button class="btn primary" style="width:100%;padding:12px;font-size:14px" id="checkinBtn" onclick="doCheckIn()">Check In</button>
           <div style="font-size:10px;color:#2a4a6a;text-align:center;margin-top:6px">Your location and time will be recorded</div>
@@ -2338,7 +2348,9 @@ async function approveCheckin(username,date){
   toast(username+' check-in approved','success');loadAttendance();
 }
 async function updateAttStatus(username,date,status){
+  var before=await sbGet('attendance','username=eq.'+encodeURIComponent(username)+'&date=eq.'+date+'&select=status');
   await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify({username:username,date:date,status:status})});
+  await sbPost('change_log',{username:currentUser.username,action:'edit_attendance_status',table_name:'attendance',record_id:username+':'+date,before_data:before.length?{status:before[0].status}:null,after_data:{status:status}});
   toast(esc(username)+' → '+status,'success');
   loadAttendance();
 }
@@ -2349,6 +2361,7 @@ async function updateAttSession(username,date,inOut,session,value){
   var data={username:username,date:date,status:'present'};
   data[field]=value?date+'T'+value+':00':null;
   await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(data)});
+  await sbPost('change_log',{username:currentUser.username,action:'edit_attendance_time',table_name:'attendance',record_id:username+':'+date,after_data:{field:field,value:value,edited_by:currentUser.username}});
 }
 
 /* ══ HOLIDAYS ══ */
@@ -2384,10 +2397,8 @@ async function loadMyAttendance(){
   var from=year+'-'+month.toString().padStart(2,'0')+'-01';
   var lastDay=new Date(year,month,0).getDate();
   var to=year+'-'+month.toString().padStart(2,'0')+'-'+lastDay.toString().padStart(2,'0');
-  // Fetch attendance
   var atts=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=gte.'+from+'&date=lte.'+to+'&order=date.asc');
   var attMap={};atts.forEach(function(a){attMap[a.date]=a;});
-  // Fetch approved leaves this year for balance
   var yearLeaves=await sbGet('leave_requests','username=eq.'+encodeURIComponent(currentUser.username)+'&status=eq.approved&start_date=gte.'+year+'-01-01&select=leave_type,start_date,end_date');
   var usedAL=0,usedMC=0,usedUnpaid=0;
   yearLeaves.forEach(function(l){
@@ -2396,50 +2407,58 @@ async function loadMyAttendance(){
     else if(l.leave_type==='medical')usedMC+=days;
     else if(l.leave_type==='unpaid')usedUnpaid+=days;
   });
-  var al=leaveConfigCache.annual_leave_days||14;
-  // Count this month
-  var present=0,absent=0,onLeave=0,holidays=0;
   var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date');
   var holDates=new Set(hols.map(function(h){return h.date;}));
-  // Count working days (Mon-Fri, excluding holidays)
-  var workingDays=0;
-  for(var d=1;d<=lastDay;d++){
-    var dt=new Date(year,month-1,d);var key=from.slice(0,8)+d.toString().padStart(2,'0');
-    var dow=dt.getDay();
-    if(dow===0||dow===6)continue;
-    if(holDates.has(key)){holidays++;continue;}
-    workingDays++;
-    var rec=attMap[key];
-    if(rec){
-      if(rec.status==='present')present++;
-      else if(rec.status==='leave')onLeave++;
-      else absent++;
-    } else absent++;
-  }
-  var rate=workingDays>0?Math.round(present/workingDays*100):0;
-  document.getElementById('myAttStats').innerHTML=
-    '<div class="stat-card blue"><div class="label">Attendance Rate</div><div class="value">'+rate+'%</div><div class="sub">'+present+' / '+workingDays+' days</div></div>'
-    +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(al-usedAL)+'</div><div class="sub">Used: '+usedAL+' / '+al+' days</div></div>'
-    +'<div class="stat-card yellow"><div class="label">MC Used</div><div class="value">'+usedMC+'</div><div class="sub">This year</div></div>'
-    +'<div class="stat-card red"><div class="label">Absent / Unpaid</div><div class="value">'+absent+'</div><div class="sub">Unpaid leave: '+usedUnpaid+' days</div></div>';
-  // Daily log
-  var logHtml='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="font-size:11px;color:#4a6fa5"><th style="text-align:left;padding:6px 0;border-bottom:1px solid #1e2d45">Date</th><th>Status</th><th>S1 In</th><th>S1 Out</th><th>S2 In</th><th>S2 Out</th></tr></thead><tbody>';
+  var uInfo=allUsers.find(function(u){return u.username===currentUser.username;})||currentUser;
+  var rule=await getEffectiveRule(currentUser.username,uInfo.department||currentUser.department);
+  var isMuslimMale=currentUser.gender==='male'&&currentUser.ethnicity==='malay';
+  var present=0,absent=0,onLeave=0,lateCount=0,earlyOutCount=0,workingDays=0;
+  var rows=[];
   for(var d=1;d<=lastDay;d++){
     var key=year+'-'+month.toString().padStart(2,'0')+'-'+d.toString().padStart(2,'0');
     var dt=new Date(year,month-1,d);var dow=dt.getDay();
-    if(dow===0||dow===6)continue;
-    var rec=attMap[key]||{};var isHol=holDates.has(key);
+    if(dow===0)continue;// Sunday rest
+    var isHol=holDates.has(key);
+    var rec=attMap[key]||{};
     var st=isHol?'holiday':(rec.status||'absent');
-    var stColor={present:'#34d399',absent:'#f87171',leave:'#fbbf24',holiday:'#a78bfa'}[st]||'#9ca3af';
-    logHtml+='<tr style="border-bottom:1px solid #0d1626"><td style="padding:5px 0;color:#e0e6f0">'+fmtDate(key)+'</td>'
-      +'<td style="text-align:center"><span style="font-size:10px;color:'+stColor+'">'+st+'</span></td>'
-      +'<td style="text-align:center;color:#6b8ab0;font-size:11px">'+(rec.check_in?fmtTime(rec.check_in):'—')+'</td>'
-      +'<td style="text-align:center;color:#6b8ab0;font-size:11px">'+(rec.check_out?fmtTime(rec.check_out):'—')+'</td>'
-      +'<td style="text-align:center;color:#6b8ab0;font-size:11px">'+(rec.check_in_2?fmtTime(rec.check_in_2):'—')+'</td>'
-      +'<td style="text-align:center;color:#6b8ab0;font-size:11px">'+(rec.check_out_2?fmtTime(rec.check_out_2):'—')+'</td>'
-      +'</tr>';
+    var late=false,earlyOut=false;
+    if(rec&&st==='present'&&rule){
+      if(rec.check_in){var ciT=new Date(rec.check_in).getHours()*60+new Date(rec.check_in).getMinutes();if(ciT>timeStrToMin(rule.check_in_1_late_after))late=true;}
+      if(rec.check_out){var coT=new Date(rec.check_out).getHours()*60+new Date(rec.check_out).getMinutes();if(coT<timeStrToMin(rule.check_out_1_early_before))earlyOut=true;}
+      if(rec.check_in_2){var ci2T=new Date(rec.check_in_2).getHours()*60+new Date(rec.check_in_2).getMinutes();var fri=isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0;if(ci2T>timeStrToMin(rule.check_in_2_late_after)+fri)late=true;}
+      if(rec.check_out_2){var co2T=new Date(rec.check_out_2).getHours()*60+new Date(rec.check_out_2).getMinutes();if(co2T<timeStrToMin(rule.check_out_2_early_before))earlyOut=true;}
+    }
+    workingDays++;
+    if(st==='present'){present++;if(late)lateCount++;if(earlyOut)earlyOutCount++;}
+    else if(st==='leave')onLeave++;
+    else if(st!=='holiday')absent++;
+    rows.push({key:key,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],st:st,rec:rec,late:late,earlyOut:earlyOut});
   }
-  logHtml+='</tbody></table>';
+  var rate=workingDays>0?Math.round(present/workingDays*100):0;
+  var al=leaveConfigCache.annual_leave_days||14;
+  document.getElementById('myAttStats').innerHTML=
+    '<div class="stat-card blue"><div class="label">Attendance Rate</div><div class="value">'+rate+'%</div><div class="sub">'+present+' / '+workingDays+'</div></div>'
+    +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(al-usedAL)+'</div><div class="sub">Used '+usedAL+' / '+al+'</div></div>'
+    +'<div class="stat-card '+(lateCount>3?'red':'yellow')+'"><div class="label">Late Arrivals</div><div class="value">'+lateCount+'</div><div class="sub">this month</div></div>'
+    +'<div class="stat-card '+(earlyOutCount>3?'red':'yellow')+'"><div class="label">Early Departures</div><div class="value">'+earlyOutCount+'</div><div class="sub">this month</div></div>'
+    +'<div class="stat-card '+(absent>3?'red':'blue')+'"><div class="label">Absent</div><div class="value">'+absent+'</div><div class="sub">Unpaid: '+usedUnpaid+' · MC: '+usedMC+'</div></div>';
+  var logHtml='<div style="overflow-x:auto;margin-top:.8rem"><table style="width:100%;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="color:#4a6fa5;font-size:10px"><th style="text-align:left;padding:5px 3px;border-bottom:1px solid #1e2d45;white-space:nowrap">Date</th>'
+    +'<th>Status</th><th>S1 In</th><th>S1 Out</th><th>S2 In</th><th>S2 Out</th><th>Flags</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    var stC={present:'#34d399',absent:'#f87171',leave:'#fbbf24',holiday:'#a78bfa'}[r.st]||'#6b8ab0';
+    var flags=(r.late?'<span style="color:#f59e0b;font-weight:600;font-size:10px">LATE</span>':'')+' '+(r.earlyOut?'<span style="color:#f87171;font-weight:600;font-size:10px">EARLY</span>':'');
+    logHtml+='<tr style="border-bottom:1px solid #0d1626">'
+      +'<td style="padding:5px 3px;color:#e0e6f0;white-space:nowrap">'+r.key.slice(5)+' <span style="color:#4a6fa5">'+r.dow+'</span></td>'
+      +'<td style="text-align:center"><span style="color:'+stC+';font-size:10px">'+r.st+'</span></td>'
+      +'<td style="text-align:center;color:#6b8ab0">'+(r.rec.check_in?fmtTime(r.rec.check_in):'—')+'</td>'
+      +'<td style="text-align:center;color:#6b8ab0">'+(r.rec.check_out?fmtTime(r.rec.check_out):'—')+'</td>'
+      +'<td style="text-align:center;color:#6b8ab0">'+(r.rec.check_in_2?fmtTime(r.rec.check_in_2):'—')+'</td>'
+      +'<td style="text-align:center;color:#6b8ab0">'+(r.rec.check_out_2?fmtTime(r.rec.check_out_2):'—')+'</td>'
+      +'<td style="white-space:nowrap">'+flags.trim()+'</td>'
+      +'</tr>';
+  });
+  logHtml+='</tbody></table></div>';
   document.getElementById('myAttLog').innerHTML=logHtml;
 }
 
@@ -3147,8 +3166,6 @@ async function deleteAttRule(id){
   loadAttRules();toast('Rule deleted','success');
 }
 
-/* ══ SALES FILTER ══ */
-var salesFilter='all';
 function filterSales(f){
   salesFilter=f;
   document.querySelectorAll('[id^="sf-"]').forEach(function(b){b.classList.remove('primary');});
@@ -3214,7 +3231,9 @@ async function doCheckIn(){
     }
     // Build pending data
     var data={field:field,timestamp:new Date().toISOString(),gps:checkinGPSCoords,photo:null};
-    if(photoFile)data.photo=await compressPhoto(photoFile);
+    // Use watermarked photo if available, otherwise compress raw file
+    if(checkinPhotoDataUrl){data.photo=checkinPhotoDataUrl;}
+    else if(photoFile){data.photo=await compressPhoto(photoFile);}
     pendingCheckinData=data;
     // Show confirmation modal
     var isIn=field.indexOf('out')<0;
@@ -3247,6 +3266,7 @@ async function confirmAndSubmitCheckin(){
   };
   await sbPost('checkin_approvals',approvalData);
   document.getElementById('checkinPhoto').value='';
+  clearCheckinPhoto();
   closeModal('checkinConfirmModal');
   toast('Submitted — awaiting admin approval ✓','success');
   await loadCheckin();
@@ -3716,11 +3736,19 @@ async function saveSale(){
 }
 async function loadMySales(){
   // Load all sales visible to current user
+  var isTrash=salesFilter==='trash';
   var rows;
-  if(currentUser.role==='admin'){
-    rows=await sbGet('sales_records',(salesFilter!=='all'?'status=eq.'+salesFilter+'&':'')+'order=created_at.desc');
+  var q='order=created_at.desc';
+  if(isTrash){
+    q='deleted_at=not.is.null&order=deleted_at.desc';
   } else {
-    rows=await sbGet('sales_records','salesperson=eq.'+encodeURIComponent(currentUser.username)+(salesFilter!=='all'?'&status=eq.'+salesFilter:'')+'&order=created_at.desc');
+    q+='&deleted_at=is.null';
+    if(salesFilter!=='all')q+='&status=eq.'+salesFilter;
+  }
+  if(currentUser.role==='admin'){
+    rows=await sbGet('sales_records',q);
+  } else {
+    rows=await sbGet('sales_records','salesperson=eq.'+encodeURIComponent(currentUser.username)+'&'+q);
   }
   if(!rows.length){document.getElementById('mySalesList').innerHTML='<div class="empty-state"><div class="icon">🏍️</div><p>No sales records yet</p></div>';return;}
   var statusInfo={
@@ -3770,7 +3798,9 @@ async function loadMySales(){
       +'</div>'
       +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'
       +'<div style="font-size:14px;font-weight:700;color:#34d399">'+(r.sale_price?'RM '+r.sale_price.toLocaleString():'—')+'</div>'
-      +(isMine
+      +(isMine&&isTrash
+        ?'<button class="btn sm success" onclick="restoreSale('+r.id+')" style="font-size:10px">↩ Restore</button>'
+        :isMine
         ?'<div style="position:relative">'
           +'<div style="background:'+(si.color)+'22;border:1px solid '+(si.color)+'44;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;color:'+si.color+'" onclick="toggleSaleStatusMenu('+r.id+')">'
           +si.label+' ▾</div>'
@@ -3800,6 +3830,10 @@ async function setSaleStatus(id,status,e){
   await sbPatch('sales_records',{id:id},{status:status,updated_at:new Date().toISOString()});
   document.querySelectorAll('[id^="ssm-"]').forEach(function(el){el.style.display='none';});
   toast('Status → '+status,'success');loadMySales();
+}
+async function restoreSale(id){
+  await sbPatch('sales_records',{id:id},{deleted_at:null,deleted_by:null,updated_at:new Date().toISOString()});
+  toast('Sale restored','success');loadMySales();
 }
 // Close menus on click outside
 document.addEventListener('click',function(){document.querySelectorAll('[id^="ssm-"]').forEach(function(el){el.style.display='none';});});
@@ -3884,7 +3918,79 @@ async function loadCheckin(){
     },{enableHighAccuracy:true,timeout:8000,maximumAge:30000});
   }
 }
+var checkinPhotoDataUrl=null;
+
+function onCheckinPhotoSelected(input){
+  var file=input.files[0];
+  if(!file){return;}
+  // Block non-camera sources on capable browsers (check EXIF or just warn)
+  if(!file.type.startsWith('image/')){toast('Images only','error');input.value='';return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var canvas=document.getElementById('checkinWatermarkCanvas');
+      var maxW=800;var scale=Math.min(1,maxW/img.width);
+      canvas.width=Math.round(img.width*scale);
+      canvas.height=Math.round(img.height*scale);
+      var ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      // Draw watermark
+      var now=new Date();
+      var timeStr=now.toLocaleDateString('en-MY')+' '+now.toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      var name=currentUser.display_name||currentUser.username;
+      var gpsStr=checkinGPSCoords?('GPS: '+checkinGPSCoords.lat.toFixed(4)+', '+checkinGPSCoords.lng.toFixed(4)):'GPS: N/A';
+      var lines=[name,timeStr,gpsStr,'HuangMotor M Sdn Bhd'];
+      var padding=10;var lineH=20;var boxH=lines.length*lineH+padding*2;
+      var boxW=canvas.width;
+      // Semi-transparent dark bar at bottom
+      ctx.fillStyle='rgba(0,0,0,0.65)';
+      ctx.fillRect(0,canvas.height-boxH,boxW,boxH);
+      // White text
+      ctx.fillStyle='#ffffff';
+      ctx.font='bold '+(Math.max(12,canvas.width/40))+'px monospace';
+      ctx.textAlign='left';
+      lines.forEach(function(line,i){
+        ctx.fillText(line,padding,canvas.height-boxH+padding+(i+1)*lineH-4);
+      });
+      // Top-right badge
+      ctx.fillStyle='rgba(29,78,216,0.85)';
+      var badge='HuangMotor';var bW=ctx.measureText(badge).width+16;
+      ctx.fillRect(canvas.width-bW-8,8,bW,26);
+      ctx.fillStyle='#fff';ctx.font='bold '+(Math.max(10,canvas.width/55))+'px sans-serif';
+      ctx.textAlign='right';ctx.fillText(badge,canvas.width-16,26);
+      // Save as data URL
+      checkinPhotoDataUrl=canvas.toDataURL('image/jpeg',0.75);
+      document.getElementById('checkinPhotoPreviewWrap').style.display='';
+      document.getElementById('checkinPhotoName').textContent=file.name;
+      document.getElementById('checkinPhotoRemove').style.display='';
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearCheckinPhoto(){
+  checkinPhotoDataUrl=null;
+  document.getElementById('checkinPhoto').value='';
+  document.getElementById('checkinPhotoName').textContent='';
+  document.getElementById('checkinPhotoRemove').style.display='none';
+  document.getElementById('checkinPhotoPreviewWrap').style.display='none';
+}
+
+function saveWatermarkedPhoto(){
+  if(!checkinPhotoDataUrl)return;
+  var a=document.createElement('a');
+  var now=new Date();
+  a.download='checkin_'+currentUser.username+'_'+now.toISOString().slice(0,19).replace(/:/g,'-')+'.jpg';
+  a.href=checkinPhotoDataUrl;a.click();
+  toast('Photo saved','success');
+}
+
 function compressPhoto(file){
+  // If we already have a watermarked version, use it
+  if(checkinPhotoDataUrl)return Promise.resolve(checkinPhotoDataUrl);
+  // Fallback: compress without watermark (for GPS-only checkins)
   return new Promise(function(resolve){
     var reader=new FileReader();
     reader.onload=function(e){
