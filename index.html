@@ -2902,19 +2902,82 @@ async function changePassword(){
 function getDeviceInfo(){
   var ua=navigator.userAgent;
   var device='Unknown';
-  if(/iPhone/.test(ua))device='iPhone';
-  else if(/iPad/.test(ua))device='iPad';
-  else if(/Android/.test(ua)){
-    var m=ua.match(/Android [^;]+; ([^)]+)\)/);
-    device=m?'Android: '+m[1].trim():'Android';
-  } else if(/Windows/.test(ua))device='Windows PC';
-  else if(/Mac/.test(ua))device='Mac';
+  // iOS
+  if(/iPhone/.test(ua)){
+    var m=ua.match(/iPhone OS ([\d_]+)/);
+    device='iPhone'+(m?' iOS '+m[1].replace(/_/g,'.') :'');
+  } else if(/iPad/.test(ua)){
+    var m=ua.match(/CPU OS ([\d_]+)/);
+    device='iPad'+(m?' iOS '+m[1].replace(/_/g,'.'):'');
+  } else if(/Android/.test(ua)){
+    // Extract model: "Android X.X; Model Name Build"
+    var m=ua.match(/Android[\s/]([\d.]+)[;\s]+([^;)]+?)(?:\s+Build|\))/);
+    device=m?'Android '+m[1]+' ('+m[2].trim()+')':'Android';
+  } else if(/Windows NT/.test(ua)){
+    device='Windows';
+  } else if(/Macintosh|Mac OS X/.test(ua)){
+    device=ua.indexOf('Mobile')>=0?'Mac (Mobile)':'Mac';
+  } else if(/Linux/.test(ua)){
+    device='Linux';
+  }
   var browser='';
-  if(/Chrome\//.test(ua)&&!/Chromium|Edge|OPR/.test(ua))browser='Chrome';
+  if(/EdgA?\/|Edg\//.test(ua))browser='Edge';
+  else if(/OPR\/|Opera\//.test(ua))browser='Opera';
+  else if(/Chrome\//.test(ua)&&!/Chromium/.test(ua))browser='Chrome';
   else if(/Firefox\//.test(ua))browser='Firefox';
   else if(/Safari\//.test(ua)&&!/Chrome/.test(ua))browser='Safari';
-  else if(/Edge\/|Edg\//.test(ua))browser='Edge';
   return device+(browser?' · '+browser:'');
+}
+
+/* Generate GPS-only watermark image (no camera photo) */
+function generateGPSWatermark(gps,field,timestamp){
+  return new Promise(function(resolve){
+    var canvas=document.createElement('canvas');
+    canvas.width=600;canvas.height=300;
+    var ctx=canvas.getContext('2d');
+    // Dark background
+    ctx.fillStyle='#0d1626';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Border
+    ctx.strokeStyle='#1e3a5f';ctx.lineWidth=3;
+    ctx.strokeRect(4,4,canvas.width-8,canvas.height-8);
+    // Company header
+    ctx.fillStyle='#1d4ed8';
+    ctx.fillRect(0,0,canvas.width,52);
+    ctx.fillStyle='#ffffff';
+    ctx.font='bold 20px sans-serif';ctx.textAlign='center';
+    ctx.fillText('HuangMotor M Sdn Bhd',canvas.width/2,33);
+    // Session label
+    var isIn=field.indexOf('out')<0;
+    var sn=(['check_in','check_out'].indexOf(field)>=0?1:['check_in_2','check_out_2'].indexOf(field)>=0?2:3);
+    var label=(isIn?'CHECK IN':'CHECK OUT')+' — Session '+sn;
+    ctx.fillStyle='#60a5fa';ctx.font='bold 18px sans-serif';ctx.textAlign='center';
+    ctx.fillText(label,canvas.width/2,90);
+    // Staff info
+    var name=currentUser.display_name||currentUser.username;
+    ctx.fillStyle='#f0f6fc';ctx.font='bold 16px sans-serif';
+    ctx.fillText(name,canvas.width/2,130);
+    // Time
+    var d=new Date(timestamp);
+    var timeStr=d.toLocaleDateString('en-MY',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('en-MY');
+    ctx.fillStyle='#fbbf24';ctx.font='14px monospace';
+    ctx.fillText(timeStr,canvas.width/2,165);
+    // GPS
+    if(gps){
+      ctx.fillStyle='#34d399';ctx.font='13px monospace';
+      ctx.fillText('📍 GPS: '+gps.lat.toFixed(6)+', '+gps.lng.toFixed(6),canvas.width/2,200);
+      ctx.fillStyle='#4a6fa5';ctx.font='11px sans-serif';
+      ctx.fillText('Location verified',canvas.width/2,222);
+    } else {
+      ctx.fillStyle='#f87171';ctx.font='13px sans-serif';
+      ctx.fillText('⚠ No GPS recorded',canvas.width/2,200);
+    }
+    // Device
+    ctx.fillStyle='#2a4a6a';ctx.font='10px sans-serif';
+    ctx.fillText(getDeviceInfo(),canvas.width/2,260);
+    ctx.fillText('Submitted: '+new Date().toLocaleString('en-MY'),canvas.width/2,278);
+    resolve(canvas.toDataURL('image/jpeg',0.85));
+  });
 }
 
 /* ══ GLOBAL BADGE REFRESH ══ */
@@ -3338,20 +3401,33 @@ async function doCheckIn(){
     }
     // Build pending data
     var data={field:field,timestamp:new Date().toISOString(),gps:checkinGPSCoords,photo:null};
-    // Use watermarked photo if available, otherwise compress raw file
-    if(checkinPhotoDataUrl){data.photo=checkinPhotoDataUrl;}
-    else if(photoFile){data.photo=await compressPhoto(photoFile);}
+    if(checkinPhotoDataUrl){
+      // Use camera watermark photo
+      data.photo=checkinPhotoDataUrl;
+    } else if(photoFile){
+      // Compress raw file (fallback)
+      data.photo=await compressPhoto(photoFile);
+    } else if(checkinGPSCoords){
+      // GPS only — generate text watermark card
+      data.photo=await generateGPSWatermark(checkinGPSCoords,field,data.timestamp);
+    }
     pendingCheckinData=data;
     // Show confirmation modal
     var isIn=field.indexOf('out')<0;
     var sn=(['check_in','check_out'].indexOf(field)>=0?1:['check_in_2','check_out_2'].indexOf(field)>=0?2:3);
     var tp=isIn?'Check In':'Check Out';
+    var device=getDeviceInfo();
     document.getElementById('checkinConfirmInfo').innerHTML=
       '<strong style="color:#f0f6fc">'+tp+' Session '+sn+'</strong><br>'
-      +(checkinGPSCoords?'📍 '+checkinGPSCoords.lat.toFixed(4)+', '+checkinGPSCoords.lng.toFixed(4)+'<br>':'')
-      +'<span style="color:#f59e0b">'+new Date().toLocaleTimeString()+'</span>';
-    if(data.photo){document.getElementById('checkinConfirmImg').src=data.photo;document.getElementById('checkinConfirmImg').style.display='';}
-    else{document.getElementById('checkinConfirmImg').style.display='none';}
+      +(checkinGPSCoords?'<span style="color:#34d399">📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5)+'</span><br>':'<span style="color:#f87171">📍 No GPS</span><br>')
+      +'<span style="color:#f59e0b">'+new Date().toLocaleTimeString()+'</span>'
+      +(device?'<br><span style="color:#2a4a6a;font-size:10px">📱 '+device+'</span>':'');
+    if(data.photo){
+      document.getElementById('checkinConfirmImg').src=data.photo;
+      document.getElementById('checkinConfirmImg').style.display='';
+    } else {
+      document.getElementById('checkinConfirmImg').style.display='none';
+    }
     openModal('checkinConfirmModal');
     await loadCheckin();
   }catch(err){
@@ -4185,7 +4261,7 @@ function onCheckinPhotoSelected(input){
       var timeStr=now.toLocaleDateString('en-MY')+' '+now.toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
       var name=currentUser.display_name||currentUser.username;
       var gpsStr=checkinGPSCoords?('GPS: '+checkinGPSCoords.lat.toFixed(4)+', '+checkinGPSCoords.lng.toFixed(4)):'GPS: N/A';
-      var lines=[name,timeStr,gpsStr,'HuangMotor M Sdn Bhd'];
+      var lines=[name,timeStr,gpsStr,'HuangMotor M Sdn Bhd · '+getDeviceInfo()];
       var padding=10;var lineH=20;var boxH=lines.length*lineH+padding*2;
       var boxW=canvas.width;
       // Semi-transparent dark bar at bottom
