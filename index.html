@@ -36,6 +36,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* ── LAYOUT ── */
 #app{display:none;min-height:100vh;flex-direction:column}
 #app.visible{display:flex}
+body{position:relative}
 .topbar{height:52px;background:#111827;border-bottom:1px solid #1e2d45;display:flex;align-items:center;padding:0 1.2rem;gap:10px;position:sticky;top:0;z-index:100}
 .tb-logo{font-size:13px;font-weight:700;color:#f0f6fc;display:flex;align-items:center;gap:6px}
 .tb-logo span{font-size:18px}
@@ -1193,45 +1194,45 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     </div><!-- /content -->
   </div><!-- /main -->
-
-  <!-- MOBILE BOTTOM NAV -->
-  <div id="mobileNav">
-    <button class="mob-nav-btn active" id="mn-dashboard" onclick="openPage('dashboard');closeMobileMore()">
-      <span class="mn-icon">🏠</span>Home
-    </button>
-    <button class="mob-nav-btn" id="mn-tasks" onclick="openPage('tasks');closeMobileMore()">
-      <span class="mn-icon">✅</span>Tasks
-    </button>
-    <button class="mob-nav-btn" id="mn-mycheckin" onclick="openPage('mycheckin');closeMobileMore()">
-      <span class="mn-icon">📍</span>Check In
-    </button>
-    <button class="mob-nav-btn" id="mn-chat" onclick="openPage('chat');closeMobileMore()">
-      <span class="mn-icon">💬</span>Chat
-      <span class="mn-badge" id="mnChatBadge" style="display:none">!</span>
-    </button>
-    <button class="mob-nav-btn" id="mn-more" onclick="toggleMobileMore()">
-      <span class="mn-icon">☰</span>More
-    </button>
-  </div>
-
-  <!-- MORE DRAWER -->
-  <div class="drawer-overlay" id="drawerOverlay" onclick="closeMobileMore()"></div>
-  <div id="mobileMoreDrawer">
-    <div class="more-section">Me</div>
-    <div class="more-item" onclick="openPage('announcements');closeMobileMore()"><span class="mi-icon">📢</span>Announcements<span id="mnUnreadBadge" style="margin-left:auto;background:#ef4444;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px;display:none">0</span></div>
-    <div class="more-item" onclick="openPage('mysales');closeMobileMore()"><span class="mi-icon">🏍️</span>My Sales</div>
-    <div class="more-item" onclick="openPage('calendar');closeMobileMore()"><span class="mi-icon">📅</span>Calendar</div>
-    <div class="more-item" onclick="openPage('leave');closeMobileMore()"><span class="mi-icon">🌴</span>Leave</div>
-    <div class="more-item" onclick="openPage('profile');closeMobileMore()"><span class="mi-icon">👤</span>My Profile</div>
-    <div class="more-section" id="mnAdminSection" style="display:none">Admin</div>
-    <div class="more-item" id="mn-admin-tasks" onclick="openPage('admin-tasks');closeMobileMore()" style="display:none"><span class="mi-icon">📊</span>All Tasks</div>
-    <div class="more-item" id="mn-admin-attendance" onclick="openPage('admin-attendance');closeMobileMore()" style="display:none"><span class="mi-icon">🕐</span>Attendance</div>
-    <div class="more-item" id="mn-admin-leave" onclick="openPage('admin-leave');closeMobileMore()" style="display:none"><span class="mi-icon">📋</span>Leave Approvals</div>
-    <div class="more-item" id="mn-performance" onclick="openPage('performance');closeMobileMore()" style="display:none"><span class="mi-icon">📈</span>Performance</div>
-    <div class="more-item" id="mn-admin-dept" onclick="openPage('admin-dept');closeMobileMore()" style="display:none"><span class="mi-icon">🏬</span>Departments</div>
-    <div class="more-item" id="mn-admin-users" onclick="openPage('admin-users');closeMobileMore()" style="display:none"><span class="mi-icon">👥</span>Users</div>
-  </div>
 </div><!-- /app -->
+
+<!-- MOBILE BOTTOM NAV — outside app to prevent clipping -->
+<div id="mobileNav">
+  <button class="mob-nav-btn active" id="mn-dashboard" onclick="openPage('dashboard');closeMobileMore()">
+    <span class="mn-icon">🏠</span>Home
+  </button>
+  <button class="mob-nav-btn" id="mn-tasks" onclick="openPage('tasks');closeMobileMore()">
+    <span class="mn-icon">✅</span>Tasks
+  </button>
+  <button class="mob-nav-btn" id="mn-mycheckin" onclick="openPage('mycheckin');closeMobileMore()">
+    <span class="mn-icon">📍</span>Check In
+  </button>
+  <button class="mob-nav-btn" id="mn-chat" onclick="openPage('chat');closeMobileMore()">
+    <span class="mn-icon">💬</span>Chat
+    <span class="mn-badge" id="mnChatBadge" style="display:none">!</span>
+  </button>
+  <button class="mob-nav-btn" id="mn-more" onclick="toggleMobileMore()">
+    <span class="mn-icon">☰</span>More
+  </button>
+</div>
+
+<!-- MORE DRAWER -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeMobileMore()"></div>
+<div id="mobileMoreDrawer">
+  <div class="more-section">Me</div>
+  <div class="more-item" onclick="openPage('announcements');closeMobileMore()"><span class="mi-icon">📢</span>Announcements<span id="mnUnreadBadge" style="margin-left:auto;background:#ef4444;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px;display:none">0</span></div>
+  <div class="more-item" onclick="openPage('mysales');closeMobileMore()"><span class="mi-icon">🏍️</span>My Sales</div>
+  <div class="more-item" onclick="openPage('calendar');closeMobileMore()"><span class="mi-icon">📅</span>Calendar</div>
+  <div class="more-item" onclick="openPage('leave');closeMobileMore()"><span class="mi-icon">🌴</span>Leave</div>
+  <div class="more-item" onclick="openPage('profile');closeMobileMore()"><span class="mi-icon">👤</span>My Profile</div>
+  <div class="more-section" id="mnAdminSection" style="display:none">Admin</div>
+  <div class="more-item" id="mn-admin-tasks" onclick="openPage('admin-tasks');closeMobileMore()" style="display:none"><span class="mi-icon">📊</span>All Tasks</div>
+  <div class="more-item" id="mn-admin-attendance" onclick="openPage('admin-attendance');closeMobileMore()" style="display:none"><span class="mi-icon">🕐</span>Attendance</div>
+  <div class="more-item" id="mn-admin-leave" onclick="openPage('admin-leave');closeMobileMore()" style="display:none"><span class="mi-icon">📋</span>Leave Approvals</div>
+  <div class="more-item" id="mn-performance" onclick="openPage('performance');closeMobileMore()" style="display:none"><span class="mi-icon">📈</span>Performance</div>
+  <div class="more-item" id="mn-admin-dept" onclick="openPage('admin-dept');closeMobileMore()" style="display:none"><span class="mi-icon">🏬</span>Departments</div>
+  <div class="more-item" id="mn-admin-users" onclick="openPage('admin-users');closeMobileMore()" style="display:none"><span class="mi-icon">👥</span>Users</div>
+</div>
 
 <script>
 /* ══ SUPABASE ══ */
@@ -1740,7 +1741,7 @@ async function openTaskDetail(id){
     +(notes.length?notes.map(function(n){
       return '<div class="progress-note"><span class="pn-user">'+esc(n.username)+'</span> <span class="pn-time">'+fmtRelative(n.ts)+'</span><div style="color:#e0e6f0;margin-top:2px">'+esc(n.note)+'</div></div>';
     }).join(''):'<div style="font-size:11px;color:#2a4a6a;margin-bottom:8px">No notes yet</div>')
-    +((canAct||isAdmin)?'<div style="display:flex;gap:6px;margin-top:10px"><input type="text" id="noteInp_'+id+'" placeholder="Add progress note..." style="flex:1;padding:7px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px;outline:none" onkeydown="if(event.key===\'Enter\')addProgressNote('+id+')"><button class="btn sm primary" onclick="addProgressNote('+id+')">Add</button></div>':'')
+    +((canAct||isAdmin)&&t.status!=='cancelled'&&t.status!=='completed'&&!t.deleted_at?'<div style="display:flex;gap:6px;margin-top:10px"><input type="text" id="noteInp_'+id+'" placeholder="Add progress note..." style="flex:1;padding:7px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px;outline:none" onkeydown="if(event.key===\'Enter\')addProgressNote('+id+')"><button class="btn sm primary" onclick="addProgressNote('+id+')">Add</button></div>':'')
     +'<div class="divider"></div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap">'+statusBtns+'</div>';
   document.getElementById('taskDetailBody').innerHTML=body;
@@ -2105,26 +2106,34 @@ async function loadAttendance(){
   document.getElementById('attList').innerHTML=users.map(function(u){
     var rec=recMap[u.username]||{};
     var st=onLeave.has(u.username)?'leave':(rec.status||'absent');
+    // Pending self-checkin waiting for admin approval
+    var isPending=rec.self_checkin&&rec.status==='pending';
     var sessions=[
       {in:rec.check_in,out:rec.check_out},
       {in:rec.check_in_2,out:rec.check_out_2},
       {in:rec.check_in_3,out:rec.check_out_3}
     ];
     var sessHtml=sessions.map(function(s,i){
-      var disabled=!canEdit||st==='leave'||st==='holiday'?'disabled':'';
+      var dis=!canEdit||st==='leave'||st==='holiday'?'disabled':'';
       return '<div style="display:flex;align-items:center;gap:4px;font-size:11px">'
         +'<span style="color:#4a6fa5;min-width:14px">S'+(i+1)+'</span>'
-        +'<input type="time" value="'+(s.in?fmtTime(s.in):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'in\','+(i+1)+',this.value)"':'')+' '+disabled+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
+        +'<input type="time" value="'+(s.in?fmtTime(s.in):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'in\','+(i+1)+',this.value)"':'')+' '+dis+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
         +'<span style="color:#2a4a6a">→</span>'
-        +'<input type="time" value="'+(s.out?fmtTime(s.out):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'out\','+(i+1)+',this.value)"':'')+' '+disabled+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
+        +'<input type="time" value="'+(s.out?fmtTime(s.out):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'out\','+(i+1)+',this.value)"':'')+' '+dis+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
         +'</div>';
     }).join('');
     var photos=[rec.checkin_photo,rec.checkin_photo_2,rec.checkin_photo_3].filter(Boolean);
-    var photoHtml=canEdit&&photos.length?'<div style="display:flex;gap:4px;margin-top:4px">'+photos.map(function(p,i){
-      return '<img src="'+p+'" onclick="viewFullImg(this.src)" title="S'+(i+1)+' photo" style="width:36px;height:36px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid #1e2d45">';
+    var photoHtml=photos.length?'<div style="display:flex;gap:4px;margin-top:4px">'+photos.map(function(p,idx){
+      return '<img src="'+p+'" onclick="viewFullImg(this.src)" title="S'+(idx+1)+' photo" style="width:40px;height:40px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid #1e2d45">';
     }).join('')+'</div>':'';
+    var pendingBadge=isPending?'<span style="font-size:10px;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;border-radius:4px;padding:1px 6px;margin-left:4px">Pending Approval</span>':'';
+    var approveBtn=isPending&&canEdit?'<button class="btn sm success" style="font-size:10px" onclick="approveCheckin(\''+u.username+'\',\''+date+'\')">✓ Approve</button>':'';
+    return '<div class="att-row" style="flex-wrap:wrap;gap:8px;'+(isPending?'background:#1a1200;border-color:#f59e0b44;':'')+'">'
       +'<div class="att-status-dot '+(st==='present'?'present':st==='leave'?'leave':st==='holiday'?'holiday':'absent')+'"></div>'
-      +'<div style="flex:1;min-width:100px"><div class="att-name">'+(esc(u.display_name)||esc(u.username))+'</div>'+photoHtml+'</div>'
+      +'<div style="flex:1;min-width:100px">'
+      +'<div class="att-name">'+(esc(u.display_name)||esc(u.username))+pendingBadge+'</div>'
+      +photoHtml
+      +'</div>'
       +(canEdit
         ?'<select onchange="updateAttStatus(\''+u.username+'\',\''+date+'\',this.value)" class="btn" style="padding:3px 7px;font-size:11px">'
           +'<option value="present"'+(st==='present'?' selected':'')+'>Present</option>'
@@ -2132,10 +2141,15 @@ async function loadAttendance(){
           +'<option value="leave"'+(st==='leave'?' selected':'')+'>Leave</option>'
           +'<option value="holiday"'+(st==='holiday'?' selected':'')+'>Holiday</option>'
           +'</select>'
-        :'<span class="task-status '+(st==='present'?'in_progress':st==='leave'?'accepted':'pending')+'">'+st+'</span>')
+          +approveBtn
+        :'<span style="font-size:11px;color:'+(st==='present'?'#34d399':st==='leave'?'#fbbf24':'#f87171')+'">'+st+'</span>')
       +'<div style="display:flex;flex-direction:column;gap:3px">'+sessHtml+'</div>'
       +'</div>';
   }).join('');
+}
+async function approveCheckin(username,date){
+  await sbPatch('attendance',{username:username,date:date},{status:'present'});
+  toast(username+' check-in approved','success');loadAttendance();
 }
 async function updateAttStatus(username,date,status){
   await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify({username:username,date:date,status:status})});
@@ -3086,29 +3100,40 @@ async function loadCheckin(){
   document.getElementById('checkinDate').textContent=fmtDate(today);
   var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
   var r=rec.length?rec[0]:{};
-  var sessions=[{l:'S1',i:r.check_in,o:r.check_out},{l:'S2',i:r.check_in_2,o:r.check_out_2},{l:'S3',i:r.check_in_3,o:r.check_out_3}];
+  var sessions=[
+    {l:'S1',i:r.check_in,o:r.check_out,photo:r.checkin_photo},
+    {l:'S2',i:r.check_in_2,o:r.check_out_2,photo:r.checkin_photo_2},
+    {l:'S3',i:r.check_in_3,o:r.check_out_3,photo:r.checkin_photo_3}
+  ];
   document.getElementById('checkinSessions').innerHTML=sessions.map(function(s){
     return '<div style="background:#0d1626;border:1px solid #1e2d45;border-radius:8px;padding:8px;text-align:center">'
       +'<div style="font-size:10px;color:#4a6fa5;margin-bottom:3px">'+s.l+'</div>'
       +'<div style="font-size:11px;color:#34d399">'+(s.i?fmtTime(s.i):'—')+'</div>'
       +'<div style="font-size:11px;color:#f87171">'+(s.o?fmtTime(s.o):'—')+'</div>'
+      +(s.photo?'<img src="'+s.photo+'" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-top:3px;cursor:pointer;border:1px solid #2a4a6a" onclick="viewFullImg(this.src)" title="Tap to view">':'')
       +'</div>';
   }).join('');
+  // Show approval status
+  var statusEl=document.getElementById('checkinStatus');
+  if(r.status==='pending')statusEl.textContent='⏳ Submitted — awaiting admin approval';
+  else if(r.status==='present')statusEl.textContent='✅ Attendance confirmed by admin';
+  else statusEl.textContent='No check-in today';
   var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
   var btn=document.getElementById('checkinBtn');
   var sn=field?(['check_in','check_out'].indexOf(field)>=0?1:['check_in_2','check_out_2'].indexOf(field)>=0?2:3):0;
   var tp=field&&field.indexOf('out')>=0?'Out':'In';
   if(!field){btn.disabled=true;btn.textContent='✓ All sessions done';}
   else{btn.disabled=false;btn.textContent='Check '+tp+' (S'+sn+')';}
-  document.getElementById('checkinStatus').textContent=field?'Next: Check '+tp+' Session '+sn:'All done for today';
+  // Try GPS silently
   if(navigator.geolocation){
     navigator.geolocation.getCurrentPosition(function(pos){
       checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
       var el=document.getElementById('checkinGPS');
       if(el)el.textContent='📍 '+checkinGPSCoords.lat.toFixed(5)+', '+checkinGPSCoords.lng.toFixed(5);
     },function(){
-      var el=document.getElementById('checkinGPS');if(el)el.textContent='📍 GPS unavailable';
-    },{enableHighAccuracy:true,timeout:8000});
+      checkinGPSCoords=null;
+      var el=document.getElementById('checkinGPS');if(el)el.textContent='📍 GPS unavailable — use photo';
+    },{enableHighAccuracy:true,timeout:8000,maximumAge:30000});
   }
 }
 async function doCheckIn(){
@@ -3133,7 +3158,10 @@ async function doCheckIn(){
     var r=rec.length?rec[0]:{};
     var field=!r.check_in?'check_in':!r.check_out?'check_out':!r.check_in_2?'check_in_2':!r.check_out_2?'check_out_2':!r.check_in_3?'check_in_3':!r.check_out_3?'check_out_3':null;
     if(!field){toast('All sessions recorded today','success');await loadCheckin();return;}
-    var data={};data[field]=new Date().toISOString();data.self_checkin=true;data.status='present';
+    var data={};data[field]=new Date().toISOString();data.self_checkin=true;
+    // Status stays 'pending' until admin approves — only set present if already approved
+    var currentStatus=r.status;
+    if(!currentStatus||currentStatus==='absent')data.status='pending';
     var isIn=field.indexOf('out')<0;
     if(checkinGPSCoords){data[isIn?'checkin_lat':'checkout_lat']=checkinGPSCoords.lat;data[isIn?'checkin_lng':'checkout_lng']=checkinGPSCoords.lng;}
     if(photoFile&&isIn){
