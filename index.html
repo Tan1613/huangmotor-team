@@ -804,6 +804,9 @@ body{position:relative}
       <div class="nav-item" onclick="openPage('performance')" id="nav-performance" style="display:none">
         <span class="nav-icon">📈</span>Performance
       </div>
+      <div class="nav-item" onclick="openPage('admin-media')" id="nav-admin-media" style="display:none">
+        <span class="nav-icon">💾</span>Media
+      </div>
       <div class="nav-item" onclick="openPage('admin-users')" id="nav-admin-users" style="display:none">
         <span class="nav-icon">👥</span>Users
       </div>
@@ -1019,6 +1022,16 @@ body{position:relative}
           </div>
           <div id="staffReportContent"></div>
         </div>
+      </div>
+
+      <!-- ADMIN: MEDIA -->
+      <div class="page" id="page-admin-media">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <div><div class="page-title">💾 Media Management</div>
+          <div class="page-sub">Monitor storage usage and clean up old media</div></div>
+          <button class="btn" onclick="loadMediaManager()">🔄 Refresh</button>
+        </div>
+        <div id="mediaManagerContent"><div class="empty-state"><p>Click Refresh to load storage stats</p></div></div>
       </div>
 
       <!-- ADMIN: ATTENDANCE RULES -->
@@ -1411,6 +1424,7 @@ body{position:relative}
   <div class="more-item" id="mn-performance" onclick="openPage('performance');closeMobileMore()" style="display:none"><span class="mi-icon">📈</span>Performance</div>
   <div class="more-item" id="mn-admin-dept" onclick="openPage('admin-dept');closeMobileMore()" style="display:none"><span class="mi-icon">🏬</span>Departments</div>
   <div class="more-item" id="mn-admin-users" onclick="openPage('admin-users');closeMobileMore()" style="display:none"><span class="mi-icon">👥</span>Users</div>
+  <div class="more-item" id="mn-admin-media" onclick="openPage('admin-media');closeMobileMore()" style="display:none"><span class="mi-icon">💾</span>Media</div>
 </div>
 
 <script>
@@ -1505,7 +1519,7 @@ async function afterLogin(){
   badge.textContent=currentUser.role;badge.className='tb-badge '+(currentUser.role||'staff');
   // Admin nav
   if(currentUser.role==='admin'){
-    ['nav-admin-section','nav-admin-tasks','nav-admin-dept','nav-admin-leave','nav-admin-attendance','nav-performance','nav-admin-users'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
+    ['nav-admin-section','nav-admin-tasks','nav-admin-dept','nav-admin-leave','nav-admin-attendance','nav-performance','nav-admin-users','nav-admin-media'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
     document.getElementById('newAnnBtn').style.display='';
     showAdminMobileNav();
   } else {
@@ -1579,7 +1593,7 @@ function updateMobileNav(page){
 }
 function showAdminMobileNav(){
   var sec=document.getElementById('mnAdminSection');if(sec)sec.style.display='';
-  ['mn-admin-tasks','mn-admin-attendance','mn-admin-leave','mn-performance','mn-admin-dept','mn-admin-users'].forEach(function(id){
+  ['mn-admin-tasks','mn-admin-attendance','mn-admin-leave','mn-performance','mn-admin-dept','mn-admin-users','mn-admin-media'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.style.display='';
   });
 }
@@ -1604,7 +1618,7 @@ function openPage(name){
   else if(name==='admin-dept')loadDeptPage();
   else if(name==='admin-leave'){loadAllLeave();loadLeaveConfig();}
   else if(name==='admin-attendance'){setAttToday();switchAttTab('day');}
-  else if(name==='admin-att-rules')loadAttRules();
+  else if(name==='admin-media')loadMediaManager();
   else if(name==='performance')loadPerformance();
   else if(name==='admin-users')loadAdminUsers();
   else if(name==='profile')loadProfilePage();
@@ -3799,9 +3813,13 @@ async function loadMySales(){
       +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'
       +'<div style="font-size:14px;font-weight:700;color:#34d399">'+(r.sale_price?'RM '+r.sale_price.toLocaleString():'—')+'</div>'
       +(isMine&&isTrash
-        ?'<button class="btn sm success" onclick="restoreSale('+r.id+')" style="font-size:10px">↩ Restore</button>'
+        ?'<div style="display:flex;gap:4px;flex-direction:column;align-items:flex-end">'
+          +'<button class="btn sm success" onclick="restoreSale('+r.id+(r.task_id?','+r.task_id:'null')+')" style="font-size:10px">↩ Restore</button>'
+          +(r.delete_reason?'<div style="font-size:10px;color:#f87171;max-width:120px;text-align:right">'+esc(r.delete_reason)+'</div>':'')
+          +'</div>'
         :isMine
-        ?'<div style="position:relative">'
+        ?'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
+          +'<div style="position:relative">'
           +'<div style="background:'+(si.color)+'22;border:1px solid '+(si.color)+'44;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:600;color:'+si.color+'" onclick="toggleSaleStatusMenu('+r.id+')">'
           +si.label+' ▾</div>'
           +'<div id="ssm-'+r.id+'" style="display:none;position:absolute;right:0;top:100%;margin-top:2px;background:#1e2d45;border:1px solid #2a3d55;border-radius:8px;overflow:hidden;z-index:10;min-width:160px">'
@@ -3813,6 +3831,8 @@ async function loadMySales(){
               +'</div>';
           }).join('')
           +'</div></div>'
+          +'<button class="btn sm danger" onclick="deleteSale('+r.id+(r.task_id?','+r.task_id:'null')+')" style="font-size:10px">🗑️</button>'
+          +'</div>'
         :'<span style="background:'+si.color+'22;border:1px solid '+si.color+'44;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:600;color:'+si.color+'">'+si.label+'</span>')
       +'</div>'
       +'</div>'
@@ -3831,9 +3851,140 @@ async function setSaleStatus(id,status,e){
   document.querySelectorAll('[id^="ssm-"]').forEach(function(el){el.style.display='none';});
   toast('Status → '+status,'success');loadMySales();
 }
-async function restoreSale(id){
-  await sbPatch('sales_records',{id:id},{deleted_at:null,deleted_by:null,updated_at:new Date().toISOString()});
+async function deleteSale(saleId,taskId){
+  var reason=prompt('Reason for moving to trash:');
+  if(reason===null)return;
+  if(!reason.trim()){toast('Reason required','error');return;}
+  var now=new Date().toISOString();
+  await sbPatch('sales_records',{id:saleId},{deleted_at:now,deleted_by:currentUser.username,delete_reason:reason.trim(),updated_at:now});
+  // Also soft-delete the linked task
+  if(taskId&&taskId!=='null'){
+    await sbPatch('tasks',{id:taskId},{deleted_at:now,deleted_by:currentUser.username,updated_at:now});
+    await sbPost('change_log',{username:currentUser.username,action:'delete_sale_task',table_name:'tasks',record_id:String(taskId),after_data:{reason:reason,by:currentUser.username}});
+  }
+  await sbPost('change_log',{username:currentUser.username,action:'delete_sale',table_name:'sales_records',record_id:String(saleId),after_data:{reason:reason,by:currentUser.username}});
+  toast('Moved to trash','success');loadMySales();
+}
+
+async function restoreSale(saleId,taskId){
+  await sbPatch('sales_records',{id:saleId},{deleted_at:null,deleted_by:null,delete_reason:null,updated_at:new Date().toISOString()});
+  // Also restore linked task
+  if(taskId&&taskId!=='null'){
+    await sbPatch('tasks',{id:taskId},{deleted_at:null,deleted_by:null,updated_at:new Date().toISOString()});
+  }
+  await sbPost('change_log',{username:currentUser.username,action:'restore_sale',table_name:'sales_records',record_id:String(saleId),after_data:{by:currentUser.username}});
   toast('Sale restored','success');loadMySales();
+}
+
+/* ══ MEDIA MANAGEMENT ══ */
+async function loadMediaManager(){
+  var wrap=document.getElementById('mediaManagerContent');
+  if(!wrap)return;
+  wrap.innerHTML='<div class="skeleton"></div>';
+  // Count base64 data sizes from attendance photos and chat images
+  var totalBytes=0;var breakdown=[];
+  // Checkin photos
+  var attRows=await sbGet('attendance','or=(checkin_photo.not.is.null,checkin_photo_2.not.is.null,checkin_photo_3.not.is.null)&select=username,date,checkin_photo,checkin_photo_2,checkin_photo_3');
+  var attBytes=0;
+  attRows.forEach(function(r){
+    if(r.checkin_photo)attBytes+=r.checkin_photo.length;
+    if(r.checkin_photo_2)attBytes+=r.checkin_photo_2.length;
+    if(r.checkin_photo_3)attBytes+=r.checkin_photo_3.length;
+  });
+  attBytes=Math.round(attBytes*0.75);// base64 → actual bytes approx
+  breakdown.push({label:'Check-in Photos',bytes:attBytes,count:attRows.length,icon:'📷'});
+  totalBytes+=attBytes;
+  // Checkin approvals photos
+  var apprRows=await sbGet('checkin_approvals','photo.not.is.null&select=id,photo,username,date');
+  var apprBytes=apprRows.reduce(function(s,r){return s+(r.photo?r.photo.length:0);},0);
+  apprBytes=Math.round(apprBytes*0.75);
+  breakdown.push({label:'Pending Approval Photos',bytes:apprBytes,count:apprRows.length,icon:'⏳'});
+  totalBytes+=apprBytes;
+  // Chat images
+  var chatRows=await sbGet('chat_messages','message_type=eq.image&select=id,media_data,username,created_at');
+  var chatBytes=chatRows.reduce(function(s,r){return s+(r.media_data?r.media_data.length:0);},0);
+  chatBytes=Math.round(chatBytes*0.75);
+  breakdown.push({label:'Chat Images',bytes:chatBytes,count:chatRows.length,icon:'💬'});
+  totalBytes+=chatBytes;
+  // DB limit: Supabase free = 500MB
+  var limitBytes=500*1024*1024;
+  var usedPct=Math.min(100,Math.round(totalBytes/limitBytes*100));
+  var fmtMB=function(b){return (b/1024/1024).toFixed(2)+' MB';};
+  var barColor=usedPct>80?'#ef4444':usedPct>50?'#f59e0b':'#34d399';
+  var html='<div class="card" style="margin-bottom:1rem">'
+    +'<div class="card-title">💾 Database Storage (Supabase Free — 500 MB)</div>'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+    +'<div style="flex:1;height:20px;background:#1e2d45;border-radius:10px;overflow:hidden">'
+    +'<div style="height:100%;width:'+usedPct+'%;background:'+barColor+';border-radius:10px;transition:width .5s"></div>'
+    +'</div>'
+    +'<span style="font-size:13px;font-weight:700;color:'+barColor+'">'+usedPct+'%</span>'
+    +'</div>'
+    +'<div style="font-size:12px;color:#6b8ab0">Used: <strong style="color:#f0f6fc">'+fmtMB(totalBytes)+'</strong> / 500 MB</div>'
+    +'</div>'
+    +'<div class="card" style="margin-bottom:1rem">'
+    +'<div class="card-title">Breakdown</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+    +breakdown.map(function(b){
+      var pct=totalBytes>0?Math.round(b.bytes/totalBytes*100):0;
+      return '<div style="display:flex;align-items:center;gap:10px">'
+        +'<span style="font-size:16px;width:24px">'+b.icon+'</span>'
+        +'<div style="flex:1">'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
+        +'<span style="font-size:12px;color:#e0e6f0">'+b.label+' ('+b.count+' records)</span>'
+        +'<span style="font-size:11px;color:#4a6fa5">'+fmtMB(b.bytes)+'</span>'
+        +'</div>'
+        +'<div style="height:6px;background:#1e2d45;border-radius:3px;overflow:hidden">'
+        +'<div style="height:100%;width:'+pct+'%;background:#3b82f6;border-radius:3px"></div>'
+        +'</div>'
+        +'</div>'
+        +'</div>';
+    }).join('')
+    +'</div></div>'
+    +'<div class="card">'
+    +'<div class="card-title">🗑️ Clean Up</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px;background:#0d1626;border-radius:8px">'
+    +'<div><div style="font-size:12px;color:#f0f6fc">Rejected check-in photos</div>'
+    +'<div style="font-size:11px;color:#4a6fa5">Remove photos from rejected approvals</div></div>'
+    +'<button class="btn sm danger" onclick="cleanRejectedPhotos()">Clean</button>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px;background:#0d1626;border-radius:8px">'
+    +'<div><div style="font-size:12px;color:#f0f6fc">Old check-in photos</div>'
+    +'<div style="font-size:11px;color:#4a6fa5">Remove photos older than 90 days from attendance</div></div>'
+    +'<button class="btn sm danger" onclick="cleanOldPhotos(90)">Clean</button>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px;background:#0d1626;border-radius:8px">'
+    +'<div><div style="font-size:12px;color:#f0f6fc">Old chat images</div>'
+    +'<div style="font-size:11px;color:#4a6fa5">Remove images from messages older than 90 days</div></div>'
+    +'<button class="btn sm danger" onclick="cleanOldChatImages(90)">Clean</button>'
+    +'</div>'
+    +'</div></div>';
+  wrap.innerHTML=html;
+}
+
+async function cleanRejectedPhotos(){
+  if(!confirm('Remove photos from all rejected check-in approvals?'))return;
+  var rows=await sbGet('checkin_approvals','status=eq.rejected&photo.not.is.null&select=id');
+  var ids=rows.map(function(r){return r.id;});
+  if(!ids.length){toast('Nothing to clean','success');return;}
+  // Batch update in chunks
+  for(var i=0;i<ids.length;i+=50){
+    var chunk=ids.slice(i,i+50);
+    await fetch(SB_URL+'/rest/v1/checkin_approvals?id=in.('+chunk.join(',')+')',{method:'PATCH',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify({photo:null})});
+  }
+  toast('Cleaned '+ids.length+' records','success');loadMediaManager();
+}
+async function cleanOldPhotos(days){
+  if(!confirm('Remove check-in photos older than '+days+' days?'))return;
+  var cutoff=new Date(Date.now()-days*86400000).toISOString().slice(0,10);
+  await fetch(SB_URL+'/rest/v1/attendance?date=lt.'+cutoff,{method:'PATCH',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify({checkin_photo:null,checkin_photo_2:null,checkin_photo_3:null})});
+  toast('Old photos cleared (before '+cutoff+')','success');loadMediaManager();
+}
+async function cleanOldChatImages(days){
+  if(!confirm('Remove chat images older than '+days+' days?'))return;
+  var cutoff=new Date(Date.now()-days*86400000).toISOString();
+  await fetch(SB_URL+'/rest/v1/chat_messages?message_type=eq.image&created_at=lt.'+cutoff,{method:'PATCH',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify({media_data:null,media_thumb:null})});
+  toast('Old chat images cleared','success');loadMediaManager();
 }
 // Close menus on click outside
 document.addEventListener('click',function(){document.querySelectorAll('[id^="ssm-"]').forEach(function(el){el.style.display='none';});});
