@@ -1007,6 +1007,12 @@ body{position:relative}
             <div class="form-field"><label>Type</label>
               <select id="hol_type"><option value="public">Public Holiday</option><option value="rest">Rest Day</option></select>
             </div>
+            <div class="form-field"><label>Pay</label>
+              <select id="hol_paid">
+                <option value="true">Paid (counts as working day)</option>
+                <option value="false">Unpaid (deducted from salary)</option>
+              </select>
+            </div>
             <div class="form-actions">
               <button class="btn" onclick="closeModal('holidayModal')">Cancel</button>
               <button class="btn primary" id="hol_save_btn" onclick="saveHoliday()">Add</button>
@@ -1111,7 +1117,10 @@ body{position:relative}
 
       <!-- ADMIN: ATTENDANCE -->
       <div class="page" id="page-admin-attendance">
-        <div class="page-title">🕐 Attendance</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
+          <div><div class="page-title">🕐 Attendance</div></div>
+          <button class="btn sm" onclick="checkMissingCheckins().then(function(){toast('Absence check done','success');})" title="Send notifications to staff who haven't checked in today" style="font-size:11px">📢 Check Missing</button>
+        </div>
         <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
           <button class="btn primary" id="attTabDay" onclick="switchAttTab('day')">👤 Per Person</button>
           <button class="btn" id="attTabPending" onclick="switchAttTab('pending')">⏳ Pending</button>
@@ -2496,7 +2505,7 @@ async function renderCalendar(){
   });
   holidaysCache.forEach(function(h){
     if(!events[h.date])events[h.date]=[];
-    events[h.date].push({type:h.type==='rest'?'rest':'holiday',label:h.name,hid:h.id,hdate:h.date,htype:h.type});
+    events[h.date].push({type:h.type==='rest'?'rest':'holiday',label:h.name,hid:h.id,hdate:h.date,htype:h.type,hpaid:h.is_paid});
   });
   // Render
   var html=days.map(function(d){return '<div class="cal-day-hdr">'+d+'</div>';}).join('');
@@ -2513,7 +2522,7 @@ async function renderCalendar(){
     if(isSunday&&!hasHoliday)dayEvs.unshift({type:'rest',label:'Rest Day'});
     var evHTML=dayEvs.slice(0,3).map(function(e){
       var cls=e.type==='task'?'task':e.type==='leave'?'leave':e.type==='rest'?'rest':'announce';
-      var editBtn=isAdmin&&e.hid?'<span onclick="event.stopPropagation();editHolidayModal('+e.hid+',\''+e.hdate+'\',\''+esc(e.label)+'\',\''+( e.htype||'public')+'\')" style="margin-left:3px;cursor:pointer;opacity:.6;font-size:9px">✏️</span>':'';
+      var editBtn=isAdmin&&e.hid?'<span onclick="event.stopPropagation();editHolidayModal('+e.hid+',\''+e.hdate+'\',\''+esc(e.label)+'\',\''+(e.htype||'public')+'\','+( e.hpaid===false?'false':'true')+')" style="margin-left:3px;cursor:pointer;opacity:.6;font-size:9px">✏️</span>':'';
       var delBtn=isAdmin&&e.hid?'<span onclick="event.stopPropagation();deleteHoliday('+e.hid+')" style="cursor:pointer;opacity:.6;font-size:9px">✕</span>':'';
       return '<div class="cal-event '+cls+'" style="display:flex;align-items:center;justify-content:space-between">'+esc(e.label)+'<span style="display:flex;gap:2px">'+editBtn+delBtn+'</span></div>';
     }).join('');
@@ -2644,10 +2653,10 @@ async function saveHoliday(){
   if(!date||!name){toast('Date and name required','error');return;}
   var editId=document.getElementById('hol_edit_id').value;
   if(editId){
-    await sbPatch('holidays',{id:parseInt(editId)},{date:date,name:name,type:document.getElementById('hol_type').value});
+    await sbPatch('holidays',{id:parseInt(editId)},{date:date,name:name,type:document.getElementById('hol_type').value,is_paid:document.getElementById('hol_paid').value==='true'});
     toast('Holiday updated','success');
   } else {
-    await sbPost('holidays',{date:date,name:name,type:document.getElementById('hol_type').value,created_by:currentUser.username});
+    await sbPost('holidays',{date:date,name:name,type:document.getElementById('hol_type').value,is_paid:document.getElementById('hol_paid').value==='true',created_by:currentUser.username});
     toast('Holiday added','success');
   }
   closeModal('holidayModal');renderCalendar();
@@ -2662,21 +2671,65 @@ function openHolidayModal(date){
   document.getElementById('hol_date').value=date||'';
   document.getElementById('hol_name').value='';
   document.getElementById('hol_type').value='holiday';
+  document.getElementById('hol_paid').value='true';
   document.getElementById('holidayModalTitle').textContent='Add Holiday / Rest Day';
   document.getElementById('hol_save_btn').textContent='Add';
   openModal('holidayModal');
 }
-function editHolidayModal(id,date,name,type){
+function editHolidayModal(id,date,name,type,isPaid){
   document.getElementById('hol_edit_id').value=id;
   document.getElementById('hol_date').value=date;
   document.getElementById('hol_name').value=name;
   document.getElementById('hol_type').value=type||'holiday';
+  document.getElementById('hol_paid').value=isPaid===false?'false':'true';
   document.getElementById('holidayModalTitle').textContent='Edit Holiday / Rest Day';
   document.getElementById('hol_save_btn').textContent='Save Changes';
   openModal('holidayModal');
 }
 
-/* ══ MY ATTENDANCE REPORT ══ */
+/* ══ AUTO ABSENCE NOTIFICATION ══ */
+async function checkMissingCheckins(){
+  if(currentUser.role!=='admin')return;
+  var today=new Date().toISOString().slice(0,10);
+  var now=new Date();var h=now.getHours();var m=now.getMinutes();var nowMin=h*60+m;
+  // Only run after 10am (give staff time to check in)
+  if(nowMin<600)return;
+  // Get default rule
+  var rule=await getEffectiveRule(null,null);
+  if(!rule)return;
+  // Get all active staff
+  var staff=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});
+  // Get today's attendance
+  var atts=await sbGet('attendance','date=eq.'+today+'&select=username,status,check_in');
+  var attMap={};atts.forEach(function(a){attMap[a.username]=a;});
+  // Get today's approved leaves
+  var leaves=await sbGet('leave_requests','start_date=lte.'+today+'&end_date=gte.'+today+'&status=eq.approved&select=username');
+  var onLeave=new Set(leaves.map(function(l){return l.username;}));
+  // Get holidays
+  var hols=await sbGet('holidays','date=eq.'+today+'&select=date');
+  if(hols.length)return;// holiday — no check needed
+  // Sunday — no check
+  if(now.getDay()===0)return;
+  for(var i=0;i<staff.length;i++){
+    var u=staff[i];
+    if(onLeave.has(u.username))continue;
+    var att=attMap[u.username];
+    if(att&&(att.check_in||att.status==='present'))continue;
+    // Check if already notified today
+    var existing=await sbGet('announcements','target_role=eq.'+encodeURIComponent(u.username)+'&title=ilike.*missing check-in*'+today+'*&select=id');
+    if(existing.length)continue;
+    // Send notification
+    await sbPost('announcements',{
+      title:'⚠️ Missing check-in — '+today,
+      content:'You have not checked in today ('+today+'). Please check in or apply for leave. If no action is taken, this may be recorded as absent.',
+      target_role:u.username,
+      is_pinned:false,
+      created_by:'system'
+    });
+  }
+}
+
+/* ══ END AUTO ABSENCE ══ */
 async function loadMyAttendance(){
   var selMonth=document.getElementById('myAttMonth');
   var selYear=document.getElementById('myAttYear');
@@ -3900,8 +3953,8 @@ async function loadPersonAttendance(){
   var attMap={};atts.forEach(function(a){attMap[a.date]=a;});
   var leaves=await sbGet('leave_requests','username=eq.'+encodeURIComponent(username)+'&status=eq.approved&start_date=lte.'+to+'&end_date=gte.'+from+'&select=start_date,end_date');
   var leaveSet=new Set();leaves.forEach(function(l){var d=new Date(l.start_date),end=new Date(l.end_date);while(d<=end){leaveSet.add(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}});
-  var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date,name');
-  var holMap={};hols.forEach(function(h){holMap[h.date]=h.name;});
+  var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date,name,is_paid');
+  var holMap={};hols.forEach(function(h){holMap[h.date]={name:h.name,is_paid:h.is_paid!==false};});
   var rule=await getEffectiveRule(username,u.department);
   var isMuslimMale=u.gender==='male'&&u.ethnicity==='malay';
   var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
@@ -3924,8 +3977,13 @@ async function loadPersonAttendance(){
     var rec=attMap[key]||{};
     var isLeave=leaveSet.has(key);
     var isHol=!!holMap[key];
+    var isHolPaid=isHol&&holMap[key].is_paid;
     var st=isHol?'holiday':isLeave?'leave':(rec.status||'absent');
     if(isWeekend&&!isHol)st='rest';
+    // Half-day logic: if only S1 recorded and S2 missing → 0.5 day
+    var hasS1=!!(rec.check_in||rec.check_out);
+    var hasS2=!!(rec.check_in_2||rec.check_out_2);
+    var workDayVal=st==='present'?(hasS1&&!hasS2?0.5:1):0;
     var stColor={present:'#34d399',absent:'#f87171',leave:'#fbbf24',holiday:'#a78bfa',rest:'#4a6fa5'}[st]||'#6b8ab0';
     // Late/early flags
     var flags=[];
@@ -3939,7 +3997,7 @@ async function loadPersonAttendance(){
       return '<input type="time" value="'+(val?fmtTime(val):'')+'" onchange="adminEditAtt(\''+username+'\',\''+key+'\',\''+field+'\',this.value)" style="width:65px;padding:1px 3px;border:1px solid #1e2d45;border-radius:3px;background:#0d1626;color:#e0e6f0;font-size:10px">';
     };
     html+='<tr style="border-bottom:1px solid #0d1626'+(isWeekend?';opacity:.5':'')+'">'
-      +'<td style="padding:5px 8px;white-space:nowrap;color:#e0e6f0">'+key.slice(5)+' <span style="color:#4a6fa5">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow]+'</span>'+(isHol?'<br><span style="font-size:9px;color:#a78bfa">'+esc(holMap[key])+'</span>':'')+'</td>'
+      +'<td style="padding:5px 8px;white-space:nowrap;color:#e0e6f0">'+key.slice(5)+' <span style="color:#4a6fa5">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow]+'</span>'+(isHol?'<br><span style="font-size:9px;color:#a78bfa">'+esc(holMap[key].name)+(isHolPaid?' 💚':' 🔴 Unpaid')+'</span>':'')+'</td>'
       +'<td style="text-align:center"><select onchange="adminEditAttStatus(\''+username+'\',\''+key+'\',this.value)" style="font-size:10px;padding:1px 3px;border:1px solid #1e2d45;border-radius:3px;background:#0d1626;color:'+stColor+'">'
       +'<option value="present"'+(st==='present'?' selected':'')+'>✓ Present</option>'
       +'<option value="absent"'+(st==='absent'?' selected':'')+'>✗ Absent</option>'
@@ -4620,6 +4678,7 @@ async function loadChatMessages(scroll){
         '<div style="text-align:center;padding:4px 0;font-size:11px;color:#2a4a6a;font-style:italic" id="msg-'+m.id+'">'+esc(m.message)+'</div>');
       return;
     }
+    var isMine=m.username===currentUser.username;
     var user=allUsers.find(function(u){return u.username===m.username;})||{};
     var initial=(user.display_name||m.username||'?').charAt(0).toUpperCase();
     var name=isMine?'You':(user.display_name||m.username);
