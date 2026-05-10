@@ -551,12 +551,19 @@ body{position:relative}
         <div class="form-field"><label>Early checkout before (S1 out)</label><input type="time" id="ar_out1_early" value="13:00"></div>
       </div>
       <div style="font-size:11px;font-weight:600;color:#60a5fa;margin:10px 0 6px">Break / Session 2 — Afternoon</div>
+      <div style="font-size:11px;color:#4a6fa5;margin-bottom:6px">迟回来 = 实际休息时长超过最大允许分钟数才算迟到</div>
       <div class="form-row">
-        <div class="form-field"><label>Late back from break after</label><input type="time" id="ar_in2_late" value="14:00"></div>
-        <div class="form-field"><label>Friday Muslim break extra (min)</label><input type="number" id="ar_friday_extra" value="30" min="0"></div>
+        <div class="form-field">
+          <label>Max break duration (minutes) <span style="font-size:10px;color:#4a6fa5">超过算迟回来</span></label>
+          <input type="number" id="ar_max_break_min" value="60" min="1" max="240" style="width:100%">
+        </div>
+        <div class="form-field">
+          <label>Friday Muslim extra break (min) <span style="font-size:10px;color:#4a6fa5">马来男周五延长</span></label>
+          <input type="number" id="ar_friday_extra" value="30" min="0" max="120">
+        </div>
       </div>
       <div class="form-row">
-        <div class="form-field"><label>Early end of day before (S2 out)</label><input type="time" id="ar_out2_early" value="17:30"></div>
+        <div class="form-field"><label>Early end of day before (S2 out) <span style="font-size:10px;color:#4a6fa5">早退</span></label><input type="time" id="ar_out2_early" value="17:30"></div>
       </div>
       <div class="form-actions">
         <button class="btn" onclick="closeModal('attRuleModal')">Cancel</button>
@@ -1115,8 +1122,13 @@ body{position:relative}
       <!-- ADMIN: ATTENDANCE RULES -->
       <div class="page" id="page-admin-att-rules">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-          <div><div class="page-title">⚙ Attendance Rules</div>
-          <div class="page-sub">Work hours & late/early thresholds by dept or employee</div></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn sm" onclick="openPage('admin-attendance')">← Back</button>
+            <div>
+              <div class="page-title">⚙ Attendance Rules</div>
+              <div class="page-sub">Work hours & late/early thresholds by dept or employee</div>
+            </div>
+          </div>
           <button class="btn primary" onclick="openNewRuleModal()">+ Add Rule</button>
         </div>
         <div id="attRulesContent"></div>
@@ -2584,7 +2596,12 @@ async function loadMyAttendance(){
     if(rec&&st==='present'&&rule){
       if(rec.check_in){var ciT=new Date(rec.check_in).getHours()*60+new Date(rec.check_in).getMinutes();if(ciT>timeStrToMin(rule.check_in_1_late_after))late=true;}
       if(rec.check_out){var coT=new Date(rec.check_out).getHours()*60+new Date(rec.check_out).getMinutes();if(coT<timeStrToMin(rule.check_out_1_early_before))earlyOut=true;}
-      if(rec.check_in_2){var ci2T=new Date(rec.check_in_2).getHours()*60+new Date(rec.check_in_2).getMinutes();var fri=isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0;if(ci2T>timeStrToMin(rule.check_in_2_late_after)+fri)late=true;}
+      // Late back from break = actual break duration > max allowed (not time-of-day)
+      if(rec.check_out&&rec.check_in_2){
+        var breakMin=(new Date(rec.check_in_2)-new Date(rec.check_out))/60000;
+        var maxBreak=(rule.max_break_minutes||60)+(isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0);
+        if(breakMin>maxBreak)late=true;
+      }
       if(rec.check_out_2){var co2T=new Date(rec.check_out_2).getHours()*60+new Date(rec.check_out_2).getMinutes();if(co2T<timeStrToMin(rule.check_out_2_early_before))earlyOut=true;}
     }
     workingDays++;
@@ -3340,6 +3357,35 @@ async function loadRolesPage(){
 
 /* ══ ROLE MODAL PERMISSION TABLE ══ */
 
+var PERM_DEFS=[
+  {id:'rm_tools',field:'can_access_tools',label:'Access Tools',short:'进入 Tools 模块',mod:'tools',status:'live',desc:'Controls access to tools.huangmotor.com. Without this, all Tools features are blocked.'},
+  {id:'rm_pl',field:'can_edit_pricelist',label:'Edit Pricelist',short:'编辑价格表',mod:'tools',status:'live',desc:'Add, edit and delete rows in the motorcycle pricelist. Without this, the user can only view.'},
+  {id:'rm_gen',field:'can_edit_generator',label:'Edit Generator',short:'编辑报价模板',mod:'tools',status:'live',desc:'Edit quotation generator settings, layout, and calculation defaults for PDF output.'},
+  {id:'rm_mf',field:'can_edit_mf',label:'Edit Max Finance',short:'编辑最高贷款额',mod:'tools',status:'live',desc:'Update the maximum finance amounts per brand and model used in HP calculations.'},
+  {id:'rm_viewer',field:'is_viewer_mode',label:'Viewer Mode',short:'只读模式（限制字段）',mod:'tools',status:'live',desc:'Read-only pricelist with limited fields, Cash OTR calculator only. Mutually exclusive with all edit permissions.',special:'viewer'},
+  {id:'rm_team',field:'can_access_team',label:'Access Team',short:'进入 Team 模块',mod:'team',status:'live',desc:'Gate to team.huangmotor.com. Required for any Team feature to work.'},
+  {id:'rm_task_dept',field:'can_assign_task_dept',label:'Assign Tasks (dept)',short:'分配任务（本部门）',mod:'team',status:'live',desc:'Create and assign tasks to members of the user\'s own department only.'},
+  {id:'rm_task_cross',field:'can_assign_task_cross',label:'Assign Tasks (cross)',short:'分配任务（跨部门）',mod:'team',status:'live',desc:'Create and assign tasks to members of any department. Superset of dept-only.'},
+  {id:'rm_attendance',field:'can_view_attendance',label:'View Attendance',short:'查看考勤 / 审批打卡',mod:'team',status:'live',desc:'View all staff attendance, approve or reject check-ins, and edit session times. All edits logged.'},
+  {id:'rm_leave_approve',field:'can_approve_leave',label:'Approve Leave',short:'批准请假',mod:'team',status:'live',desc:'Approve, reject, or revoke leave applications including already-approved leaves.'},
+  {id:'rm_perf_own',field:'can_view_perf_own',label:'View Own Performance',short:'查看自己绩效',mod:'team',status:'live',desc:'View own performance statistics. Enabled by default for all staff.'},
+  {id:'rm_perf_dept',field:'can_view_perf_dept',label:'View Dept Performance',short:'查看部门绩效',mod:'team',status:'live',desc:'View performance stats for all members within the same department.'},
+  {id:'rm_perf_all',field:'can_view_perf_all',label:'View All Performance',short:'查看全员绩效',mod:'team',status:'live',desc:'View performance stats for every staff member across all departments.'},
+  {id:'rm_view_all_sales',field:'can_view_all_sales',label:'View All Sales',short:'查看全员销售记录',mod:'team',status:'live',desc:'See MySales records from all staff, not just own. For sales managers.'},
+  {id:'rm_export_sales',field:'can_export_sales',label:'Export Sales',short:'导出销售报表',mod:'team',status:'live',desc:'Download sales records as CSV or PDF for month-end reporting.'},
+  {id:'rm_create_ann',field:'can_create_announcement',label:'Create Announcements',short:'发布公告',mod:'team',status:'live',desc:'Create and delete announcements. Unlocks read-receipt Details view.'},
+  {id:'rm_pin_ann',field:'can_pin_announcement',label:'Pin Announcements',short:'置顶公告',mod:'team',status:'live',desc:'Pin or unpin announcements to top of list.'},
+  {id:'rm_create_chat',field:'can_create_chat_room',label:'Create Chat Rooms',short:'创建群聊',mod:'team',status:'live',desc:'Create new group chat rooms. Independent from task assignment permissions.'},
+  {id:'rm_view_log',field:'can_view_change_log',label:'View Change Log',short:'查看更改记录',mod:'team',status:'live',desc:'View audit trail of attendance edits, sales changes, task deletions, and Tools edits.'},
+  {id:'rm_manage_users',field:'can_manage_users',label:'Manage Users',short:'管理账号',mod:'team',status:'live',desc:'Create, edit, disable accounts and reset passwords. All actions logged. Cannot manage admin accounts.'},
+  {id:'rm_manage_roles',field:'can_manage_roles',label:'Manage Roles',short:'管理角色',mod:'team',status:'live',desc:'Create and edit custom role templates. Cannot grant permissions beyond own level.'},
+  {id:'rm_manage_depts',field:'can_manage_departments',label:'Manage Departments',short:'管理部门',mod:'team',status:'live',desc:'Add, rename, and delete departments.'},
+  {id:'rm_export_att',field:'can_export_attendance',label:'Export Attendance',short:'导出考勤报表',mod:'team',status:'live',desc:'Export monthly attendance reports to CSV or PDF for payroll processing.'},
+  {id:'rm_access_benefit',field:'can_access_benefit',label:'Access Benefits',short:'访问福利模块',mod:'team',status:'future',desc:'Access the Benefits module (placeholder). Will cover benefit claims when built.'},
+  {id:'rm_manage_benefit',field:'can_manage_benefit',label:'Manage Benefits',short:'管理福利 / 审批申请',mod:'team',status:'future',desc:'Approve benefit claims and configure entitlement rules. HR manager level.'},
+  {id:'rm_access_payroll',field:'can_access_payroll',label:'Access Payroll',short:'访问薪资模拟器',mod:'team',status:'future',desc:'Access Salary Simulator — gross to nett with EPF, SOCSO, EIS, PCB. Read-only simulation.'},
+];
+
 var rmPermState={};
 var rmCurrentFilter='all';
 
@@ -3784,7 +3830,12 @@ async function loadStaffReport(){
       // Check early S1 out
       if(rec.check_out){var co=new Date(rec.check_out);var coT=co.getHours()*60+co.getMinutes();var earlyT=timeStrToMin(rule.check_out_1_early_before);if(coT<earlyT)earlyOut1=true;}
       // Check late S2 in (with Friday Muslim extension)
-      if(rec.check_in_2){var ci2=new Date(rec.check_in_2);var ci2T=ci2.getHours()*60+ci2.getMinutes();var late2T=timeStrToMin(rule.check_in_2_late_after)+(isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0);if(ci2T>late2T)lateBack=true;}
+      // Late back = break duration > max allowed
+      if(rec.check_out&&rec.check_in_2){
+        var breakDur=(new Date(rec.check_in_2)-new Date(rec.check_out))/60000;
+        var maxBrk=(rule.max_break_minutes||60)+(isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0);
+        if(breakDur>maxBrk)lateBack=true;
+      }
       // Check early S2 out
       if(rec.check_out_2){var co2=new Date(rec.check_out_2);var co2T=co2.getHours()*60+co2.getMinutes();var earlyEnd2T=timeStrToMin(rule.check_out_2_early_before);if(co2T<earlyEnd2T)earlyEnd=true;}
       // Total work minutes (S1 + S2 + S3)
@@ -3855,7 +3906,7 @@ async function loadAttRules(){
       +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.name)+'</div>'
       +'<div style="font-size:11px;color:#4a6fa5">'+( r.scope==='global'?'🌐 Global':r.scope==='department'?'🏬 Dept: '+esc(r.scope_target):'👤 User: '+esc(r.scope_target))+'</div>'
       +'<div style="font-size:10px;color:#2a4a6a;margin-top:2px">'
-      +'Late in: '+( r.check_in_1_late_after||'—')+' · Early out: '+(r.check_out_1_early_before||'—')+' · Late back: '+(r.check_in_2_late_after||'—')+' · End: '+(r.check_out_2_early_before||'—')+' · Fri+'+( r.break_overtime_friday_min||0)+'min'
+      +'Late in: '+(r.check_in_1_late_after||'—')+' · Early out: '+(r.check_out_1_early_before||'—')+' · Max break: '+(r.max_break_minutes||60)+'min · End: '+(r.check_out_2_early_before||'—')+' · Fri+'+(r.break_overtime_friday_min||0)+'min'
       +'</div>'
       +'</div>'
       +'<div style="display:flex;gap:5px">'
@@ -3871,7 +3922,8 @@ async function openNewRuleModal(){
   document.getElementById('ar_name').value='';
   document.getElementById('ar_scope').value='global';
   document.getElementById('ar_in1_early').value='08:00';document.getElementById('ar_in1_late').value='09:00';
-  document.getElementById('ar_out1_early').value='13:00';document.getElementById('ar_in2_late').value='14:00';
+  document.getElementById('ar_out1_early').value='13:00';
+  document.getElementById('ar_max_break_min').value='60';
   document.getElementById('ar_friday_extra').value='30';document.getElementById('ar_out2_early').value='17:30';
   populateRuleScopeTarget();toggleRuleScope();
   openModal('attRuleModal');
@@ -3899,7 +3951,7 @@ async function editAttRule(id){
   document.getElementById('ar_in1_early').value=r.check_in_1_early_before||'08:00';
   document.getElementById('ar_in1_late').value=r.check_in_1_late_after||'09:00';
   document.getElementById('ar_out1_early').value=r.check_out_1_early_before||'13:00';
-  document.getElementById('ar_in2_late').value=r.check_in_2_late_after||'14:00';
+  document.getElementById('ar_max_break_min').value=r.max_break_minutes||60;
   document.getElementById('ar_friday_extra').value=r.break_overtime_friday_min||30;
   document.getElementById('ar_out2_early').value=r.check_out_2_early_before||'17:30';
   openModal('attRuleModal');
@@ -3914,7 +3966,7 @@ async function saveAttRule(){
     check_in_1_early_before:document.getElementById('ar_in1_early').value,
     check_in_1_late_after:document.getElementById('ar_in1_late').value,
     check_out_1_early_before:document.getElementById('ar_out1_early').value,
-    check_in_2_late_after:document.getElementById('ar_in2_late').value,
+    max_break_minutes:parseInt(document.getElementById('ar_max_break_min').value)||60,
     break_overtime_friday_min:parseInt(document.getElementById('ar_friday_extra').value)||30,
     check_out_2_early_before:document.getElementById('ar_out2_early').value,
     is_active:true
