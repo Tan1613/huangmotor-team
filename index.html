@@ -718,6 +718,8 @@ body{position:relative}
           <select id="task_assign_type" onchange="toggleTaskAssignType()">
             <option value="person">👤 Specific Person</option>
             <option value="dept">🏬 Department</option>
+            <option value="all_staff">👥 All Staff</option>
+            <option value="all_dept">🏬 All Departments (select multiple)</option>
           </select>
         </div>
         <div class="form-field">
@@ -732,6 +734,24 @@ body{position:relative}
       <div class="form-field" id="task_dept_wrap" style="display:none">
         <label>Department</label>
         <select id="task_dept_id"></select>
+      </div>
+      <!-- All staff checkboxes -->
+      <div class="form-field" id="task_all_staff_wrap" style="display:none">
+        <label>Select Staff <span style="font-size:10px;color:#4a6fa5">— check all or pick individuals</span></label>
+        <div style="display:flex;gap:6px;margin-bottom:4px">
+          <button class="btn sm" onclick="checkAllStaff(true)" type="button">All</button>
+          <button class="btn sm" onclick="checkAllStaff(false)" type="button">None</button>
+        </div>
+        <div id="task_staff_list" style="max-height:160px;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:3px;border:1px solid #1e2d45;border-radius:6px;padding:6px"></div>
+      </div>
+      <!-- All dept checkboxes -->
+      <div class="form-field" id="task_all_dept_wrap" style="display:none">
+        <label>Select Departments</label>
+        <div style="display:flex;gap:6px;margin-bottom:4px">
+          <button class="btn sm" onclick="checkAllDepts(true)" type="button">All</button>
+          <button class="btn sm" onclick="checkAllDepts(false)" type="button">None</button>
+        </div>
+        <div id="task_dept_list" style="display:flex;flex-direction:column;gap:3px;border:1px solid #1e2d45;border-radius:6px;padding:6px"></div>
       </div>
       <div class="form-field">
         <label>Notes</label>
@@ -1381,8 +1401,10 @@ body{position:relative}
             </div>
             <!-- Search bar -->
             <div id="chatSearchBar" style="display:none;padding:6px .7rem;background:#0a0f1a;border-bottom:1px solid #1e2d45">
-              <div style="display:flex;gap:6px">
-                <input type="text" id="chatSearchInput" placeholder="Search messages..." style="flex:1;padding:6px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px" oninput="searchChatMessages(this.value)">
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <input type="text" id="chatSearchInput" placeholder="Search messages..." style="flex:1;min-width:120px;padding:6px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px" oninput="searchChatMessages()">
+                <input type="date" id="chatSearchFrom" style="padding:4px 6px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:11px" onchange="searchChatMessages()" title="From date">
+                <input type="date" id="chatSearchTo" style="padding:4px 6px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:11px" onchange="searchChatMessages()" title="To date">
                 <button class="btn sm" onclick="toggleChatSearch()">✕</button>
               </div>
               <div id="chatSearchResults" style="max-height:160px;overflow-y:auto;margin-top:4px"></div>
@@ -1776,6 +1798,7 @@ function openPage(name){
   else if(name==='admin-dept')loadDeptPage();
   else if(name==='admin-leave'){loadAllLeave();loadLeaveConfig();}
   else if(name==='admin-attendance'){setAttToday();switchAttTab('day');}
+  else if(name==='admin-att-rules')loadAttRules();
   else if(name==='benefit'){}// placeholder, nothing to load
   else if(name==='admin-roles')loadRolesPage();
   else if(name==='performance')loadPerformance();
@@ -2198,7 +2221,32 @@ function toggleTaskAssignType(){
   var t=document.getElementById('task_assign_type').value;
   document.getElementById('task_assignee_wrap').style.display=t==='person'?'':'none';
   document.getElementById('task_dept_wrap').style.display=t==='dept'?'':'none';
+  document.getElementById('task_all_staff_wrap').style.display=t==='all_staff'?'':'none';
+  document.getElementById('task_all_dept_wrap').style.display=t==='all_dept'?'':'none';
+  if(t==='all_staff')populateTaskStaffList();
+  if(t==='all_dept')populateTaskDeptList();
 }
+
+function populateTaskStaffList(){
+  var list=document.getElementById('task_staff_list');
+  list.innerHTML=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';}).map(function(u){
+    return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px">'
+      +'<input type="checkbox" class="task_staff_ck" value="'+esc(u.username)+'" checked> '+(esc(u.display_name||u.username))
+      +'</label>';
+  }).join('');
+}
+
+function populateTaskDeptList(){
+  var list=document.getElementById('task_dept_list');
+  list.innerHTML=allDepts.map(function(d){
+    return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px">'
+      +'<input type="checkbox" class="task_dept_ck" value="'+esc(d.name)+'" checked> '+esc(d.name)
+      +'</label>';
+  }).join('');
+}
+
+function checkAllStaff(val){document.querySelectorAll('.task_staff_ck').forEach(function(el){el.checked=val;});}
+function checkAllDepts(val){document.querySelectorAll('.task_dept_ck').forEach(function(el){el.checked=val;});}
 async function openTaskModal(){
   var canCross=currentUser.role==='admin'||currentUser.can_assign_task_cross;
   var canDept=currentUser.role==='admin'||currentUser.can_assign_task_dept||currentUser.can_assign_task_cross;
@@ -2207,6 +2255,11 @@ async function openTaskModal(){
   document.getElementById('task_plate').value='';document.getElementById('task_vehicle_model').value='';
   document.getElementById('task_due').value='';document.getElementById('task_type').value='general';
   document.getElementById('task_priority').value='normal';document.getElementById('task_assign_type').value='person';
+  // Show bulk assignment options for cross-dept users
+  var allStaffOpt=document.querySelector('#task_assign_type option[value="all_staff"]');
+  var allDeptOpt=document.querySelector('#task_assign_type option[value="all_dept"]');
+  if(allStaffOpt)allStaffOpt.style.display=canCross?'':'none';
+  if(allDeptOpt)allDeptOpt.style.display=canCross?'':'none';
   toggleTaskAssignType();
   var sel=document.getElementById('task_assignee');sel.innerHTML='';
   var users=canCross
@@ -2227,23 +2280,42 @@ async function saveTask(){
   var title=document.getElementById('task_title').value.trim();
   if(!title){toast('Task title required','error');return;}
   var assignType=document.getElementById('task_assign_type').value;
-  var assignTo=assignType==='person'?document.getElementById('task_assignee').value:null;
-  var deptId=assignType==='dept'?document.getElementById('task_dept_id').value:null;
-  if(assignType==='dept'&&!deptId){toast('Please select a department','error');return;}
   var plate=document.getElementById('task_plate').value.trim();
   var vModel=document.getElementById('task_vehicle_model').value.trim();
-  var dept=deptId?allDepts.find(function(d){return String(d.id)===String(deptId);}):null;
-  await sbPost('tasks',{
+  var base={
     title:title,description:document.getElementById('task_desc').value.trim(),
     task_type:document.getElementById('task_type').value,
     priority:document.getElementById('task_priority').value,
-    assigned_to:assignTo,
-    assigned_dept:dept?dept.name:null,
     assigned_by:currentUser.username,status:'pending',
     due_date:document.getElementById('task_due').value||null,
     vehicle_info:plate?{plate:plate,model:vModel}:null
-  });
-  closeModal('taskModal');loadAllTasks();toast('Task assigned','success');
+  };
+  if(assignType==='person'){
+    var assignTo=document.getElementById('task_assignee').value;
+    await sbPost('tasks',Object.assign({},base,{assigned_to:assignTo,assigned_dept:null}));
+    toast('Task assigned to '+assignTo,'success');
+  } else if(assignType==='dept'){
+    var deptId=document.getElementById('task_dept_id').value;
+    if(!deptId){toast('Please select a department','error');return;}
+    var dept=allDepts.find(function(d){return String(d.id)===String(deptId);});
+    await sbPost('tasks',Object.assign({},base,{assigned_to:null,assigned_dept:dept?dept.name:null}));
+    toast('Task assigned to department','success');
+  } else if(assignType==='all_staff'){
+    var selected=Array.from(document.querySelectorAll('.task_staff_ck:checked')).map(function(el){return el.value;});
+    if(!selected.length){toast('Select at least one staff member','error');return;}
+    for(var i=0;i<selected.length;i++){
+      await sbPost('tasks',Object.assign({},base,{assigned_to:selected[i],assigned_dept:null}));
+    }
+    toast('Task assigned to '+selected.length+' staff','success');
+  } else if(assignType==='all_dept'){
+    var selDepts=Array.from(document.querySelectorAll('.task_dept_ck:checked')).map(function(el){return el.value;});
+    if(!selDepts.length){toast('Select at least one department','error');return;}
+    for(var i=0;i<selDepts.length;i++){
+      await sbPost('tasks',Object.assign({},base,{assigned_to:null,assigned_dept:selDepts[i]}));
+    }
+    toast('Task assigned to '+selDepts.length+' departments','success');
+  }
+  closeModal('taskModal');loadAllTasks();
 }
 
 /* ══ LEAVE ══ */
@@ -2939,7 +3011,7 @@ async function loadAdminUsers(){
       +'<span style="font-size:10px;color:'+(u.is_active!==false?'#34d399':'#f87171')+'">'+(u.is_active!==false?'Active':'Disabled')+'</span>'
       +'<div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap">'
       +'<button class="btn sm" onclick="editUser(\''+esc(u.username)+'\')">Edit</button>'
-      +(lastInviteData&&lastInviteData.username===u.username?'<button class="btn sm" onclick="reshowInvite(\''+esc(u.username)+'\')" title="Re-show invite message">📋</button>':'')
+      +(u.username!==currentUser.username&&!isAdm?'<button class="btn sm" onclick="resendInvite(\''+esc(u.username)+'\')" title="Generate new invite message">📋</button>':'')
       +(u.username!==currentUser.username&&!isAdm?'<button class="btn sm" onclick="renameUsername(\''+esc(u.username)+'\')" title="Change username">@</button>':'')
       +(u.username!==currentUser.username?'<button class="btn sm" onclick="toggleActive(\''+esc(u.username)+'\','+(u.is_active!==false?'false':'true')+')">'+(u.is_active!==false?'Disable':'Enable')+'</button>':'')
       +(u.username!==currentUser.username?'<button class="btn sm" onclick="resetPw(\''+esc(u.username)+'\')">Reset PW</button>':'')
@@ -2993,6 +3065,14 @@ async function renameUsername(oldUsername){
   await sbPost('change_log',{username:currentUser.username,action:'rename_username',table_name:'users',record_id:oldUsername,after_data:{new_username:newUsername}});
   toast('Username renamed to "'+newUsername+'"','success');
   await loadAllUsersCache();loadAdminUsers();
+}
+async function resendInvite(username){
+  if(!confirm('Generate a new temporary password for "'+username+'" and show invite message?'))return;
+  var tempPw=generateTempPassword();
+  var hash=await sha256(tempPw);
+  await sbPatch('users',{username:username},{password_hash:hash,must_change_password:true});
+  showInviteModal(username,tempPw,'https://login.huangmotor.com');
+  toast('New temp password set — copy the invite message','success');
 }
 async function removeUser(username){
   if(!confirm('Permanently delete "'+username+'"?\nThis cannot be undone.'))return;
@@ -4267,15 +4347,26 @@ async function openNewRoomModal(){
   openModal('newRoomModal');
 }
 
+async function postSystemMsg(roomId,text){
+  await fetch(SB_URL+'/rest/v1/chat_messages',{method:'POST',
+    headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
+    body:JSON.stringify({room_id:roomId,username:'system',message:text,message_type:'system'})
+  });
+}
+
 async function createChatRoom(){
   var name=document.getElementById('cr_name').value.trim();
   if(!name){toast('Room name required','error');return;}
   var isPublic=document.getElementById('cr_public').value==='true';
   var members=Array.from(document.querySelectorAll('.rm_ck:checked')).map(function(el){return el.value;});
-  // Always include creator and all admins
   members.push(currentUser.username);
   allUsers.filter(function(u){return u.role==='admin'&&u.username!==currentUser.username;}).forEach(function(u){if(members.indexOf(u.username)<0)members.push(u.username);});
-  await sbPost('chat_rooms',{name:name,description:document.getElementById('cr_desc').value.trim()||null,created_by:currentUser.username,members:members,is_public:isPublic});
+  var res=await sbPost('chat_rooms',{name:name,description:document.getElementById('cr_desc').value.trim()||null,created_by:currentUser.username,members:members,is_public:isPublic});
+  if(res&&res.length){
+    var roomId=res[0].id;
+    var creatorName=currentUser.display_name||currentUser.username;
+    await postSystemMsg(roomId,'🎉 Room created by '+creatorName+'. Members: '+members.map(function(u){var usr=allUsers.find(function(x){return x.username===u;});return usr?(usr.display_name||u):u;}).join(', '));
+  }
   closeModal('newRoomModal');toast('Room created','success');loadChatRooms();
 }
 
@@ -4342,6 +4433,10 @@ async function addChatMember(){
   var members=rooms.length?(rooms[0].members||[]):[];
   if(members.indexOf(username)<0)members.push(username);
   await sbPatch('chat_rooms',{id:currentRoomId},{members:members});
+  var addedUser=allUsers.find(function(u){return u.username===username;});
+  var addedName=addedUser?(addedUser.display_name||username):username;
+  var byName=currentUser.display_name||currentUser.username;
+  await postSystemMsg(currentRoomId,'👋 '+addedName+' was added by '+byName);
   toast(username+' added','success');closeModal('roomManageModal');
   await openChatRoom(currentRoomId,document.getElementById('chatRoomName').textContent);
   openRoomManage();
@@ -4350,6 +4445,10 @@ async function removeChatMember(username){
   var rooms=await sbGet('chat_rooms','id=eq.'+currentRoomId+'&select=members');
   var members=(rooms.length?(rooms[0].members||[]):[]).filter(function(u){return u!==username;});
   await sbPatch('chat_rooms',{id:currentRoomId},{members:members});
+  var removedUser=allUsers.find(function(u){return u.username===username;});
+  var removedName=removedUser?(removedUser.display_name||username):username;
+  var byName=currentUser.display_name||currentUser.username;
+  await postSystemMsg(currentRoomId,'👋 '+removedName+' was removed by '+byName);
   toast(username+' removed','success');closeModal('roomManageModal');
   await openChatRoom(currentRoomId,document.getElementById('chatRoomName').textContent);
   openRoomManage();
@@ -4400,7 +4499,12 @@ async function loadChatMessages(scroll){
       }
       return;
     }
-    var isMine=m.username===currentUser.username;
+    // System messages (member join/leave/create notifications)
+    if(m.message_type==='system'){
+      container.insertAdjacentHTML('beforeend',
+        '<div style="text-align:center;padding:4px 0;font-size:11px;color:#2a4a6a;font-style:italic" id="msg-'+m.id+'">'+esc(m.message)+'</div>');
+      return;
+    }
     var user=allUsers.find(function(u){return u.username===m.username;})||{};
     var initial=(user.display_name||m.username||'?').charAt(0).toUpperCase();
     var name=isMine?'You':(user.display_name||m.username);
@@ -4421,13 +4525,13 @@ async function loadChatMessages(scroll){
       +(canHide&&!m.hidden_by?'<button class="btn sm" onclick="hideMsg('+m.id+')" style="font-size:10px;padding:2px 6px">'+(isAdmin?'Hide':'Retract')+'</button>':'')
       +(m.hidden_by&&isAdmin?'<button class="btn sm" onclick="unhideMsg('+m.id+')" style="font-size:10px;padding:2px 6px">Unhide</button>':'')
       +'</div>';
-    var bubble='<div class="chat-msg'+(isMine?' mine':'')+'" id="msg-'+m.id+'" data-id="'+m.id+'" onmouseenter="showMsgActions(this)" onmouseleave="hideMsgActions(this)" ontouchstart="handleMsgTouch(this,event)">'
+    var timeStr=new Date(m.created_at).toLocaleString('en-MY',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true});
       +'<div class="chat-avatar">'+initial+'</div>'
       +'<div class="chat-bubble">'
       +(isMine?'':'<div class="chat-bubble-name">'+esc(name)+'</div>')
       +replyHtml+content
       +hiddenTag
-      +'<div class="chat-bubble-time">'+fmtRelative(m.created_at)+'</div>'
+      +'<div class="chat-bubble-time">'+timeStr+'</div>'
       +actions
       +'</div></div>';
     container.insertAdjacentHTML('beforeend',bubble);
@@ -4471,16 +4575,23 @@ function toggleChatSearch(){
   if(!visible)document.getElementById('chatSearchInput').focus();
   else{document.getElementById('chatSearchInput').value='';document.getElementById('chatSearchResults').innerHTML='';}
 }
-async function searchChatMessages(query){
-  if(!query||query.length<2){document.getElementById('chatSearchResults').innerHTML='';return;}
-  var msgs=await sbGet('chat_messages','room_id=eq.'+currentRoomId+'&message=ilike.*'+encodeURIComponent(query)+'*&order=created_at.desc&limit=20&select=id,username,message,created_at');
+async function searchChatMessages(){
+  var query=(document.getElementById('chatSearchInput').value||'').trim();
+  var from=document.getElementById('chatSearchFrom').value;
+  var to=document.getElementById('chatSearchTo').value;
+  if(!query&&!from&&!to){document.getElementById('chatSearchResults').innerHTML='';return;}
+  var q='room_id=eq.'+currentRoomId+'&order=created_at.desc&limit=30&select=id,username,message,created_at';
+  if(query&&query.length>=2)q+='&message=ilike.*'+encodeURIComponent(query)+'*';
+  if(from)q+='&created_at=gte.'+from+'T00:00:00Z';
+  if(to)q+='&created_at=lte.'+to+'T23:59:59Z';
+  var msgs=await sbGet('chat_messages',q);
   if(!msgs.length){document.getElementById('chatSearchResults').innerHTML='<div style="font-size:11px;color:#4a6fa5;padding:4px">No results</div>';return;}
   document.getElementById('chatSearchResults').innerHTML=msgs.map(function(m){
     var u=allUsers.find(function(x){return x.username===m.username;})||{};
+    var timeStr=new Date(m.created_at).toLocaleString('en-MY',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true});
     return '<div onclick="scrollToMsg('+m.id+');toggleChatSearch()" style="padding:5px 6px;cursor:pointer;border-radius:4px;margin-bottom:2px;background:#0d1626" onmouseenter="this.style.background=\'#1e2d45\'" onmouseleave="this.style.background=\'#0d1626\'">'
-      +'<div style="font-size:11px;color:#60a5fa">'+(esc(u.display_name||m.username))+'</div>'
-      +'<div style="font-size:12px;color:#e0e6f0">'+esc((m.message||'').slice(0,60))+'</div>'
-      +'<div style="font-size:10px;color:#4a6fa5">'+fmtRelative(m.created_at)+'</div>'
+      +'<div style="display:flex;justify-content:space-between"><span style="font-size:11px;color:#60a5fa">'+(esc(u.display_name||m.username))+'</span><span style="font-size:10px;color:#4a6fa5">'+timeStr+'</span></div>'
+      +'<div style="font-size:12px;color:#e0e6f0">'+esc((m.message||'').slice(0,80))+'</div>'
       +'</div>';
   }).join('');
 }
@@ -4510,24 +4621,32 @@ async function togglePinRoom(){
 }
 
 /* ── Feedback / Report ── */
-function openFeedbackModal(){
-  var el=document.getElementById('fbContent');if(el)el.value='';
-  var anon=document.getElementById('fbAnon');if(anon)anon.checked=false;
-  openModal('feedbackModal');
-}
-async function submitFeedback(){
-  var content=(document.getElementById('fbContent').value||'').trim();
-  if(!content){toast('Please enter a message','error');return;}
-  var isAnon=document.getElementById('fbAnon').checked;
-  await sbPost('feedback_reports',{
-    room_id:currentRoomId,
-    reporter:isAnon?null:currentUser.username,
-    content:content,
-    is_anonymous:isAnon,
-    status:'open'
+async function openFeedbackModal(){
+  // Find admin users
+  var admins=allUsers.filter(function(u){return u.role==='admin';});
+  if(!admins.length){toast('No admin available','error');return;}
+  var admin=admins[0];
+  // Check if a private feedback room already exists between this user and admin
+  var rooms=await sbGet('chat_rooms','is_public=eq.false&select=id,name,members,created_by');
+  var dmRoom=rooms.find(function(r){
+    var members=r.members||[];
+    return members.indexOf(currentUser.username)>=0&&members.indexOf(admin.username)>=0&&r.members.length===2;
   });
-  closeModal('feedbackModal');
-  toast('Feedback sent to admin ✓','success');
+  if(!dmRoom){
+    // Create one
+    var res=await sbPost('chat_rooms',{
+      name:'Feedback: '+( currentUser.display_name||currentUser.username)+' ↔ Admin',
+      created_by:currentUser.username,
+      members:[currentUser.username,admin.username],
+      is_public:false,
+      description:'Private feedback channel'
+    });
+    if(res&&res.length)dmRoom=res[0];
+  }
+  if(!dmRoom){toast('Could not open feedback channel','error');return;}
+  // Open the DM room
+  backToRooms();
+  await openChatRoom(dmRoom.id,dmRoom.name);
 }
 
 async function hideMsg(id){
