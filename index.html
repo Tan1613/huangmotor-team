@@ -1119,7 +1119,14 @@ body{position:relative}
       <div class="page" id="page-admin-attendance">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
           <div><div class="page-title">🕐 Attendance</div></div>
-          <button class="btn sm" onclick="checkMissingCheckins().then(function(){toast('Absence check done','success');})" title="Send notifications to staff who haven't checked in today" style="font-size:11px">📢 Check Missing</button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:#4a6fa5">Auto absence alerts</span>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer">
+              <input type="checkbox" id="absenceAlertToggle" onchange="saveAbsenceAlertSetting(this.checked)" style="opacity:0;width:0;height:0">
+              <span id="absenceAlertTrack" style="position:absolute;inset:0;background:#1e2d45;border-radius:11px;transition:.2s"></span>
+              <span id="absenceAlertThumb" style="position:absolute;width:16px;height:16px;background:#4a6fa5;border-radius:50%;top:3px;left:3px;transition:.2s"></span>
+            </label>
+          </div>
         </div>
         <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
           <button class="btn primary" id="attTabDay" onclick="switchAttTab('day')">👤 Per Person</button>
@@ -1738,6 +1745,7 @@ async function afterLogin(){
   // Start badge refresh (every 60s)
   refreshBadges();
   setInterval(refreshBadges,60000);
+  if(currentUser.role==='admin')loadAbsenceAlertSetting();
 }
 
 function doLogout(){
@@ -1810,7 +1818,7 @@ function openPage(name){
   else if(name==='admin-tasks')loadAllTasks();
   else if(name==='admin-dept')loadDeptPage();
   else if(name==='admin-leave'){loadAllLeave();loadLeaveConfig();}
-  else if(name==='admin-attendance'){switchAttTab('day');}
+  else if(name==='admin-attendance'){switchAttTab('day');if(currentUser.role==='admin')loadAbsenceAlertSetting();}
   else if(name==='admin-att-rules')loadAttRules();
   else if(name==='benefit'){}// placeholder, nothing to load
   else if(name==='admin-roles')loadRolesPage();
@@ -2651,12 +2659,24 @@ async function saveHoliday(){
   var date=document.getElementById('hol_date').value;
   var name=document.getElementById('hol_name').value.trim();
   if(!date||!name){toast('Date and name required','error');return;}
+  var isPaidEl=document.getElementById('hol_paid');
+  var isPaid=isPaidEl?isPaidEl.value==='true':true;
+  var typeVal=document.getElementById('hol_type').value;
   var editId=document.getElementById('hol_edit_id').value;
+  var data={date:date,name:name,type:typeVal};
   if(editId){
-    await sbPatch('holidays',{id:parseInt(editId)},{date:date,name:name,type:document.getElementById('hol_type').value,is_paid:document.getElementById('hol_paid').value==='true'});
+    var ok=await sbPatch('holidays',{id:parseInt(editId)},data);
+    if(!ok){toast('Update failed','error');return;}
     toast('Holiday updated','success');
   } else {
-    await sbPost('holidays',{date:date,name:name,type:document.getElementById('hol_type').value,is_paid:document.getElementById('hol_paid').value==='true',created_by:currentUser.username});
+    data.created_by=currentUser.username;
+    // Try with is_paid first, fall back without it
+    var r=await fetch(SB_URL+'/rest/v1/holidays',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(Object.assign({},data,{is_paid:isPaid}))});
+    if(!r.ok){
+      // Retry without is_paid (column may not exist yet)
+      var r2=await fetch(SB_URL+'/rest/v1/holidays',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});
+      if(!r2.ok){var err=await r2.json().catch(function(){return {};});toast('Failed: '+(err.message||err.details||'unknown error'),'error');return;}
+    }
     toast('Holiday added','success');
   }
   closeModal('holidayModal');renderCalendar();
@@ -2670,7 +2690,7 @@ function openHolidayModal(date){
   document.getElementById('hol_edit_id').value='';
   document.getElementById('hol_date').value=date||'';
   document.getElementById('hol_name').value='';
-  document.getElementById('hol_type').value='holiday';
+  document.getElementById('hol_type').value='public';
   document.getElementById('hol_paid').value='true';
   document.getElementById('holidayModalTitle').textContent='Add Holiday / Rest Day';
   document.getElementById('hol_save_btn').textContent='Add';
@@ -2680,7 +2700,7 @@ function editHolidayModal(id,date,name,type,isPaid){
   document.getElementById('hol_edit_id').value=id;
   document.getElementById('hol_date').value=date;
   document.getElementById('hol_name').value=name;
-  document.getElementById('hol_type').value=type||'holiday';
+  document.getElementById('hol_type').value=(type==='rest'?'rest':'public');
   document.getElementById('hol_paid').value=isPaid===false?'false':'true';
   document.getElementById('holidayModalTitle').textContent='Edit Holiday / Rest Day';
   document.getElementById('hol_save_btn').textContent='Save Changes';
@@ -2688,44 +2708,92 @@ function editHolidayModal(id,date,name,type,isPaid){
 }
 
 /* ══ AUTO ABSENCE NOTIFICATION ══ */
-async function checkMissingCheckins(){
-  if(currentUser.role!=='admin')return;
-  var today=new Date().toISOString().slice(0,10);
-  var now=new Date();var h=now.getHours();var m=now.getMinutes();var nowMin=h*60+m;
-  // Only run after 10am (give staff time to check in)
-  if(nowMin<600)return;
-  // Get default rule
-  var rule=await getEffectiveRule(null,null);
-  if(!rule)return;
-  // Get all active staff
+var absenceAlertEnabled=false;
+var absenceCheckInterval=null;
+
+async function loadAbsenceAlertSetting(){
+  var rows=await sbGet('app_config','key=eq.absence_alert_enabled');
+  var val=rows.length?rows[0].value:false;
+  absenceAlertEnabled=(val===true||val==='true'||val===1);
+  updateAbsenceToggleUI();
+  if(absenceAlertEnabled)startAbsenceCheckInterval();
+}
+
+function updateAbsenceToggleUI(){
+  var cb=document.getElementById('absenceAlertToggle');
+  var track=document.getElementById('absenceAlertTrack');
+  var thumb=document.getElementById('absenceAlertThumb');
+  if(!cb)return;
+  cb.checked=absenceAlertEnabled;
+  if(track)track.style.background=absenceAlertEnabled?'#1d4ed8':'#1e2d45';
+  if(thumb){thumb.style.left=absenceAlertEnabled?'21px':'3px';thumb.style.background=absenceAlertEnabled?'#fff':'#4a6fa5';}
+}
+
+async function saveAbsenceAlertSetting(enabled){
+  absenceAlertEnabled=!!enabled;
+  await fetch(SB_URL+'/rest/v1/app_config',{
+    method:'POST',
+    headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),
+    body:JSON.stringify({key:'absence_alert_enabled',value:enabled})
+  });
+  updateAbsenceToggleUI();
+  if(enabled){startAbsenceCheckInterval();toast('Auto absence alerts ON ✓','success');}
+  else{clearInterval(absenceCheckInterval);absenceCheckInterval=null;toast('Auto absence alerts OFF','success');}
+}
+
+function startAbsenceCheckInterval(){
+  clearInterval(absenceCheckInterval);
+  absenceCheckInterval=setInterval(runAbsenceCheck,10*60*1000);
+  runAbsenceCheck();
+}
+
+async function runAbsenceCheck(){
+  if(!absenceAlertEnabled||currentUser.role!=='admin')return;
+  var today=new Date();
+  var todayStr=today.toISOString().slice(0,10);
+  if(today.getDay()===0)return;
+  var hols=await sbGet('holidays','date=eq.'+todayStr+'&select=date');
+  if(hols.length)return;
   var staff=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});
-  // Get today's attendance
-  var atts=await sbGet('attendance','date=eq.'+today+'&select=username,status,check_in');
-  var attMap={};atts.forEach(function(a){attMap[a.username]=a;});
-  // Get today's approved leaves
-  var leaves=await sbGet('leave_requests','start_date=lte.'+today+'&end_date=gte.'+today+'&status=eq.approved&select=username');
+  var leaves=await sbGet('leave_requests','start_date=lte.'+todayStr+'&end_date=gte.'+todayStr+'&status=eq.approved&select=username');
   var onLeave=new Set(leaves.map(function(l){return l.username;}));
-  // Get holidays
-  var hols=await sbGet('holidays','date=eq.'+today+'&select=date');
-  if(hols.length)return;// holiday — no check needed
-  // Sunday — no check
-  if(now.getDay()===0)return;
+  var atts=await sbGet('attendance','date=eq.'+todayStr+'&select=username,check_in,check_out,check_in_2,check_out_2');
+  var attMap={};atts.forEach(function(a){attMap[a.username]=a;});
+  var nowMin=today.getHours()*60+today.getMinutes();
+
   for(var i=0;i<staff.length;i++){
     var u=staff[i];
     if(onLeave.has(u.username))continue;
-    var att=attMap[u.username];
-    if(att&&(att.check_in||att.status==='present'))continue;
-    // Check if already notified today
-    var existing=await sbGet('announcements','target_role=eq.'+encodeURIComponent(u.username)+'&title=ilike.*missing check-in*'+today+'*&select=id');
-    if(existing.length)continue;
-    // Send notification
-    await sbPost('announcements',{
-      title:'⚠️ Missing check-in — '+today,
-      content:'You have not checked in today ('+today+'). Please check in or apply for leave. If no action is taken, this may be recorded as absent.',
-      target_role:u.username,
-      is_pinned:false,
-      created_by:'system'
-    });
+    // Get this person's effective rule → use their role's early-out time
+    var rule=await getEffectiveRule(u.username,u.department);
+    // Threshold: check_out_2_early_before = latest S2 checkout = end of work day
+    var endOfDayMin=timeStrToMin((rule&&rule.check_out_2_early_before)||'17:30');
+    // Don't notify until past their end-of-day
+    if(nowMin<endOfDayMin)continue;
+    var att=attMap[u.username]||{};
+    // Full day done
+    if(att.check_out_2)continue;
+
+    if(att.check_in&&!att.check_in_2){
+      // Morning only — half day / incomplete PM
+      var notifKey='half_day:'+u.username+':'+todayStr;
+      var ex=await sbGet('announcements','target_role=eq.'+encodeURIComponent(u.username)+'&title=eq.'+encodeURIComponent('⚠️ Incomplete attendance — '+todayStr)+'&deleted_at=is.null&select=id');
+      if(ex.length)continue;
+      await sbPost('announcements',{
+        title:'⚠️ Incomplete attendance — '+todayStr,
+        content:'Morning session recorded but afternoon is missing for '+todayStr+'. Please check in for S2 or apply for half-day leave before end of day.',
+        target_role:u.username,is_pinned:false,created_by:'system'
+      });
+    } else if(!att.check_in){
+      // No check-in at all
+      var ex2=await sbGet('announcements','target_role=eq.'+encodeURIComponent(u.username)+'&title=eq.'+encodeURIComponent('⚠️ Missing check-in — '+todayStr)+'&deleted_at=is.null&select=id');
+      if(ex2.length)continue;
+      await sbPost('announcements',{
+        title:'⚠️ Missing check-in — '+todayStr,
+        content:'No attendance recorded for '+todayStr+'. Please check in or apply for leave immediately. Failure to do so will be recorded as absent.',
+        target_role:u.username,is_pinned:false,created_by:'system'
+      });
+    }
   }
 }
 
