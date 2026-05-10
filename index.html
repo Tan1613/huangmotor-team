@@ -796,6 +796,7 @@ body{position:relative}
     <span class="tb-user" id="tbUser"></span>
     <span class="tb-badge" id="tbBadge"></span>
     <button class="tb-btn" onclick="openPage('profile')">👤 Profile</button>
+    <button id="langToggleBtn" class="tb-btn" onclick="setLang(LANG==='zh'?'en':'zh')" style="font-size:11px">中文</button>
     <button class="tb-btn red" onclick="doLogout()">Sign Out</button>
   </div>
   <div class="main">
@@ -1646,6 +1647,9 @@ async function afterLogin(){
   await loadAllUsersCache();
   await loadDashboard();
   await checkUnread();
+  // Load language preference
+  var savedLang=localStorage.getItem('hm_lang');
+  if(savedLang&&(savedLang==='zh'||savedLang==='en')){LANG=savedLang;applyLang();}
   // Start badge refresh (every 60s)
   refreshBadges();
   setInterval(refreshBadges,60000);
@@ -3154,7 +3158,86 @@ function generateGPSWatermark(gps,field,timestamp){
   });
 }
 
-/* ══ CUSTOM ROLES ══ */
+/* ══ i18n ══ */
+var LANG='en';
+var I18N={
+  en:{
+    dashboard:'Dashboard',announcements:'Announcements',tasks:'My Tasks',
+    mysales:'My Sales',chat:'Chat',checkin:'Check In',leave:'Leave',
+    calendar:'Calendar',performance:'Performance',profile:'My Profile',
+    benefit:'Benefits',attendance:'Attendance',attRules:'Att. Rules',
+    users:'Users',roles:'Roles',departments:'Departments',media:'Media',
+    allTasks:'All Tasks',leaveApprovals:'Leave Approvals',
+    pending:'Pending',present:'Present',absent:'Absent',
+    approved:'Approved',rejected:'Rejected',cancelled:'Cancelled',
+    save:'Save','delete':'Delete',edit:'Edit',cancel:'Cancel',
+    confirm:'Confirm',close:'Close',add:'Add',create:'Create',
+    loading:'Loading…',noData:'No records found',
+    checkIn:'Check In',checkOut:'Check Out',
+    late:'Late',earlyOut:'Early Out',
+    signOut:'Sign Out',settings:'Settings'
+  },
+  zh:{
+    dashboard:'主页',announcements:'公告',tasks:'我的任务',
+    mysales:'我的销售',chat:'聊天',checkin:'打卡',leave:'请假',
+    calendar:'日历',performance:'绩效',profile:'我的资料',
+    benefit:'福利',attendance:'考勤',attRules:'考勤规则',
+    users:'用户管理',roles:'角色管理',departments:'部门管理',media:'媒体管理',
+    allTasks:'所有任务',leaveApprovals:'请假审批',
+    pending:'待处理',present:'出席',absent:'缺席',
+    approved:'已批准',rejected:'已拒绝',cancelled:'已取消',
+    save:'保存','delete':'删除',edit:'编辑',cancel:'取消',
+    confirm:'确认',close:'关闭',add:'添加',create:'创建',
+    loading:'加载中…',noData:'暂无记录',
+    checkIn:'签到',checkOut:'签退',
+    late:'迟到',earlyOut:'早退',
+    signOut:'退出登录',settings:'设置'
+  }
+};
+function t(key){return (I18N[LANG]&&I18N[LANG][key])||I18N.en[key]||key;}
+function setLang(lang){
+  LANG=lang;
+  localStorage.setItem('hm_lang',lang);
+  applyLang();
+}
+function applyLang(){
+  // Nav items
+  var navMap={
+    'nav-dashboard':'dashboard','nav-announcements':'announcements',
+    'nav-tasks':'tasks','nav-mysales':'mysales','nav-chat':'chat',
+    'nav-mycheckin':'checkin','nav-leave':'leave','nav-calendar':'calendar',
+    'nav-performance':'performance','nav-profile':'profile','nav-benefit':'benefit',
+    'nav-admin-attendance':'attendance','nav-admin-att-rules':'attRules',
+    'nav-admin-users':'users','nav-admin-roles':'roles',
+    'nav-admin-dept':'departments','nav-admin-media':'media',
+    'nav-admin-tasks':'allTasks','nav-admin-leave':'leaveApprovals'
+  };
+  Object.keys(navMap).forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el)return;
+    var icon=el.querySelector('.nav-icon');
+    var iconHtml=icon?icon.outerHTML:'';
+    var badge=el.querySelector('.nav-badge');
+    var badgeHtml=badge?badge.outerHTML:'';
+    el.innerHTML=iconHtml+t(navMap[id])+badgeHtml;
+  });
+  // Mobile nav
+  var mnMap={
+    'mn-dashboard':'dashboard','mn-tasks':'tasks','mn-mycheckin':'checkin',
+    'mn-chat':'chat','mn-more':LANG==='zh'?'更多':'More'
+  };
+  Object.keys(mnMap).forEach(function(id){
+    var el=document.getElementById(id);if(!el)return;
+    var icon=el.querySelector('.mn-icon');
+    var iconHtml=icon?icon.outerHTML:'';
+    var badge=el.querySelector('.mn-badge');
+    var badgeHtml=badge?badge.outerHTML:'';
+    el.innerHTML=iconHtml+(mnMap[id].indexOf(' ')<0?t(mnMap[id]):mnMap[id])+badgeHtml;
+  });
+  // Page titles — only update visible page
+  var langBtn=document.getElementById('langToggleBtn');
+  if(langBtn)langBtn.textContent=LANG==='zh'?'EN':'中文';
+}
 var allRoles=[];
 async function loadAllRoles(){
   allRoles=await sbGet('custom_roles','order=name.asc');
@@ -3257,7 +3340,18 @@ async function loadRolesPage(){
 
 /* ══ ROLE MODAL PERMISSION TABLE ══ */
 
-var rmPermState={};// stores checked/disabled state independently of DOM
+var rmPermState={};
+var rmCurrentFilter='all';
+
+function rmFilter(f){
+  rmCurrentFilter=f;
+  ['all','tools','team','live','future'].forEach(function(x){
+    var b=document.getElementById('rmf-'+x);
+    if(!b)return;
+    b.className='btn sm'+(x===f?' primary':'');
+  });
+  renderRmPerms();
+}
 
 function rmSetState(id,checked,disabled){
   rmPermState[id]={checked:!!checked,disabled:!!disabled};
@@ -4553,15 +4647,16 @@ async function loadMediaManager(){
   // Count base64 data sizes from attendance photos and chat images
   var totalBytes=0;var breakdown=[];
   // Checkin photos
-  var attRows=await sbGet('attendance','or=(checkin_photo.not.is.null,checkin_photo_2.not.is.null,checkin_photo_3.not.is.null)&select=username,date,checkin_photo,checkin_photo_2,checkin_photo_3');
+  var attRows=await sbGet('attendance','checkin_photo=not.is.null&select=username,date,checkin_photo,checkin_photo_2,checkin_photo_3');
+  var attRows2=await sbGet('attendance','checkin_photo_2=not.is.null&select=checkin_photo_2');
+  var attRows3=await sbGet('attendance','checkin_photo_3=not.is.null&select=checkin_photo_3');
   var attBytes=0;
-  attRows.forEach(function(r){
-    if(r.checkin_photo)attBytes+=r.checkin_photo.length;
-    if(r.checkin_photo_2)attBytes+=r.checkin_photo_2.length;
-    if(r.checkin_photo_3)attBytes+=r.checkin_photo_3.length;
-  });
-  attBytes=Math.round(attBytes*0.75);// base64 → actual bytes approx
+  attRows.forEach(function(r){if(r.checkin_photo)attBytes+=r.checkin_photo.length;if(r.checkin_photo_2)attBytes+=r.checkin_photo_2.length;if(r.checkin_photo_3)attBytes+=r.checkin_photo_3.length;});
+  attRows2.forEach(function(r){if(r.checkin_photo_2)attBytes+=r.checkin_photo_2.length;});
+  attRows3.forEach(function(r){if(r.checkin_photo_3)attBytes+=r.checkin_photo_3.length;});
+  attBytes=Math.round(attBytes*0.75);
   breakdown.push({label:'Check-in Photos',bytes:attBytes,count:attRows.length,icon:'📷'});
+  totalBytes+=attBytes;
   totalBytes+=attBytes;
   // Checkin approvals photos
   var apprRows=await sbGet('checkin_approvals','photo.not.is.null&select=id,photo,username,date');
