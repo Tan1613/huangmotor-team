@@ -1614,14 +1614,13 @@ async function sbDelete(table,match){
 }
 
 function esc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-async function sha256(msg){var buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(msg));return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');}
 function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='toast '+(type||'');t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2500);}
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 function fmtDate(d){if(!d)return '—';var t=new Date(d);return t.getDate().toString().padStart(2,'0')+'/'+(t.getMonth()+1).toString().padStart(2,'0')+'/'+t.getFullYear();}
 function fmtTime(d){if(!d)return '';var t=new Date(d);return t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0');}
 function fmtRelative(d){if(!d)return '';var diff=(Date.now()-new Date(d).getTime())/1000;if(diff<60)return 'just now';if(diff<3600)return Math.floor(diff/60)+'m ago';if(diff<86400)return Math.floor(diff/3600)+'h ago';return Math.floor(diff/86400)+'d ago';}
-function isAdminOrSuper(){return currentUser&&(currentUser.role==='admin'||currentUser.department==='supervisor');}
+function isAdminOrSuper(){return currentUser&&currentUser.role==='admin';}
 
 /* ══ AUTH ══ */
 async function sha256(msg){
@@ -2248,10 +2247,6 @@ async function saveTask(){
 }
 
 /* ══ LEAVE ══ */
-function updateLeaveDays(){
-  var s=document.getElementById('leave_start').value,e=document.getElementById('leave_end').value;
-  if(s&&e){var d=Math.round((new Date(e)-new Date(s))/86400000)+1;document.getElementById('leaveDaysCount').textContent=d>0?d+' day'+(d>1?'s':''):'Invalid dates';}
-}
 async function loadMyLeave(){
   var cfg=await sbGet('leave_config','select=key,value');
   var cfgMap={};cfg.forEach(function(c){cfgMap[c.key]=c.value;});
@@ -2988,33 +2983,6 @@ async function saveEditUser(username,isAdm){
 }
 
 /* ══ PROFILE ══ */
-function loadProfilePage(){
-  if(!currentUser)return;
-  document.getElementById('pf_username').value=currentUser.username||'';
-  document.getElementById('pf_display_name').value=currentUser.display_name||'';
-  document.getElementById('pf_position').value=currentUser.position||'';
-  document.getElementById('pf_phone').value=currentUser.phone||'';
-  document.getElementById('pf_email').value=currentUser.email||'';
-  // Lock position for non-admin
-  var posEl=document.getElementById('pf_position');
-  if(currentUser.role!=='admin'){
-    posEl.readOnly=true;posEl.style.opacity='0.5';posEl.title='Only Admin can change position';
-  } else {
-    posEl.readOnly=false;posEl.style.opacity='';posEl.title='';
-  }
-  var n=currentUser.display_name||currentUser.username||'?';
-  document.getElementById('profileAvatar').textContent=n.charAt(0).toUpperCase();
-  document.getElementById('profileName').textContent=n;
-  document.getElementById('profileRole').textContent=(currentUser.role||'staff')+(currentUser.department?' · '+currentUser.department:'');
-  // Fetch and show joined date
-  sbGet('users','username=eq.'+encodeURIComponent(currentUser.username)+'&select=joined_date,resigned_date').then(function(rows){
-    var el=document.getElementById('pf_joined_display');
-    if(el&&rows.length){
-      var j=rows[0].joined_date;var r=rows[0].resigned_date;
-      el.textContent=j?'📅 Joined: '+fmtDate(j)+(r?' · Resigned: '+fmtDate(r):''):'—';
-    }
-  });
-}
 function autoFillFromIC(val){
   var digits=val.replace(/-/g,'');
   if(digits.length>=6){
