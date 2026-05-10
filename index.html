@@ -485,6 +485,14 @@ body{position:relative}
         <div class="form-field"><label>Role Name</label><input type="text" id="rm_name" placeholder="e.g. Sales Executive"></div>
         <div class="form-field"><label>Description</label><input type="text" id="rm_desc" placeholder="Brief description"></div>
       </div>
+      <div class="form-field">
+        <label>Applies To <span style="font-size:10px;color:#4a6fa5">— filters role dropdown when creating accounts</span></label>
+        <select id="rm_applies_to" style="width:100%;padding:7px 10px;border:1px solid #1e2d45;border-radius:7px;background:#0d1626;color:#e0e6f0">
+          <option value="all">All groups (Staff + Partner)</option>
+          <option value="staff">Staff only</option>
+          <option value="partner">Partner only</option>
+        </select>
+      </div>
       <div style="font-size:11px;font-weight:600;color:#4a6fa5;margin:10px 0 6px;text-transform:uppercase;letter-spacing:.05em">Module Access</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div style="border:1px solid #1e3a5f;border-radius:8px;overflow:hidden">
@@ -1211,11 +1219,11 @@ body{position:relative}
           </div>
           <div class="form-row">
             <div class="form-field">
-              <label>System Role</label>
+              <label>Group / System Role</label>
               <select id="nu_role" onchange="onNuRoleChange()">
                 <option value="staff">Staff</option>
-                <option value="admin">Admin</option>
                 <option value="partner">Partner</option>
+                <option value="admin">Admin (full access)</option>
               </select>
             </div>
             <div class="form-field">
@@ -2656,21 +2664,28 @@ var NU_PERM_MAP={
 function onNuRoleChange(){
   var role=document.getElementById('nu_role').value;
   var mod=document.getElementById('nu_modules');
-  if(role==='staff'){
-    mod.style.display='';
-    populateNuRoleDropdown();
-  } else {
+  if(role==='admin'){
+    // Admin gets everything, no custom role needed
     mod.style.display='none';
+  } else {
+    // Staff, partner, etc — all need a custom role
+    mod.style.display='';
+    populateNuRoleDropdown(role);
   }
 }
 
-async function populateNuRoleDropdown(){
+async function populateNuRoleDropdown(groupFilter){
   await loadAllRoles();
   var sel=document.getElementById('nu_custom_role');
   var cur=sel.value;
+  var filtered=allRoles.filter(function(r){
+    if(r.is_active===false)return false;
+    if(!r.applies_to||r.applies_to==='all')return true;
+    return r.applies_to===groupFilter;
+  });
   sel.innerHTML='<option value="">— Select a role —</option>'
-    +allRoles.filter(function(r){return r.is_active!==false;}).map(function(r){
-      return '<option value="'+r.id+'"'+(cur==r.id?' selected':'')+'>'+esc(r.name)+'</option>';
+    +filtered.map(function(r){
+      return '<option value="'+r.id+'"'+(cur==r.id?' selected':'')+'>'+esc(r.name)+(r.applies_to&&r.applies_to!=='all'?' ('+r.applies_to+')':'')+'</option>';
     }).join('');
   if(cur)sel.value=cur;
 }
@@ -2745,13 +2760,13 @@ async function createUser(){
   if(!u){toast('Username required','error');return;}
   var r=document.getElementById('nu_role').value;
   var isAdmin=r==='admin';
-  if(r==='staff'){
+  if(r!=='admin'){
     var roleId=document.getElementById('nu_custom_role').value;
-    if(!roleId){toast('Please select a Custom Role for this staff member','error');return;}
+    if(!roleId){toast('Please select a Custom Role','error');return;}
   }
   var tempPw=generateTempPassword();var hash=await sha256(tempPw);
   var dept=document.getElementById('nu_dept').value;
-  var customRoleId=(!isAdmin&&r==='staff')?parseInt(document.getElementById('nu_custom_role').value):null;
+  var customRoleId=(r!=='admin')?parseInt(document.getElementById('nu_custom_role').value):null;
   var perms={};
   if(!isAdmin){Object.keys(NU_PERM_MAP).forEach(function(ckId){var el=document.getElementById(ckId);if(el)perms[NU_PERM_MAP[ckId]]=el.checked;});perms.can_view_perf_own=true;}
   var overrideFields=[];
@@ -3157,7 +3172,7 @@ async function loadRolesPage(){
       +'<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-bottom:3px">'+esc(r.name)+'</div>'
-      +(r.description?'<div style="font-size:11px;color:#4a6fa5;margin-bottom:6px">'+esc(r.description)+'</div>':'')
+      +'<div style="font-size:11px;color:#4a6fa5">'+(r.applies_to&&r.applies_to!=='all'?'Applies to: <strong>'+r.applies_to+'</strong>':'Applies to: all groups')+'</div>'
       +'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">'
       +perms.map(function(p){return '<span style="font-size:10px;padding:1px 7px;border-radius:4px;background:#0d1e35;color:#60a5fa">'+p+'</span>';}).join('')
       +'</div>'
@@ -3187,6 +3202,7 @@ function openRoleModal(id){
   document.getElementById('rm_id').value='';
   document.getElementById('rm_name').value='';
   document.getElementById('rm_desc').value='';
+  document.getElementById('rm_applies_to').value='all';
   document.getElementById('roleModalTitle').textContent='🎭 New Role';
   ['rm_tools','rm_team','rm_pl','rm_gen','rm_mf','rm_viewer','rm_task_dept','rm_task_cross','rm_attendance','rm_leave_approve','rm_perf_dept','rm_perf_all'].forEach(function(i){var el=document.getElementById(i);if(el){el.checked=false;el.disabled=false;}});
   document.getElementById('rm_perf_own').checked=true;
@@ -3200,6 +3216,7 @@ async function editRole(id){
   document.getElementById('rm_id').value=id;
   document.getElementById('rm_name').value=r.name||'';
   document.getElementById('rm_desc').value=r.description||'';
+  document.getElementById('rm_applies_to').value=r.applies_to||'all';
   document.getElementById('roleModalTitle').textContent='Edit Role: '+esc(r.name);
   var set=function(id,val){var el=document.getElementById(id);if(el)el.checked=!!val;};
   set('rm_tools',r.can_access_tools);set('rm_team',r.can_access_team);
@@ -3217,7 +3234,9 @@ async function saveRole(){
   if(!name){toast('Role name required','error');return;}
   var id=document.getElementById('rm_id').value;
   var data={
-    name:name,description:document.getElementById('rm_desc').value.trim()||null,is_active:true,
+    name:name,description:document.getElementById('rm_desc').value.trim()||null,
+    applies_to:document.getElementById('rm_applies_to').value||'all',
+    is_active:true,
     can_access_tools:document.getElementById('rm_tools').checked,
     can_access_team:document.getElementById('rm_team').checked,
     can_edit_pricelist:document.getElementById('rm_pl').checked,
@@ -4693,34 +4712,29 @@ async function resolvePermissions(user){
     user.is_viewer_mode=false;
     return;
   }
-  // If no custom role assigned, keep existing can_* fields as-is (backward compat)
+  // All non-admin groups (staff, partner, etc) — use custom role if assigned
   if(!user.custom_role_id){
-    // Just ensure perf_own defaults to true if not set
+    // No custom role — keep existing can_* fields (backward compat for old accounts)
     if(user.can_view_perf_own===undefined||user.can_view_perf_own===null)user.can_view_perf_own=true;
     return;
   }
-  // Start with all false, perf_own true
+  // Resolve from custom role template
   var resolved={};
   PERM_FIELDS.forEach(function(f){resolved[f]=false;});
   resolved.can_view_perf_own=true;
-  // Layer 1: apply custom role template
   var roles=await sbGet('custom_roles','id=eq.'+user.custom_role_id+'&is_active=eq.true&select=*');
   if(roles.length){
     var role=roles[0];
     PERM_FIELDS.forEach(function(f){if(role[f]!==undefined&&role[f]!==null)resolved[f]=role[f];});
     user._custom_role_name=role.name;
-    user._custom_role_description=role.description;
   }
-  // Layer 2: apply individual permission overrides
+  // Apply individual overrides
   var overrides=user.permission_overrides||[];
   if(Array.isArray(overrides)&&overrides.length){
     overrides.forEach(function(f){
-      if(PERM_FIELDS.indexOf(f)>=0&&user[f]!==undefined&&user[f]!==null){
-        resolved[f]=user[f];
-      }
+      if(PERM_FIELDS.indexOf(f)>=0&&user[f]!==undefined&&user[f]!==null)resolved[f]=user[f];
     });
   }
-  // Viewer mode mutually exclusive with edit
   if(resolved.is_viewer_mode){
     resolved.can_edit_pricelist=false;
     resolved.can_edit_generator=false;
