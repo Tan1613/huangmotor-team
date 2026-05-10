@@ -953,8 +953,9 @@ body{position:relative}
       <!-- Holiday modal -->
       <div class="modal-overlay" id="holidayModal">
         <div class="modal" style="max-width:360px">
-          <div class="modal-hdr"><h3>📅 Add Holiday / Rest Day</h3><button class="btn sm" onclick="closeModal('holidayModal')">✕</button></div>
+          <div class="modal-hdr"><h3 id="holidayModalTitle">📅 Add Holiday / Rest Day</h3><button class="btn sm" onclick="closeModal('holidayModal')">✕</button></div>
           <div class="modal-body">
+            <input type="hidden" id="hol_edit_id">
             <div class="form-field"><label>Date</label><input type="date" id="hol_date"></div>
             <div class="form-field"><label>Name</label><input type="text" id="hol_name" placeholder="e.g. Hari Raya Aidilfitri"></div>
             <div class="form-field"><label>Type</label>
@@ -962,7 +963,7 @@ body{position:relative}
             </div>
             <div class="form-actions">
               <button class="btn" onclick="closeModal('holidayModal')">Cancel</button>
-              <button class="btn primary" onclick="saveHoliday()">Save</button>
+              <button class="btn primary" id="hol_save_btn" onclick="saveHoliday()">Add</button>
             </div>
           </div>
         </div>
@@ -2343,7 +2344,7 @@ async function renderCalendar(){
   var startStr=y+'-'+(m+1).toString().padStart(2,'0')+'-01';
   var endStr=y+'-'+(m+1).toString().padStart(2,'0')+'-'+last.getDate().toString().padStart(2,'0');
   // Load events
-  var myTasks=await sbGet('tasks','assigned_to=eq.'+encodeURIComponent(currentUser.username)+'&due_date=gte.'+startStr+'&due_date=lte.'+endStr+'&select=title,due_date,status');
+  var myTasks=await sbGet('tasks','assigned_to=eq.'+encodeURIComponent(currentUser.username)+'&due_date=gte.'+startStr+'&due_date=lte.'+endStr+'&deleted_at=is.null&select=title,due_date,status');
   // Load approved leave (own + others if admin)
   var leaveQ='start_date=lte.'+endStr+'&end_date=gte.'+startStr+'&status=eq.approved&select=leave_type,start_date,end_date,username';
   var approvedLeave=await sbGet('leave_requests',leaveQ);
@@ -2365,27 +2366,31 @@ async function renderCalendar(){
   });
   holidaysCache.forEach(function(h){
     if(!events[h.date])events[h.date]=[];
-    events[h.date].push({type:h.type==='rest'?'rest':'holiday',label:h.name});
+    events[h.date].push({type:h.type==='rest'?'rest':'holiday',label:h.name,hid:h.id,hdate:h.date,htype:h.type});
   });
   // Render
   var html=days.map(function(d){return '<div class="cal-day-hdr">'+d+'</div>';}).join('');
   for(var i=0;i<startDay;i++)html+='<div class="cal-day other-month"></div>';
   var today=new Date();today.setHours(0,0,0,0);
+  var isAdmin=currentUser.role==='admin';
   for(var d=1;d<=last.getDate();d++){
     var dt=new Date(y,m,d);dt.setHours(0,0,0,0);
     var key=y+'-'+(m+1).toString().padStart(2,'0')+'-'+d.toString().padStart(2,'0');
     var isToday=dt.getTime()===today.getTime();
-    var isSunday=dt.getDay()===0; // Fixed rest day
+    var isSunday=dt.getDay()===0;
     var dayEvs=events[key]||[];
-    // Mark Sunday as rest if not already a holiday
     var hasHoliday=dayEvs.some(function(e){return e.type==='holiday'||e.type==='rest';});
     if(isSunday&&!hasHoliday)dayEvs.unshift({type:'rest',label:'Rest Day'});
     var evHTML=dayEvs.slice(0,3).map(function(e){
       var cls=e.type==='task'?'task':e.type==='leave'?'leave':e.type==='rest'?'rest':'announce';
-      return '<div class="cal-event '+cls+'">'+esc(e.label)+'</div>';
+      var editBtn=isAdmin&&e.hid?'<span onclick="event.stopPropagation();editHolidayModal('+e.hid+',\''+e.hdate+'\',\''+esc(e.label)+'\',\''+( e.htype||'public')+'\')" style="margin-left:3px;cursor:pointer;opacity:.6;font-size:9px">✏️</span>':'';
+      var delBtn=isAdmin&&e.hid?'<span onclick="event.stopPropagation();deleteHoliday('+e.hid+')" style="cursor:pointer;opacity:.6;font-size:9px">✕</span>':'';
+      return '<div class="cal-event '+cls+'" style="display:flex;align-items:center;justify-content:space-between">'+esc(e.label)+'<span style="display:flex;gap:2px">'+editBtn+delBtn+'</span></div>';
     }).join('');
     html+='<div class="cal-day'+(isToday?' today':'')+(isSunday?' other-month':'')+'">'
-      +'<div class="cal-day-num">'+d+'</div>'+evHTML+'</div>';
+      +'<div class="cal-day-num" style="display:flex;justify-content:space-between;align-items:center">'+d
+      +(isAdmin?'<span onclick="openHolidayModal(\''+key+'\')" title="Add holiday" style="font-size:10px;color:#2a4a6a;cursor:pointer;line-height:1">+</span>':'')
+      +'</div>'+evHTML+'</div>';
   }
   document.getElementById('calGrid').innerHTML=html;
 }
@@ -2498,10 +2503,39 @@ async function saveHoliday(){
   var date=document.getElementById('hol_date').value;
   var name=document.getElementById('hol_name').value.trim();
   if(!date||!name){toast('Date and name required','error');return;}
-  await sbPost('holidays',{date:date,name:name,type:document.getElementById('hol_type').value,created_by:currentUser.username});
-  closeModal('holidayModal');renderCalendar();toast('Holiday added','success');
+  var editId=document.getElementById('hol_edit_id').value;
+  if(editId){
+    await sbPatch('holidays',{id:parseInt(editId)},{date:date,name:name,type:document.getElementById('hol_type').value});
+    toast('Holiday updated','success');
+  } else {
+    await sbPost('holidays',{date:date,name:name,type:document.getElementById('hol_type').value,created_by:currentUser.username});
+    toast('Holiday added','success');
+  }
+  closeModal('holidayModal');renderCalendar();
 }
-function openHolidayModal(){document.getElementById('hol_date').value='';document.getElementById('hol_name').value='';openModal('holidayModal');}
+async function deleteHoliday(id){
+  if(!confirm('Delete this holiday/rest day?'))return;
+  await fetch(SB_URL+'/rest/v1/holidays?id=eq.'+id,{method:'DELETE',headers:sbH()});
+  toast('Deleted','success');renderCalendar();
+}
+function openHolidayModal(date){
+  document.getElementById('hol_edit_id').value='';
+  document.getElementById('hol_date').value=date||'';
+  document.getElementById('hol_name').value='';
+  document.getElementById('hol_type').value='holiday';
+  document.getElementById('holidayModalTitle').textContent='Add Holiday / Rest Day';
+  document.getElementById('hol_save_btn').textContent='Add';
+  openModal('holidayModal');
+}
+function editHolidayModal(id,date,name,type){
+  document.getElementById('hol_edit_id').value=id;
+  document.getElementById('hol_date').value=date;
+  document.getElementById('hol_name').value=name;
+  document.getElementById('hol_type').value=type||'holiday';
+  document.getElementById('holidayModalTitle').textContent='Edit Holiday / Rest Day';
+  document.getElementById('hol_save_btn').textContent='Save Changes';
+  openModal('holidayModal');
+}
 
 /* ══ MY ATTENDANCE REPORT ══ */
 async function loadMyAttendance(){
@@ -2813,7 +2847,7 @@ async function loadAdminUsers(){
   var dsel=document.getElementById('nu_dept');
   if(dsel){dsel.innerHTML='<option value="">— No Department —</option>';allDepts.forEach(function(d){var o=document.createElement('option');o.value=d.name;o.textContent=d.name;dsel.appendChild(o);});}
   await populateNuRoleDropdown();
-  if(!allUsers.length){document.getElementById('adminUserList').innerHTML='<div class="empty-state"><p>No users found</p></div>';return;}
+  onNuRoleChange();// show permissions section for default staff role
   var roleMap={};allRoles.forEach(function(r){roleMap[r.id]=r;});
   var html=allUsers.map(function(u){
     var isAdm=u.role==='admin';
@@ -3222,66 +3256,6 @@ async function loadRolesPage(){
 }
 
 /* ══ ROLE MODAL PERMISSION TABLE ══ */
-var PERM_DEFS=[
-  // Tools
-  {id:'rm_tools',field:'can_access_tools',label:'Access Tools',short:'Module gate',mod:'tools',status:'live',
-    desc:'Controls whether this role can access tools.huangmotor.com at all. Disable to block all Tools access regardless of other flags.'},
-  {id:'rm_pl',field:'can_edit_pricelist',label:'Edit Pricelist',short:'Add / edit / delete price rows',mod:'tools',status:'live',
-    desc:'Full CRUD on the motorcycle pricelist — add new models, change prices, delete rows. Without this, user can only view.'},
-  {id:'rm_gen',field:'can_edit_generator',label:'Edit Generator',short:'Quotation template settings',mod:'tools',status:'live',
-    desc:'Edit the quotation generator settings, including layout, line items shown, and calculation defaults used for PDF output.'},
-  {id:'rm_mf',field:'can_edit_mf',label:'Edit Max Finance',short:'Max HP amount per model',mod:'tools',status:'live',
-    desc:'Update the maximum finance amounts per brand and model used in HP calculations in the calculator.'},
-  {id:'rm_viewer',field:'is_viewer_mode',label:'Viewer Mode',short:'Read-only, Cash OTR only',mod:'tools',status:'live',
-    desc:'Restricts the user to view-only pricelist (limited fields visible) and Cash OTR calculator only. Mutually exclusive with all edit permissions — enabling this auto-disables Edit Pricelist, Generator, and Max Finance.',
-    special:'viewer'},
-  // Team core
-  {id:'rm_team',field:'can_access_team',label:'Access Team',short:'Module gate',mod:'team',status:'live',
-    desc:'Controls whether this role can access team.huangmotor.com. Required for any Team feature to work.'},
-  {id:'rm_task_dept',field:'can_assign_task_dept',label:'Assign Tasks (dept)',short:'Create tasks within own dept',mod:'team',status:'live',
-    desc:'Create and assign tasks to members of the user\'s own department only.'},
-  {id:'rm_task_cross',field:'can_assign_task_cross',label:'Assign Tasks (cross)',short:'Create tasks to any dept',mod:'team',status:'live',
-    desc:'Create and assign tasks to members of any department. Superset of dept-only assignment.'},
-  {id:'rm_attendance',field:'can_view_attendance',label:'View Attendance',short:'Approve check-ins, edit times',mod:'team',status:'live',
-    desc:'View all staff attendance records, approve or reject check-in submissions, and edit session times manually. All manual edits logged to change log.'},
-  {id:'rm_leave_approve',field:'can_approve_leave',label:'Approve Leave',short:'Approve / reject / revoke',mod:'team',status:'live',
-    desc:'Approve, reject, or revoke leave applications. Can also revoke already-approved leave if circumstances change.'},
-  {id:'rm_perf_own',field:'can_view_perf_own',label:'View Own Performance',short:'Own stats only',mod:'team',status:'live',
-    desc:'View own performance statistics. Enabled by default for all staff — almost never needs to be disabled.'},
-  {id:'rm_perf_dept',field:'can_view_perf_dept',label:'View Dept Performance',short:'Department stats',mod:'team',status:'live',
-    desc:'View performance stats for all members within the same department. Intended for department heads or team leads.'},
-  {id:'rm_perf_all',field:'can_view_perf_all',label:'View All Performance',short:'All staff stats',mod:'team',status:'live',
-    desc:'View performance stats for every staff member across all departments. Director or manager level.'},
-  // Team sales & content
-  {id:'rm_view_all_sales',field:'can_view_all_sales',label:'View All Sales',short:'All staff sales records',mod:'team',status:'live',
-    desc:'See MySales records from all staff, not just own. Useful for sales managers reviewing the full team pipeline.'},
-  {id:'rm_export_sales',field:'can_export_sales',label:'Export Sales',short:'CSV / PDF download',mod:'team',status:'live',
-    desc:'Download sales records as a CSV or PDF report. Intended for month-end reporting and analysis.'},
-  {id:'rm_create_ann',field:'can_create_announcement',label:'Create Announcements',short:'Post, delete, see read receipts',mod:'team',status:'live',
-    desc:'Create and delete announcements visible to all staff or targeted groups. Also unlocks read-receipt Details view showing who has read and confirmed each post.'},
-  {id:'rm_pin_ann',field:'can_pin_announcement',label:'Pin Announcements',short:'Pin to top of list',mod:'team',status:'live',
-    desc:'Pin or unpin announcements so they always appear at the top of the announcements list for all staff.'},
-  {id:'rm_create_chat',field:'can_create_chat_room',label:'Create Chat Rooms',short:'Start new group chats',mod:'team',status:'live',
-    desc:'Create new group chat rooms and invite members. Previously tied to cross-dept task permission — now independent so chat access can be granted separately.'},
-  {id:'rm_view_log',field:'can_view_change_log',label:'View Change Log',short:'Audit trail',mod:'team',status:'live',
-    desc:'View the audit trail covering attendance edits, sales changes, task deletions, and Tools pricelist edits. Useful for compliance, HR audit, or senior management.'},
-  // Team admin
-  {id:'rm_manage_users',field:'can_manage_users',label:'Manage Users',short:'Create / edit / disable accounts',mod:'team',status:'live',
-    desc:'Create accounts, edit profile fields, disable or enable users, and reset passwords. Cannot manage admin accounts. All actions logged to change log as backup trail.'},
-  {id:'rm_manage_roles',field:'can_manage_roles',label:'Manage Roles',short:'Create / edit custom roles',mod:'team',status:'live',
-    desc:'Create and edit custom role templates. Enforced ceiling: cannot grant a permission to a role if the role manager does not have that permission themselves. Admin exempt from ceiling.'},
-  {id:'rm_manage_depts',field:'can_manage_departments',label:'Manage Departments',short:'Add / rename / delete depts',mod:'team',status:'live',
-    desc:'Add, rename, and delete departments used for task assignment, attendance rules, and reporting groupings.'},
-  {id:'rm_export_att',field:'can_export_attendance',label:'Export Attendance',short:'Monthly reports for payroll',mod:'team',status:'live',
-    desc:'Export monthly attendance reports to CSV or PDF for payroll processing or HR compliance records.'},
-  // Future
-  {id:'rm_access_benefit',field:'can_access_benefit',label:'Access Benefits',short:'View own claims & entitlements',mod:'team',status:'future',
-    desc:'Access the Benefits module (currently placeholder). Will cover submitting and viewing personal benefit claims and entitlements when built.'},
-  {id:'rm_manage_benefit',field:'can_manage_benefit',label:'Manage Benefits',short:'Approve claims, configure rules',mod:'team',status:'future',
-    desc:'Approve or reject benefit claims, configure entitlement rules per role or department. HR manager level permission.'},
-  {id:'rm_access_payroll',field:'can_access_payroll',label:'Access Payroll',short:'Salary simulator',mod:'team',status:'future',
-    desc:'Access the Salary Simulator — gross to nett calculation including EPF, SOCSO, EIS, and PCB deductions. Read-only simulation tool, not payroll processing.'},
-];
 
 var rmPermState={};// stores checked/disabled state independently of DOM
 
@@ -3292,7 +3266,6 @@ function rmGetState(id){
   return rmPermState[id]||{checked:false,disabled:false};
 }
 function rmSyncFromDom(){
-  // Save current DOM state before re-render
   PERM_DEFS.forEach(function(p){
     var el=document.getElementById(p.id);
     if(el)rmPermState[p.id]={checked:el.checked,disabled:el.disabled};
@@ -3411,26 +3384,24 @@ async function editRole(id){
 }
 
 async function saveRole(){
-  var name=document.getElementById('rm_name').value.trim();
-  if(!name){toast('Role name required','error');return;}
+  var nameEl=document.getElementById('rm_name');
+  if(!nameEl){toast('Form error','error');return;}
+  var name=nameEl.value.trim();
+  if(!name){toast('Role name is required','error');nameEl.focus();return;}
   var id=document.getElementById('rm_id').value;
-  var data={name:name,description:document.getElementById('rm_desc').value.trim()||null,
-    applies_to:document.getElementById('rm_applies_to').value||'all',is_active:true};
-  rmSyncFromDom();// capture final checkbox state
-  PERM_DEFS.forEach(function(p){
-    data[p.field]=!!(rmPermState[p.id]&&rmPermState[p.id].checked);
-  });
+  var data={name:name,
+    description:(document.getElementById('rm_desc').value||'').trim()||null,
+    applies_to:(document.getElementById('rm_applies_to').value)||'all',
+    is_active:true};
+  rmSyncFromDom();
+  PERM_DEFS.forEach(function(p){data[p.field]=!!(rmPermState[p.id]&&rmPermState[p.id].checked);});
   if(id){await sbPatch('custom_roles',{id:parseInt(id)},data);}
   else{
-    // Non-admin role managers cannot grant permissions they don't have
-    if(currentUser.role!=='admin'){
-      PERM_FIELDS.forEach(function(f){
-        if(data[f]&&!currentUser[f])data[f]=false;
-      });
-    }
-    await sbPost('custom_roles',data);
+    if(currentUser.role!=='admin'){PERM_FIELDS.forEach(function(f){if(data[f]&&!currentUser[f])data[f]=false;});}
+    var res=await sbPost('custom_roles',data);
+    if(!res){toast('Failed — name may already exist','error');return;}
   }
-  closeModal('roleModal');toast('Role saved','success');loadRolesPage();
+  closeModal('roleModal');toast('Role saved ✓','success');loadRolesPage();
 }
 
 async function deleteRole(id){
