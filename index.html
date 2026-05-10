@@ -1411,15 +1411,7 @@ body{position:relative}
             <div style="font-size:12px;color:#4a6fa5" id="checkinStatus">Loading...</div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem" id="checkinSessions"></div>
-          <!-- Quick time entry -->
-          <div style="background:#0a0f1a;border:1px solid #1e2d45;border-radius:8px;padding:10px;margin-bottom:10px">
-            <div style="font-size:11px;color:#4a6fa5;margin-bottom:6px">⚡ Quick entry <span style="color:#2a4a6a">— type time, auto-detect session</span></div>
-            <div style="display:flex;gap:6px;align-items:center">
-              <input type="time" id="quickTimeInput" style="flex:1;padding:7px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:13px" onchange="previewQuickTime(this.value)">
-              <button class="btn sm primary" onclick="submitQuickTime()" style="white-space:nowrap">Submit</button>
-            </div>
-            <div id="quickTimePreview" style="font-size:11px;color:#f59e0b;margin-top:4px;min-height:14px"></div>
-          </div>
+
           <!-- Session selector -->
           <div id="checkinSessionSel" style="margin-bottom:8px;display:none">
             <label style="font-size:11px;color:#4a6fa5;display:block;margin-bottom:4px">打卡时段 / Session:</label>
@@ -3542,6 +3534,7 @@ async function saveRole(){
   if(!name){toast('Role name is required','error');nameEl.focus();return;}
   var id=document.getElementById('rm_id').value;
   var data={name:name,
+    code:name.toLowerCase().replace(/[^a-z0-9]/g,'_').replace(/_+/g,'_').slice(0,20),
     description:(document.getElementById('rm_desc').value||'').trim()||null,
     applies_to:(document.getElementById('rm_applies_to').value)||'all'};
   rmSyncFromDom();
@@ -4924,47 +4917,6 @@ async function loadCheckin(){
   }
 }
 
-function previewQuickTime(val){
-  if(!val){document.getElementById('quickTimePreview').textContent='';return;}
-  var parts=val.split(':');var h=parseInt(parts[0]);var m=parseInt(parts[1]||0);
-  // Determine session: before 12:00 → S1, 12:00-18:00 → S2, after 18:00 → S3
-  var session=h<12?1:h<18?2:3;
-  // Determine in/out: if session's check_in not done → in, else → out
-  var fieldMap={1:{in:'check_in',out:'check_out'},2:{in:'check_in_2',out:'check_out_2'},3:{in:'check_in_3',out:'check_out_3'}};
-  var sessionLabel={1:'Session 1',2:'Session 2',3:'Session 3'};
-  document.getElementById('quickTimePreview').textContent='→ Will record as '+sessionLabel[session]+' (auto-detected)';
-}
-
-async function submitQuickTime(){
-  var val=document.getElementById('quickTimeInput').value;
-  if(!val){toast('Enter a time first','error');return;}
-  var parts=val.split(':');var h=parseInt(parts[0]);
-  var session=h<12?1:h<18?2:3;
-  var today=new Date().toISOString().slice(0,10);
-  // Load current attendance to determine in or out
-  var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
-  var r=rec.length?rec[0]:{};
-  var fieldMap={1:{in:'check_in',out:'check_out'},2:{in:'check_in_2',out:'check_out_2'},3:{in:'check_in_3',out:'check_out_3'}};
-  var sf=fieldMap[session];
-  // Determine if this is check_in or check_out for this session
-  var field=!r[sf.in]?sf.in:!r[sf.out]?sf.out:null;
-  if(!field){toast('Session '+session+' already complete — choose another session','error');return;}
-  // Check pending
-  var pend=await sbGet('checkin_approvals','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&session_field=eq.'+field+'&status=eq.pending');
-  if(pend.length){toast('Already pending approval for this session','error');return;}
-  // Build a timestamp for this time today
-  var ts=today+'T'+val+':00';
-  var approvalData={username:currentUser.username,date:today,session_field:field,recorded_at:ts,status:'pending',
-    gps_lat:checkinGPSCoords?checkinGPSCoords.lat:null,gps_lng:checkinGPSCoords?checkinGPSCoords.lng:null,
-    device_info:getDeviceInfo()};
-  // Generate GPS watermark for photo evidence
-  if(checkinGPSCoords){approvalData.photo=await generateGPSWatermark(checkinGPSCoords,field,ts);}
-  await sbPost('checkin_approvals',approvalData);
-  document.getElementById('quickTimeInput').value='';
-  document.getElementById('quickTimePreview').textContent='';
-  toast('Submitted '+field.replace(/_/g,' ')+' at '+val+' — awaiting approval','success');
-  await loadCheckin();
-}
 
 function updateCheckinBtnLabel(){
   var btn=document.getElementById('checkinBtn');
