@@ -494,8 +494,7 @@ body{position:relative}
         </select>
       </div>
       <div style="font-size:11px;font-weight:600;color:#4a6fa5;margin:10px 0 6px;text-transform:uppercase;letter-spacing:.05em">Module Access</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div style="border:1px solid #1e3a5f;border-radius:8px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">        <div style="border:1px solid #1e3a5f;border-radius:8px;overflow:hidden">
           <div style="background:#0d1e35;padding:7px 10px;display:flex;align-items:center;gap:7px">
             <input type="checkbox" id="rm_tools" onchange="toggleRoleSection('tools',this.checked)">
             <label for="rm_tools" style="font-size:12px;font-weight:600;color:#60a5fa;cursor:pointer">Tools Access</label>
@@ -530,6 +529,35 @@ body{position:relative}
             <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="rm_perf_dept"> View dept performance</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="rm_perf_all"> View all performance</label>
           </div>
+        </div>
+      </div>
+      <!-- Extended permissions -->
+      <div style="margin-bottom:8px;border:1px solid #2a3a2a;border-radius:8px;overflow:hidden">
+        <div style="background:#0d1a0d;padding:6px 10px;font-size:11px;font-weight:600;color:#4ade80">Sales & Content</div>
+        <div style="padding:8px 10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_view_all_sales"> View all sales</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_export_sales"> Export sales</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_create_ann"> Create announcements</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_pin_ann"> Pin announcements</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_create_chat"> Create chat rooms</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_view_log"> View change log</label>
+        </div>
+      </div>
+      <div style="margin-bottom:8px;border:1px solid #2a2a3a;border-radius:8px;overflow:hidden">
+        <div style="background:#0d0d1a;padding:6px 10px;font-size:11px;font-weight:600;color:#a78bfa">Administration</div>
+        <div style="padding:8px 10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_manage_users"> Manage users</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_manage_roles"> Manage roles</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_manage_depts"> Manage departments</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_export_att"> Export attendance</label>
+        </div>
+      </div>
+      <div style="margin-bottom:10px;border:1px solid #2a1a2a;border-radius:8px;overflow:hidden">
+        <div style="background:#1a0d1a;padding:6px 10px;font-size:11px;font-weight:600;color:#f0abfc">Future Modules</div>
+        <div style="padding:8px 10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_access_benefit"> Access Benefits</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_manage_benefit"> Manage Benefits</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:11px"><input type="checkbox" id="rm_access_payroll"> Access Payroll</label>
         </div>
       </div>
       <div class="form-actions">
@@ -1310,6 +1338,35 @@ body{position:relative}
               ⚠ Permissions differ from selected role.
               <button class="btn sm" onclick="promptSaveAsNewRole()" style="margin-left:8px;font-size:10px">Save as new role?</button>
             </div>
+            <!-- Extended permissions -->
+            <div style="margin-top:10px;border:1px solid #2a3a2a;border-radius:8px;overflow:hidden">
+              <div style="background:#0d1a0d;padding:7px 10px;font-size:11px;font-weight:600;color:#4ade80">📊 Sales & Content</div>
+              <div style="padding:8px 12px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_view_all_sales" onchange="onNuPermChange()"> View all sales</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_export_sales" onchange="onNuPermChange()"> Export sales</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_create_ann" onchange="onNuPermChange()"> Create announcements</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_pin_ann" onchange="onNuPermChange()"> Pin announcements</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_create_chat" onchange="onNuPermChange()"> Create chat rooms</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_view_log" onchange="onNuPermChange()"> View change log</label>
+              </div>
+            </div>
+            <div style="margin-top:8px;border:1px solid #2a2a3a;border-radius:8px;overflow:hidden">
+              <div style="background:#0d0d1a;padding:7px 10px;font-size:11px;font-weight:600;color:#a78bfa">&#9881; Administration</div>
+              <div style="padding:8px 12px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_users" onchange="onNuPermChange()"> Manage users</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_roles" onchange="onNuPermChange()"> Manage roles</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_depts" onchange="onNuPermChange()"> Manage departments</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_export_att" onchange="onNuPermChange()"> Export attendance</label>
+              </div>
+            </div>
+            <div style="margin-top:8px;border:1px solid #2a1a2a;border-radius:8px;overflow:hidden">
+              <div style="background:#1a0d1a;padding:7px 10px;font-size:11px;font-weight:600;color:#f0abfc">Future Modules</div>
+              <div style="padding:8px 12px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_access_benefit" onchange="onNuPermChange()"> Access Benefits</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_benefit" onchange="onNuPermChange()"> Manage Benefits</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_access_payroll" onchange="onNuPermChange()"> Access Payroll</label>
+              </div>
+            </div>
           </div>
 
           <div style="display:flex;justify-content:flex-end;margin-top:1rem">
@@ -1582,7 +1639,7 @@ async function doLogin(){
   document.getElementById('loginErr').textContent='';
   try{
     var hash=await sha256(pass);
-    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity');
+    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity');
     if(!rows||!rows.length||rows[0].password_hash!==hash){
       document.getElementById('loginErr').textContent='Invalid username or password.';
       btn.disabled=false;btn.textContent='Sign In';return;
@@ -1626,23 +1683,19 @@ async function afterLogin(){
     document.getElementById('newAnnBtn').style.display='';
     showAdminMobileNav();
   } else {
-    var canTask=currentUser.can_assign_task_dept||currentUser.can_assign_task_cross;
-    var canAtt=currentUser.can_view_attendance;
-    var canLeave=currentUser.can_approve_leave;
-    var canPerf=currentUser.can_view_perf_own||currentUser.can_view_perf_dept||currentUser.can_view_perf_all;
-    var anyAdmin=canTask||canAtt||canLeave||canPerf;
-    if(canTask){['nav-admin-tasks','nav-admin-section'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});}
-    if(canAtt){['nav-admin-attendance','nav-admin-section'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});}
-    if(canLeave){['nav-admin-leave','nav-admin-section'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});}
-    if(canPerf){
-      ['nav-performance'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
-      // Show in mobile more drawer too
-      var mnPerf=document.getElementById('mn-performance');if(mnPerf)mnPerf.style.display='';
-      var mnSec=document.getElementById('mnAdminSection');if(mnSec)mnSec.style.display='';
-    }
-    if(anyAdmin){
-      var mnSec2=document.getElementById('mnAdminSection');if(mnSec2)mnSec2.style.display='';
-    }
+    var p=currentUser;
+    var show=function(id){var el=document.getElementById(id);if(el)el.style.display='';};
+    if(p.can_assign_task_dept||p.can_assign_task_cross){show('nav-admin-tasks');show('nav-admin-section');}
+    if(p.can_view_attendance){show('nav-admin-attendance');show('nav-admin-section');}
+    if(p.can_approve_leave){show('nav-admin-leave');show('nav-admin-section');}
+    if(p.can_view_perf_own||p.can_view_perf_dept||p.can_view_perf_all){show('nav-performance');show('mn-performance');show('mnAdminSection');}
+    if(p.can_manage_users){show('nav-admin-users');show('nav-admin-section');}
+    if(p.can_manage_roles){show('nav-admin-roles');show('nav-admin-section');}
+    if(p.can_manage_departments){show('nav-admin-dept');show('nav-admin-section');}
+    if(p.can_create_announcement){show('newAnnBtn');}
+    var anyAdmin=p.can_assign_task_dept||p.can_assign_task_cross||p.can_view_attendance||
+      p.can_approve_leave||p.can_manage_users||p.can_manage_roles||p.can_manage_departments;
+    if(anyAdmin){show('mnAdminSection');}
   }
   // Load data
   await loadAllUsersCache();
@@ -1791,8 +1844,8 @@ async function loadAnnouncements(){
       +(isConfirmed?'<span style="font-size:11px;color:#34d399">✓ Confirmed</span>':'')
       +(isAdmin&&readCount>0?'<span style="font-size:10px;color:#4a6fa5" title="'+readNames+'">👁 '+readCount+' read</span>':'')
       +(isAdmin&&confirmCount>0?'<span style="font-size:10px;color:#34d399" title="'+confirmNames+'">✓ '+confirmCount+' confirmed</span>':'')
-      +(isAdmin?'<button class="btn sm danger" style="margin-left:auto" onclick="deleteAnn('+a.id+',event)">Delete</button>':'')
-      +(isAdmin?'<button class="btn sm" onclick="viewAnnReads('+a.id+',event)">👥 Details</button>':'')
+      +(isAdmin||currentUser.can_create_announcement?'<button class="btn sm danger" style="margin-left:auto" onclick="deleteAnn('+a.id+',event)">Delete</button>':'')
+      +(isAdmin||currentUser.can_create_announcement?'<button class="btn sm" onclick="viewAnnReads('+a.id+',event)">👥 Details</button>':'')
       +'</div>'
       +'</div>';
   }).join('');
@@ -2658,7 +2711,14 @@ var NU_PERM_MAP={
   nu_gen:'can_edit_generator',nu_mf:'can_edit_mf',nu_viewer:'is_viewer_mode',
   nu_task_dept:'can_assign_task_dept',nu_task_cross:'can_assign_task_cross',
   nu_attendance:'can_view_attendance',nu_leave:'can_approve_leave',
-  nu_perf_own:'can_view_perf_own',nu_perf_dept:'can_view_perf_dept',nu_perf_all:'can_view_perf_all'
+  nu_perf_own:'can_view_perf_own',nu_perf_dept:'can_view_perf_dept',nu_perf_all:'can_view_perf_all',
+  nu_view_all_sales:'can_view_all_sales',nu_create_ann:'can_create_announcement',
+  nu_pin_ann:'can_pin_announcement',nu_create_chat:'can_create_chat_room',
+  nu_manage_users:'can_manage_users',nu_manage_roles:'can_manage_roles',
+  nu_manage_depts:'can_manage_departments',nu_export_att:'can_export_attendance',
+  nu_export_sales:'can_export_sales',nu_view_log:'can_view_change_log',
+  nu_access_benefit:'can_access_benefit',nu_manage_benefit:'can_manage_benefit',
+  nu_access_payroll:'can_access_payroll'
 };
 
 function onNuRoleChange(){
@@ -2806,6 +2866,7 @@ function showInviteModal(username,tempPw,loginUrl){
 }
 
 async function loadAdminUsers(){
+  if(currentUser.role!=='admin'&&!currentUser.can_manage_users){toast('No permission to manage users','error');return;}
   await loadAllUsersCache();await loadAllRoles();
   // Populate dept and role dropdowns
   await loadAllDepts();
@@ -3149,6 +3210,7 @@ async function loadAllRoles(){
 }
 
 async function loadRolesPage(){
+  if(currentUser.role!=='admin'&&!currentUser.can_manage_roles){toast('No permission to manage roles','error');return;}
   await loadAllRoles();
   if(!allRoles.length){
     document.getElementById('rolesPageContent').innerHTML='<div class="empty-state"><div class="icon">🎭</div><p>No roles yet. Create one to get started.</p></div>';
@@ -3187,24 +3249,28 @@ async function loadRolesPage(){
   document.getElementById('rolesPageContent').innerHTML=html;
 }
 
-function toggleRoleSection(mod,checked){
-  // Visual only — checkboxes inside are always enabled, just for clarity
-}
-function onRoleViewerChange(checked){
-  if(checked){
-    ['rm_pl','rm_gen','rm_mf'].forEach(function(id){var el=document.getElementById(id);if(el){el.checked=false;el.disabled=true;}});
-  } else {
-    ['rm_pl','rm_gen','rm_mf'].forEach(function(id){var el=document.getElementById(id);if(el)el.disabled=false;});
-  }
-}
+var RM_PERM_MAP={
+  rm_tools:'can_access_tools',rm_team:'can_access_team',rm_pl:'can_edit_pricelist',
+  rm_gen:'can_edit_generator',rm_mf:'can_edit_mf',rm_viewer:'is_viewer_mode',
+  rm_task_dept:'can_assign_task_dept',rm_task_cross:'can_assign_task_cross',
+  rm_attendance:'can_view_attendance',rm_leave_approve:'can_approve_leave',
+  rm_perf_own:'can_view_perf_own',rm_perf_dept:'can_view_perf_dept',rm_perf_all:'can_view_perf_all',
+  rm_view_all_sales:'can_view_all_sales',rm_create_ann:'can_create_announcement',
+  rm_pin_ann:'can_pin_announcement',rm_create_chat:'can_create_chat_room',
+  rm_manage_users:'can_manage_users',rm_manage_roles:'can_manage_roles',
+  rm_manage_depts:'can_manage_departments',rm_export_att:'can_export_attendance',
+  rm_export_sales:'can_export_sales',rm_view_log:'can_view_change_log',
+  rm_access_benefit:'can_access_benefit',rm_manage_benefit:'can_manage_benefit',
+  rm_access_payroll:'can_access_payroll'
+};
 
-function openRoleModal(id){
+function openRoleModal(){
   document.getElementById('rm_id').value='';
   document.getElementById('rm_name').value='';
   document.getElementById('rm_desc').value='';
   document.getElementById('rm_applies_to').value='all';
-  document.getElementById('roleModalTitle').textContent='🎭 New Role';
-  ['rm_tools','rm_team','rm_pl','rm_gen','rm_mf','rm_viewer','rm_task_dept','rm_task_cross','rm_attendance','rm_leave_approve','rm_perf_dept','rm_perf_all'].forEach(function(i){var el=document.getElementById(i);if(el){el.checked=false;el.disabled=false;}});
+  document.getElementById('roleModalTitle').textContent='New Role';
+  Object.keys(RM_PERM_MAP).forEach(function(id){var el=document.getElementById(id);if(el){el.checked=false;el.disabled=false;}});
   document.getElementById('rm_perf_own').checked=true;
   openModal('roleModal');
 }
@@ -3218,13 +3284,7 @@ async function editRole(id){
   document.getElementById('rm_desc').value=r.description||'';
   document.getElementById('rm_applies_to').value=r.applies_to||'all';
   document.getElementById('roleModalTitle').textContent='Edit Role: '+esc(r.name);
-  var set=function(id,val){var el=document.getElementById(id);if(el)el.checked=!!val;};
-  set('rm_tools',r.can_access_tools);set('rm_team',r.can_access_team);
-  set('rm_pl',r.can_edit_pricelist);set('rm_gen',r.can_edit_generator);set('rm_mf',r.can_edit_mf);
-  set('rm_viewer',r.is_viewer_mode);set('rm_task_dept',r.can_assign_task_dept);
-  set('rm_task_cross',r.can_assign_task_cross);set('rm_attendance',r.can_view_attendance);
-  set('rm_leave_approve',r.can_approve_leave);set('rm_perf_own',r.can_view_perf_own!==false);
-  set('rm_perf_dept',r.can_view_perf_dept);set('rm_perf_all',r.can_view_perf_all);
+  Object.keys(RM_PERM_MAP).forEach(function(id){var el=document.getElementById(id);if(el)el.checked=!!r[RM_PERM_MAP[id]];});
   if(r.is_viewer_mode){['rm_pl','rm_gen','rm_mf'].forEach(function(i){var el=document.getElementById(i);if(el)el.disabled=true;});}
   openModal('roleModal');
 }
@@ -3233,26 +3293,22 @@ async function saveRole(){
   var name=document.getElementById('rm_name').value.trim();
   if(!name){toast('Role name required','error');return;}
   var id=document.getElementById('rm_id').value;
-  var data={
-    name:name,description:document.getElementById('rm_desc').value.trim()||null,
-    applies_to:document.getElementById('rm_applies_to').value||'all',
-    is_active:true,
-    can_access_tools:document.getElementById('rm_tools').checked,
-    can_access_team:document.getElementById('rm_team').checked,
-    can_edit_pricelist:document.getElementById('rm_pl').checked,
-    can_edit_generator:document.getElementById('rm_gen').checked,
-    can_edit_mf:document.getElementById('rm_mf').checked,
-    is_viewer_mode:document.getElementById('rm_viewer').checked,
-    can_assign_task_dept:document.getElementById('rm_task_dept').checked,
-    can_assign_task_cross:document.getElementById('rm_task_cross').checked,
-    can_view_attendance:document.getElementById('rm_attendance').checked,
-    can_approve_leave:document.getElementById('rm_leave_approve').checked,
-    can_view_perf_own:document.getElementById('rm_perf_own').checked,
-    can_view_perf_dept:document.getElementById('rm_perf_dept').checked,
-    can_view_perf_all:document.getElementById('rm_perf_all').checked
-  };
+  var data={name:name,description:document.getElementById('rm_desc').value.trim()||null,
+    applies_to:document.getElementById('rm_applies_to').value||'all',is_active:true};
+  Object.keys(RM_PERM_MAP).forEach(function(ckId){
+    var el=document.getElementById(ckId);
+    if(el)data[RM_PERM_MAP[ckId]]=el.checked;
+  });
   if(id){await sbPatch('custom_roles',{id:parseInt(id)},data);}
-  else{await sbPost('custom_roles',data);}
+  else{
+    // Non-admin role managers cannot grant permissions they don't have
+    if(currentUser.role!=='admin'){
+      PERM_FIELDS.forEach(function(f){
+        if(data[f]&&!currentUser[f])data[f]=false;
+      });
+    }
+    await sbPost('custom_roles',data);
+  }
   closeModal('roleModal');toast('Role saved','success');loadRolesPage();
 }
 
@@ -3834,7 +3890,7 @@ var currentRoomId=null;var chatPollInterval=null;var chatLastMsgId=0;var pending
 
 async function loadChatRooms(){
   // Allow admin OR anyone with cross-dept task permission to create rooms
-  var canCreate=currentUser.role==='admin'||currentUser.can_assign_task_cross||currentUser.can_view_perf_all;
+  var canCreate=currentUser.role==='admin'||currentUser.can_create_chat_room;
   if(canCreate)document.getElementById('newChatRoomBtn').style.display='';
   var rooms=await sbGet('chat_rooms','order=created_at.desc');
   // Filter rooms user is member of or is public
@@ -4280,7 +4336,7 @@ async function loadMySales(){
     q+='&deleted_at=is.null';
     if(salesFilter!=='all')q+='&status=eq.'+salesFilter;
   }
-  if(currentUser.role==='admin'){
+  if(currentUser.role==='admin'||currentUser.can_view_all_sales){
     rows=await sbGet('sales_records',q);
   } else {
     rows=await sbGet('sales_records','salesperson=eq.'+encodeURIComponent(currentUser.username)+'&'+q);
@@ -4704,7 +4760,11 @@ function isTaskVisible(task){
 var resolvedPerms={};
 var PERM_FIELDS=['can_access_tools','can_access_team','can_edit_pricelist','can_edit_generator',
   'can_edit_mf','is_viewer_mode','can_assign_task_dept','can_assign_task_cross',
-  'can_view_attendance','can_approve_leave','can_view_perf_own','can_view_perf_dept','can_view_perf_all'];
+  'can_view_attendance','can_approve_leave','can_view_perf_own','can_view_perf_dept','can_view_perf_all',
+  'can_view_all_sales','can_create_announcement','can_pin_announcement','can_create_chat_room',
+  'can_manage_users','can_manage_roles','can_manage_departments',
+  'can_export_attendance','can_export_sales','can_view_change_log',
+  'can_access_benefit','can_manage_benefit','can_access_payroll'];
 
 async function resolvePermissions(user){
   if(user.role==='admin'){
@@ -4757,7 +4817,7 @@ async function resolvePermissions(user){
   if(!sess){showTeamLoginPrompt();return;}
   try{
     var s=JSON.parse(sess);
-    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity',{headers:sbH()});
+    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity',{headers:sbH()});
     var rows=await r.json();
     if(!rows.length||rows[0].is_active===false){
       sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;
