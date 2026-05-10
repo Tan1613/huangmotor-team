@@ -1113,15 +1113,19 @@ body{position:relative}
       <div class="page" id="page-admin-attendance">
         <div class="page-title">🕐 Attendance</div>
         <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
-          <button class="btn primary" id="attTabDay" onclick="switchAttTab('day')">📅 Daily</button>
+          <button class="btn primary" id="attTabDay" onclick="switchAttTab('day')">👤 Per Person</button>
           <button class="btn" id="attTabPending" onclick="switchAttTab('pending')">⏳ Pending</button>
           <button class="btn" id="attTabReport" onclick="switchAttTab('report')">📊 Report</button>
           <button class="btn" id="attTabRules" onclick="openPage('admin-att-rules')" style="margin-left:auto">⚙ Rules</button>
         </div>
+        <!-- Per-person tab -->
         <div id="attDayTab">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:.8rem;flex-wrap:wrap">
-            <input type="date" id="attDate" class="btn" style="padding:5px 10px" oninput="loadAttendance()">
-            <button class="btn" onclick="setAttToday()">Today</button>
+            <select id="attPersonSel" class="btn" style="padding:5px 10px;min-width:150px" onchange="loadPersonAttendance()">
+              <option value="">— Select staff —</option>
+            </select>
+            <input type="month" id="attPersonMonth" class="btn" style="padding:5px 10px" onchange="loadPersonAttendance()">
+            <button class="btn" onclick="setAttPersonToday()">This Month</button>
           </div>
           <div class="page-sub" id="attDateLabel" style="margin-bottom:.8rem"></div>
           <div id="attList"></div>
@@ -1797,7 +1801,7 @@ function openPage(name){
   else if(name==='admin-tasks')loadAllTasks();
   else if(name==='admin-dept')loadDeptPage();
   else if(name==='admin-leave'){loadAllLeave();loadLeaveConfig();}
-  else if(name==='admin-attendance'){setAttToday();switchAttTab('day');}
+  else if(name==='admin-attendance'){switchAttTab('day');}
   else if(name==='admin-att-rules')loadAttRules();
   else if(name==='benefit'){}// placeholder, nothing to load
   else if(name==='admin-roles')loadRolesPage();
@@ -3862,9 +3866,111 @@ function switchAttTab(tab){
     if(d)d.style.display=show?'':'none';
     if(b){b.className=b.className.replace(/\bprimary\b/,'').trim()+(show?' primary':'');}
   });
-  if(tab==='day'){if(!document.getElementById('attDate').value)setAttToday();else loadAttendance();}
+  if(tab==='day')initAttPersonTab();
   if(tab==='pending')loadPendingCheckins();
   if(tab==='report')populateReportUserList();
+}
+
+function initAttPersonTab(){
+  var sel=document.getElementById('attPersonSel');
+  if(sel&&sel.options.length<=1){
+    sel.innerHTML='<option value="">— Select staff —</option>';
+    allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';}).forEach(function(u){
+      var o=document.createElement('option');o.value=u.username;o.textContent=u.display_name||u.username;sel.appendChild(o);
+    });
+  }
+  setAttPersonToday();
+}
+
+function setAttPersonToday(){
+  var m=new Date();
+  var monthEl=document.getElementById('attPersonMonth');
+  if(monthEl)monthEl.value=m.getFullYear()+'-'+String(m.getMonth()+1).padStart(2,'0');
+}
+
+async function loadPersonAttendance(){
+  var username=document.getElementById('attPersonSel').value;
+  var month=document.getElementById('attPersonMonth').value;
+  if(!username||!month){document.getElementById('attList').innerHTML='<div class="empty-state"><p>Select a staff member and month</p></div>';return;}
+  var from=month+'-01';var lastDay=new Date(parseInt(month.split('-')[0]),parseInt(month.split('-')[1]),0).getDate();
+  var to=month+'-'+String(lastDay).padStart(2,'0');
+  var u=allUsers.find(function(x){return x.username===username;})||{};
+  document.getElementById('attDateLabel').textContent=(u.display_name||username)+' — '+month;
+  var atts=await sbGet('attendance','username=eq.'+encodeURIComponent(username)+'&date=gte.'+from+'&date=lte.'+to+'&order=date.asc');
+  var attMap={};atts.forEach(function(a){attMap[a.date]=a;});
+  var leaves=await sbGet('leave_requests','username=eq.'+encodeURIComponent(username)+'&status=eq.approved&start_date=lte.'+to+'&end_date=gte.'+from+'&select=start_date,end_date');
+  var leaveSet=new Set();leaves.forEach(function(l){var d=new Date(l.start_date),end=new Date(l.end_date);while(d<=end){leaveSet.add(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}});
+  var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date,name');
+  var holMap={};hols.forEach(function(h){holMap[h.date]=h.name;});
+  var rule=await getEffectiveRule(username,u.department);
+  var isMuslimMale=u.gender==='male'&&u.ethnicity==='malay';
+  var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+    +'<thead><tr style="color:#4a6fa5;font-size:10px;background:#0a0f1a">'
+    +'<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #1e2d45">Date</th>'
+    +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">Status</th>'
+    +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">S1 In</th>'
+    +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">S1 Out</th>'
+    +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">S2 In</th>'
+    +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">S2 Out</th>'
+    +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">S3 In</th>'
+    +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">S3 Out</th>'
+    +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">Flags</th>'
+    +'</tr></thead><tbody>';
+  for(var d=1;d<=lastDay;d++){
+    var key=month+'-'+String(d).padStart(2,'0');
+    var dt=new Date(parseInt(month.split('-')[0]),parseInt(month.split('-')[1])-1,d);
+    var dow=dt.getDay();
+    var isWeekend=dow===0;
+    var rec=attMap[key]||{};
+    var isLeave=leaveSet.has(key);
+    var isHol=!!holMap[key];
+    var st=isHol?'holiday':isLeave?'leave':(rec.status||'absent');
+    if(isWeekend&&!isHol)st='rest';
+    var stColor={present:'#34d399',absent:'#f87171',leave:'#fbbf24',holiday:'#a78bfa',rest:'#4a6fa5'}[st]||'#6b8ab0';
+    // Late/early flags
+    var flags=[];
+    if(st==='present'&&rule){
+      if(rec.check_in){var ciT=new Date(rec.check_in).getHours()*60+new Date(rec.check_in).getMinutes();if(ciT>timeStrToMin(rule.check_in_1_late_after))flags.push('<span style="color:#f59e0b;font-size:10px">LATE</span>');}
+      if(rec.check_out&&rec.check_in_2){var brk=(new Date(rec.check_in_2)-new Date(rec.check_out))/60000;var maxBrk=(rule.max_break_minutes||60)+(isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0);if(brk>maxBrk)flags.push('<span style="color:#f59e0b;font-size:10px">SLOW BACK</span>');}
+      if(rec.check_out_2){var co2T=new Date(rec.check_out_2).getHours()*60+new Date(rec.check_out_2).getMinutes();if(co2T<timeStrToMin(rule.check_out_2_early_before))flags.push('<span style="color:#ef4444;font-size:10px">EARLY</span>');}
+    }
+    // Inline time inputs for admin editing
+    var mkInput=function(field,val){
+      return '<input type="time" value="'+(val?fmtTime(val):'')+'" onchange="adminEditAtt(\''+username+'\',\''+key+'\',\''+field+'\',this.value)" style="width:65px;padding:1px 3px;border:1px solid #1e2d45;border-radius:3px;background:#0d1626;color:#e0e6f0;font-size:10px">';
+    };
+    html+='<tr style="border-bottom:1px solid #0d1626'+(isWeekend?';opacity:.5':'')+'">'
+      +'<td style="padding:5px 8px;white-space:nowrap;color:#e0e6f0">'+key.slice(5)+' <span style="color:#4a6fa5">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow]+'</span>'+(isHol?'<br><span style="font-size:9px;color:#a78bfa">'+esc(holMap[key])+'</span>':'')+'</td>'
+      +'<td style="text-align:center"><select onchange="adminEditAttStatus(\''+username+'\',\''+key+'\',this.value)" style="font-size:10px;padding:1px 3px;border:1px solid #1e2d45;border-radius:3px;background:#0d1626;color:'+stColor+'">'
+      +'<option value="present"'+(st==='present'?' selected':'')+'>✓ Present</option>'
+      +'<option value="absent"'+(st==='absent'?' selected':'')+'>✗ Absent</option>'
+      +'<option value="leave"'+(st==='leave'?' selected':'')+'>🌴 Leave</option>'
+      +'<option value="holiday"'+(st==='holiday'?' selected':'')+'>📅 Holiday</option>'
+      +'<option value="rest"'+(st==='rest'?' selected':'')+'>😴 Rest</option>'
+      +'</select></td>'
+      +'<td style="text-align:center">'+mkInput('check_in',rec.check_in)+'</td>'
+      +'<td style="text-align:center">'+mkInput('check_out',rec.check_out)+'</td>'
+      +'<td style="text-align:center">'+mkInput('check_in_2',rec.check_in_2)+'</td>'
+      +'<td style="text-align:center">'+mkInput('check_out_2',rec.check_out_2)+'</td>'
+      +'<td style="text-align:center">'+mkInput('check_in_3',rec.check_in_3)+'</td>'
+      +'<td style="text-align:center">'+mkInput('check_out_3',rec.check_out_3)+'</td>'
+      +'<td style="white-space:nowrap">'+flags.join(' ')+'</td>'
+      +'</tr>';
+  }
+  html+='</tbody></table></div>';
+  document.getElementById('attList').innerHTML=html;
+}
+
+async function adminEditAtt(username,date,field,value){
+  var data={username:username,date:date};
+  data[field]=value?date+'T'+value+':00':null;
+  if(value)data.status='present';
+  await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(data)});
+  await sbPost('change_log',{username:currentUser.username,action:'admin_edit_attendance',table_name:'attendance',record_id:username+':'+date,after_data:{field:field,value:value,edited_by:currentUser.username,manual:true}});
+}
+
+async function adminEditAttStatus(username,date,status){
+  await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify({username:username,date:date,status:status})});
+  await sbPost('change_log',{username:currentUser.username,action:'admin_edit_attendance_status',table_name:'attendance',record_id:username+':'+date,after_data:{status:status,edited_by:currentUser.username}});
 }
 
 async function loadPendingCheckins(){
@@ -4489,7 +4595,7 @@ async function loadChatMessages(scroll){
   if(!currentRoomId)return;
   var q='room_id=eq.'+currentRoomId+'&order=created_at.asc&limit=100';
   if(!scroll&&chatLastMsgId>0)q+='&id=gt.'+chatLastMsgId;
-  var msgs=await sbGet('chat_messages',q+'&select=id,username,message,message_type,media_data,created_at,reply_to,hidden_by,hidden_at');
+  var msgs=await sbGet('chat_messages',q+'&select=*');
   if(!msgs.length&&!scroll)return;
   var container=document.getElementById('chatMsgs');
   if(scroll)container.innerHTML='';
@@ -4672,7 +4778,8 @@ async function sendChatMsg(){
   if(!currentRoomId)return;
   var txt=document.getElementById('chatInput').value.trim();
   if(!txt&&!pendingChatImg)return;
-  var base={room_id:currentRoomId,username:currentUser.username,reply_to:chatReplyTo||null};
+  var base={room_id:currentRoomId,username:currentUser.username};
+  if(chatReplyTo)base.reply_to=chatReplyTo;
   if(pendingChatImg){
     await fetch(SB_URL+'/rest/v1/chat_messages',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(Object.assign({},base,{message:'[image]',message_type:'image',media_data:pendingChatImg}))});
     clearChatImg();
