@@ -4636,26 +4636,29 @@ var PERM_FIELDS=['can_access_tools','can_access_team','can_edit_pricelist','can_
 
 async function resolvePermissions(user){
   if(user.role==='admin'){
-    // Admin always gets everything
     PERM_FIELDS.forEach(function(f){user[f]=true;});
     user.is_viewer_mode=false;
     return;
   }
-  // Start with defaults (all false, perf_own true)
+  // If no custom role assigned, keep existing can_* fields as-is (backward compat)
+  if(!user.custom_role_id){
+    // Just ensure perf_own defaults to true if not set
+    if(user.can_view_perf_own===undefined||user.can_view_perf_own===null)user.can_view_perf_own=true;
+    return;
+  }
+  // Start with all false, perf_own true
   var resolved={};
   PERM_FIELDS.forEach(function(f){resolved[f]=false;});
   resolved.can_view_perf_own=true;
   // Layer 1: apply custom role template
-  if(user.custom_role_id){
-    var roles=await sbGet('custom_roles','id=eq.'+user.custom_role_id+'&select=*&is_active=eq.true');
-    if(roles.length){
-      var role=roles[0];
-      PERM_FIELDS.forEach(function(f){if(role[f]!==undefined&&role[f]!==null)resolved[f]=role[f];});
-      user._custom_role_name=role.name;
-      user._custom_role_description=role.description;
-    }
+  var roles=await sbGet('custom_roles','id=eq.'+user.custom_role_id+'&is_active=eq.true&select=*');
+  if(roles.length){
+    var role=roles[0];
+    PERM_FIELDS.forEach(function(f){if(role[f]!==undefined&&role[f]!==null)resolved[f]=role[f];});
+    user._custom_role_name=role.name;
+    user._custom_role_description=role.description;
   }
-  // Layer 2: apply individual permission overrides (fields explicitly set for this user)
+  // Layer 2: apply individual permission overrides
   var overrides=user.permission_overrides||[];
   if(Array.isArray(overrides)&&overrides.length){
     overrides.forEach(function(f){
@@ -4664,13 +4667,12 @@ async function resolvePermissions(user){
       }
     });
   }
-  // Viewer mode is mutually exclusive with edit permissions
+  // Viewer mode mutually exclusive with edit
   if(resolved.is_viewer_mode){
     resolved.can_edit_pricelist=false;
     resolved.can_edit_generator=false;
     resolved.can_edit_mf=false;
   }
-  // Write resolved values back into currentUser
   PERM_FIELDS.forEach(function(f){user[f]=resolved[f];});
   resolvedPerms=resolved;
 }
@@ -4688,16 +4690,21 @@ async function resolvePermissions(user){
   if(!sess){showTeamLoginPrompt();return;}
   try{
     var s=JSON.parse(sess);
-    if(s.module!=='team'&&s.role!=='admin'){sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;}
     var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity',{headers:sbH()});
     var rows=await r.json();
     if(!rows.length||rows[0].is_active===false){
       sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;
     }
     currentUser=rows[0];
+    // Admin always allowed through
+    if(currentUser.role==='admin'){
+      await resolvePermissions(currentUser);
+      if(currentUser.must_change_password){showForceChangePassword();return;}
+      await afterLogin();return;
+    }
     await resolvePermissions(currentUser);
-    // After resolve: check team access
-    if(!currentUser.can_access_team&&currentUser.role!=='admin'){
+    // Check team access after resolving permissions
+    if(!currentUser.can_access_team){
       sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;
     }
     if(currentUser.must_change_password){showForceChangePassword();return;}
