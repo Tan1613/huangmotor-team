@@ -2561,13 +2561,16 @@ async function loadAttendance(){
       {in:rec.check_in_2,out:rec.check_out_2},
       {in:rec.check_in_3,out:rec.check_out_3}
     ];
+    var isAdmin=currentUser.role==='admin';
     var sessHtml=sessions.map(function(s,i){
-      var dis=!canEdit||st==='leave'||st==='holiday'?'disabled':'';
+      // Admin can always edit; others only if present/absent
+      var editOk=isAdmin||(canEdit&&st!=='leave'&&st!=='holiday');
+      var dis=editOk?'':'disabled';
       return '<div style="display:flex;align-items:center;gap:4px;font-size:11px">'
         +'<span style="color:#4a6fa5;min-width:14px">S'+(i+1)+'</span>'
-        +'<input type="time" value="'+(s.in?fmtTime(s.in):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'in\','+(i+1)+',this.value)"':'')+' '+dis+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
+        +'<input type="time" value="'+(s.in?fmtTime(s.in):'')+'" '+(editOk?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'in\','+(i+1)+',this.value)"':'')+' '+dis+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:'+(editOk?'#0d1626':'#070c14')+';color:#e0e6f0;font-size:10px">'
         +'<span style="color:#2a4a6a">→</span>'
-        +'<input type="time" value="'+(s.out?fmtTime(s.out):'')+'" '+(canEdit&&st!=='leave'&&st!=='holiday'?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'out\','+(i+1)+',this.value)"':'')+' '+dis+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:#0d1626;color:#e0e6f0;font-size:10px">'
+        +'<input type="time" value="'+(s.out?fmtTime(s.out):'')+'" '+(editOk?'onchange="updateAttSession(\''+u.username+'\',\''+date+'\',\'out\','+(i+1)+',this.value)"':'')+' '+dis+' style="width:70px;padding:2px 4px;border:1px solid #1e2d45;border-radius:4px;background:'+(editOk?'#0d1626':'#070c14')+';color:#e0e6f0;font-size:10px">'
         +'</div>';
     }).join('');
     var photos=[rec.checkin_photo,rec.checkin_photo_2,rec.checkin_photo_3].filter(Boolean);
@@ -2582,7 +2585,7 @@ async function loadAttendance(){
       +'<div class="att-name">'+(esc(u.display_name)||esc(u.username))+pendingBadge+'</div>'
       +photoHtml
       +'</div>'
-      +(canEdit
+      +(isAdmin||canEdit
         ?'<select onchange="updateAttStatus(\''+u.username+'\',\''+date+'\',this.value)" class="btn" style="padding:3px 7px;font-size:11px">'
           +'<option value="present"'+(st==='present'?' selected':'')+'>Present</option>'
           +'<option value="absent"'+(st==='absent'?' selected':'')+'>Absent</option>'
@@ -2610,10 +2613,16 @@ async function updateAttSession(username,date,inOut,session,value){
   var fieldMap={in:{1:'check_in',2:'check_in_2',3:'check_in_3'},out:{1:'check_out',2:'check_out_2',3:'check_out_3'}};
   var field=fieldMap[inOut][session];
   if(!field)return;
-  var data={username:username,date:date,status:'present'};
-  data[field]=value?date+'T'+value+':00':null;
+  var data={username:username,date:date};
+  if(value){
+    data[field]=date+'T'+value+':00';
+    // Auto-set status to present if admin enters a time
+    if(currentUser.role==='admin')data.status='present';
+  } else {
+    data[field]=null;
+  }
   await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(data)});
-  await sbPost('change_log',{username:currentUser.username,action:'edit_attendance_time',table_name:'attendance',record_id:username+':'+date,after_data:{field:field,value:value,edited_by:currentUser.username}});
+  await sbPost('change_log',{username:currentUser.username,action:'edit_attendance_time',table_name:'attendance',record_id:username+':'+date,after_data:{field:field,value:value,edited_by:currentUser.username,manual_entry:true}});
 }
 
 /* ══ HOLIDAYS ══ */
@@ -4526,6 +4535,7 @@ async function loadChatMessages(scroll){
       +(m.hidden_by&&isAdmin?'<button class="btn sm" onclick="unhideMsg('+m.id+')" style="font-size:10px;padding:2px 6px">Unhide</button>':'')
       +'</div>';
     var timeStr=new Date(m.created_at).toLocaleString('en-MY',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true});
+    var bubble='<div class="chat-msg'+(isMine?' mine':'')+'" id="msg-'+m.id+'" data-id="'+m.id+'" onmouseenter="showMsgActions(this)" onmouseleave="hideMsgActions(this)" ontouchstart="handleMsgTouch(this,event)">'
       +'<div class="chat-avatar">'+initial+'</div>'
       +'<div class="chat-bubble">'
       +(isMine?'':'<div class="chat-bubble-name">'+esc(name)+'</div>')
