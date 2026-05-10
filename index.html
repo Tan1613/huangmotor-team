@@ -521,6 +521,24 @@ body{position:relative}
   </div>
 </div>
 
+<!-- Feedback / Report Modal -->
+<div class="modal-overlay" id="feedbackModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-hdr"><h3>📣 Feedback / Report</h3><button class="btn sm" onclick="closeModal('feedbackModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:11px;color:#4a6fa5;margin-bottom:8px">Your feedback goes directly to admin. You can choose to stay anonymous.</div>
+      <div class="form-field"><label>Message</label><textarea id="fbContent" rows="4" placeholder="Describe your feedback or concern..." style="width:100%;padding:8px;border:1px solid #1e2d45;border-radius:7px;background:#0d1626;color:#e0e6f0;font-size:12px;resize:none"></textarea></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:12px">
+        <input type="checkbox" id="fbAnon"> Submit anonymously
+      </label>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('feedbackModal')">Cancel</button>
+        <button class="btn primary" onclick="submitFeedback()">Send to Admin</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Attendance Rule Modal -->
 <div class="modal-overlay" id="attRuleModal">
   <div class="modal">
@@ -1357,9 +1375,24 @@ body{position:relative}
                 <div style="font-size:13px;font-weight:600;color:#f0f6fc" id="chatRoomName"></div>
                 <div style="font-size:10px;color:#4a6fa5" id="chatRoomMembers"></div>
               </div>
+              <button class="btn sm" id="chatPinBtn" onclick="togglePinRoom()" title="Pin/unpin this room" style="font-size:14px;padding:3px 7px">📌</button>
+              <button class="btn sm" id="chatSearchBtn" onclick="toggleChatSearch()" title="Search messages" style="font-size:14px;padding:3px 7px">🔍</button>
               <button class="btn sm" id="chatManageBtn" onclick="openRoomManage()" style="display:none">⚙</button>
             </div>
+            <!-- Search bar -->
+            <div id="chatSearchBar" style="display:none;padding:6px .7rem;background:#0a0f1a;border-bottom:1px solid #1e2d45">
+              <div style="display:flex;gap:6px">
+                <input type="text" id="chatSearchInput" placeholder="Search messages..." style="flex:1;padding:6px 10px;border:1px solid #1e2d45;border-radius:6px;background:#0d1626;color:#e0e6f0;font-size:12px" oninput="searchChatMessages(this.value)">
+                <button class="btn sm" onclick="toggleChatSearch()">✕</button>
+              </div>
+              <div id="chatSearchResults" style="max-height:160px;overflow-y:auto;margin-top:4px"></div>
+            </div>
             <div class="chat-msgs" id="chatMsgs"></div>
+            <!-- Reply bar -->
+            <div id="chatReplyBar" style="display:none;padding:4px .7rem;background:#0a0f1a;border-top:1px solid #1e3a5f;font-size:11px;color:#60a5fa;display:flex;align-items:center;justify-content:space-between">
+              <span id="chatReplyText"></span>
+              <button onclick="clearChatReply()" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:12px">✕</button>
+            </div>
             <div id="chatImgPreviewWrap" style="padding:0 .7rem;background:#0d1626;border-left:1px solid #1e2d45;border-right:1px solid #1e2d45;display:none">
               <div style="position:relative;display:inline-block">
                 <img id="chatImgPreview" class="chat-img-preview">
@@ -1368,6 +1401,7 @@ body{position:relative}
             </div>
             <div class="chat-input-row">
               <button class="chat-img-btn" onclick="document.getElementById('chatImgInput').click()" title="Send image">📷</button>
+              <button class="chat-img-btn" onclick="openFeedbackModal()" title="Anonymous feedback / report" style="font-size:14px">📣</button>
               <input type="file" id="chatImgInput" accept="image/*" style="display:none" onchange="onChatImgSelected(this)">
               <textarea class="chat-input" id="chatInput" placeholder="Type a message..." rows="1"
                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMsg();}"
@@ -1679,7 +1713,7 @@ function doLogout(){
 }
 
 async function loadAllUsersCache(){
-  allUsers=await sbGet('users','select=username,display_name,role,department,is_active&order=username.asc');
+  allUsers=await sbGet('users','select=username,display_name,role,department,is_active,custom_role_id,permission_overrides&order=username.asc');
 }
 
 /* ══ NAVIGATION ══ */
@@ -2851,17 +2885,27 @@ async function createUser(){
   } else {toast('Failed — username may already exist','error');}
 }
 
+var lastInviteData=null;
+
 function showInviteModal(username,tempPw,loginUrl){
+  lastInviteData={username:username,tempPw:tempPw,loginUrl:loginUrl};
   var inviteText='Welcome to HuangMotor M Sdn Bhd! 🏍️\n\nYour account is ready. Sign in at:\n'+loginUrl+'\n\nUsername: '+username+'\nPassword: '+tempPw+'\n\nPlease change your password in Settings after first login.';
   document.getElementById('taskDetailBody').innerHTML=
     '<div style="font-size:13px;font-weight:600;color:#f0f6fc;margin-bottom:12px">✅ Account Created — '+esc(username)+'</div>'
     +'<div style="font-size:11px;color:#4a6fa5;margin-bottom:8px">Copy and send this to the new staff member:</div>'
-    +'<textarea readonly style="width:100%;min-height:160px;padding:10px;background:#0a0f1a;border:1px solid #1e2d45;border-radius:8px;color:#e0e6f0;font-size:12px;font-family:monospace;resize:none;line-height:1.6" onclick="this.select()">'+inviteText+'</textarea>'
+    +'<textarea id="inviteTextArea" readonly style="width:100%;min-height:160px;padding:10px;background:#0a0f1a;border:1px solid #1e2d45;border-radius:8px;color:#e0e6f0;font-size:12px;font-family:monospace;resize:none;line-height:1.6" onclick="this.select()">'+inviteText+'</textarea>'
     +'<div style="display:flex;gap:6px;margin-top:10px">'
-    +'<button class="btn primary" onclick="navigator.clipboard.writeText(document.querySelector(\'#taskDetailBody textarea\').value);toast(\'Copied!\',\'success\')">📋 Copy Message</button>'
+    +'<button class="btn primary" onclick="navigator.clipboard.writeText(document.getElementById(\'inviteTextArea\').value);toast(\'Copied!\',\'success\')">📋 Copy Message</button>'
     +'<button class="btn" onclick="closeModal(\'taskDetailModal\')">Close</button>'
     +'</div>';
   openModal('taskDetailModal');
+}
+
+function reshowInvite(username){
+  if(!lastInviteData||lastInviteData.username!==username){
+    toast('Invite data not available — only available immediately after creation','error');return;
+  }
+  showInviteModal(lastInviteData.username,lastInviteData.tempPw,lastInviteData.loginUrl);
 }
 
 async function loadAdminUsers(){
@@ -2895,6 +2939,8 @@ async function loadAdminUsers(){
       +'<span style="font-size:10px;color:'+(u.is_active!==false?'#34d399':'#f87171')+'">'+(u.is_active!==false?'Active':'Disabled')+'</span>'
       +'<div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap">'
       +'<button class="btn sm" onclick="editUser(\''+esc(u.username)+'\')">Edit</button>'
+      +(lastInviteData&&lastInviteData.username===u.username?'<button class="btn sm" onclick="reshowInvite(\''+esc(u.username)+'\')" title="Re-show invite message">📋</button>':'')
+      +(u.username!==currentUser.username&&!isAdm?'<button class="btn sm" onclick="renameUsername(\''+esc(u.username)+'\')" title="Change username">@</button>':'')
       +(u.username!==currentUser.username?'<button class="btn sm" onclick="toggleActive(\''+esc(u.username)+'\','+(u.is_active!==false?'false':'true')+')">'+(u.is_active!==false?'Disable':'Enable')+'</button>':'')
       +(u.username!==currentUser.username?'<button class="btn sm" onclick="resetPw(\''+esc(u.username)+'\')">Reset PW</button>':'')
       +(u.username!==currentUser.username&&!isAdm?'<button class="btn sm danger" onclick="removeUser(\''+esc(u.username)+'\')">Delete</button>':'')
@@ -2915,6 +2961,38 @@ async function resetPw(username){
   var hash=await sha256(np);
   await sbPatch('users',{username:username},{password_hash:hash,failed_attempts:0,locked_until:null});
   toast('Password reset for "'+username+'"','success');
+}
+async function renameUsername(oldUsername){
+  var newUsername=prompt('New username for "'+oldUsername+'":\n(Warning: this will update all related records)');
+  if(!newUsername||!newUsername.trim())return;
+  newUsername=newUsername.trim().toLowerCase().replace(/[^a-z0-9_.-]/g,'');
+  if(!newUsername){toast('Invalid username — use letters, numbers, _ . - only','error');return;}
+  if(!confirm('Rename "'+oldUsername+'" → "'+newUsername+'"?\n\nThis updates users, attendance, sales, tasks, and chat records.'))return;
+  // Update all tables that reference username
+  var tables=[
+    {t:'attendance',col:'username'},
+    {t:'sales_records',col:'salesperson'},
+    {t:'leave_requests',col:'username'},
+    {t:'checkin_approvals',col:'username'},
+    {t:'chat_messages',col:'username'},
+    {t:'announcement_reads',col:'username'},
+    {t:'generator_settings',col:'username'},
+  ];
+  for(var i=0;i<tables.length;i++){
+    var tb=tables[i];
+    await fetch(SB_URL+'/rest/v1/'+tb.t+'?'+tb.col+'=eq.'+encodeURIComponent(oldUsername),{
+      method:'PATCH',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify({[tb.col]:newUsername})
+    });
+  }
+  // Update users table last (FK references cleared above)
+  await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(oldUsername),{
+    method:'PATCH',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
+    body:JSON.stringify({username:newUsername})
+  });
+  await sbPost('change_log',{username:currentUser.username,action:'rename_username',table_name:'users',record_id:oldUsername,after_data:{new_username:newUsername}});
+  toast('Username renamed to "'+newUsername+'"','success');
+  await loadAllUsersCache();loadAdminUsers();
 }
 async function removeUser(username){
   if(!confirm('Permanently delete "'+username+'"?\nThis cannot be undone.'))return;
@@ -4143,18 +4221,24 @@ function updateLeaveDays(){
 }
 
 /* ══ CHAT ══ */
-var currentRoomId=null;var chatPollInterval=null;var chatLastMsgId=0;var pendingChatImg=null;
+var currentRoomId=null;var chatPollInterval=null;var chatLastMsgId=0;var pendingChatImg=null;var chatRooms=[];
 
 async function loadChatRooms(){
-  // Allow admin OR anyone with cross-dept task permission to create rooms
   var canCreate=currentUser.role==='admin'||currentUser.can_create_chat_room;
   if(canCreate)document.getElementById('newChatRoomBtn').style.display='';
+  await loadPinnedRooms();
   var rooms=await sbGet('chat_rooms','order=created_at.desc');
-  // Filter rooms user is member of or is public
+  chatRooms=rooms;
   var myRooms=rooms.filter(function(r){
     if(r.is_public)return true;
     var members=r.members||[];
     return members.indexOf(currentUser.username)>=0||r.created_by===currentUser.username||currentUser.role==='admin';
+  });
+  // Sort: pinned first, then by created_at desc
+  myRooms.sort(function(a,b){
+    var ap=pinnedRooms.has(a.id)?1:0;var bp=pinnedRooms.has(b.id)?1:0;
+    if(ap!==bp)return bp-ap;
+    return new Date(b.created_at)-new Date(a.created_at);
   });
   if(!myRooms.length){
     document.getElementById('chatRoomItems').innerHTML='<div class="empty-state"><div class="icon">💬</div><p>No chat rooms yet.'+(currentUser.role==='admin'?' Create one above.':'')+'</p></div>';
@@ -4162,9 +4246,10 @@ async function loadChatRooms(){
   }
   document.getElementById('chatRoomItems').innerHTML=myRooms.map(function(r){
     var members=r.members||[];
+    var isPinned=pinnedRooms.has(r.id);
     return '<div class="chat-room-item" onclick="openChatRoom('+r.id+',\''+esc(r.name)+'\')">'
       +'<div class="chat-room-icon">'+(r.name.charAt(0).toUpperCase())+'</div>'
-      +'<div><div class="chat-room-name">'+esc(r.name)+'</div>'
+      +'<div style="flex:1"><div class="chat-room-name">'+(isPinned?'📌 ':'')+esc(r.name)+'</div>'
       +'<div class="chat-room-sub">'+(r.is_public?'Public · All staff':'Private · '+members.length+' members')+'</div></div>'
       +'</div>';
   }).join('');
@@ -4204,15 +4289,19 @@ async function openChatRoom(roomId,roomName){
   var members=room.members||[];
   var memberNames=room.is_public?'All staff':members.map(function(u){var usr=allUsers.find(function(x){return x.username===u;});return usr?(usr.display_name||usr.username):u;}).join(', ');
   document.getElementById('chatRoomMembers').textContent=(room.is_closed?'🔒 Closed · ':'')+memberNames;
-  // Show manage btn for admin or room creator
   var manBtn=document.getElementById('chatManageBtn');
   if(manBtn)manBtn.style.display=(currentUser.role==='admin'||room.created_by===currentUser.username)?'':'none';
-  // Block input if room closed and not admin
+  // Update pin button
+  var pinBtn=document.getElementById('chatPinBtn');
+  if(pinBtn)pinBtn.style.opacity=pinnedRooms.has(roomId)?'1':'0.5';
   var isBlocked=room.is_closed&&currentUser.role!=='admin';
   document.getElementById('chatInput').disabled=isBlocked;
   document.getElementById('chatInput').placeholder=isBlocked?'Room is closed':'Type a message...';
   document.querySelector('.chat-send-btn').disabled=isBlocked;
   document.querySelector('.chat-img-btn').disabled=isBlocked;
+  // Hide search bar and reply bar
+  var sb=document.getElementById('chatSearchBar');if(sb)sb.style.display='none';
+  clearChatReply();
   await loadChatMessages(true);
   clearInterval(chatPollInterval);
   chatPollInterval=setInterval(function(){loadChatMessages(false);},5000);
@@ -4286,16 +4375,31 @@ function backToRooms(){
   loadChatRooms();
 }
 
+var chatReplyTo=null;
+
 async function loadChatMessages(scroll){
   if(!currentRoomId)return;
   var q='room_id=eq.'+currentRoomId+'&order=created_at.asc&limit=100';
   if(!scroll&&chatLastMsgId>0)q+='&id=gt.'+chatLastMsgId;
-  var msgs=await sbGet('chat_messages',q);
+  var msgs=await sbGet('chat_messages',q+'&select=id,username,message,message_type,media_data,created_at,reply_to,hidden_by,hidden_at');
   if(!msgs.length&&!scroll)return;
   var container=document.getElementById('chatMsgs');
   if(scroll)container.innerHTML='';
+  var isAdmin=currentUser.role==='admin';
+  var room=chatRooms&&chatRooms.find(function(r){return r.id===currentRoomId;});
+  var isCreator=room&&room.created_by===currentUser.username;
   msgs.forEach(function(m){
     if(m.id>chatLastMsgId)chatLastMsgId=m.id;
+    // Hidden messages
+    if(m.hidden_by&&!isAdmin){
+      if(scroll){
+        var hidden='<div class="chat-msg" data-id="'+m.id+'" style="opacity:.4">'
+          +'<div class="chat-avatar">—</div>'
+          +'<div class="chat-bubble"><div class="chat-bubble-text" style="font-style:italic;color:#4a6fa5">Message retracted</div></div></div>';
+        container.insertAdjacentHTML('beforeend',hidden);
+      }
+      return;
+    }
     var isMine=m.username===currentUser.username;
     var user=allUsers.find(function(u){return u.username===m.username;})||{};
     var initial=(user.display_name||m.username||'?').charAt(0).toUpperCase();
@@ -4303,39 +4407,153 @@ async function loadChatMessages(scroll){
     var content=m.message_type==='image'&&m.media_data
       ?'<img src="'+m.media_data+'" class="chat-bubble-img" onclick="viewFullImg(this.src)">'
       :'<div class="chat-bubble-text">'+esc(m.message)+'</div>';
-    var bubble='<div class="chat-msg'+(isMine?' mine':'')+'">'
+    // Reply preview
+    var replyHtml='';
+    if(m.reply_to){
+      replyHtml='<div style="background:#0a0f1a;border-left:2px solid #3b82f6;padding:4px 8px;margin-bottom:4px;border-radius:4px;font-size:10px;color:#4a6fa5" id="reply-ref-'+m.reply_to+'">↩ replying to <a href="#msg-'+m.reply_to+'" onclick="scrollToMsg('+m.reply_to+')" style="color:#60a5fa">message</a></div>';
+    }
+    // Admin hidden indicator
+    var hiddenTag=m.hidden_by&&isAdmin?'<span style="font-size:9px;color:#f87171;margin-left:4px">[hidden from staff]</span>':'';
+    // Action buttons (shown on hover via CSS)
+    var canHide=isAdmin||isCreator||isMine;
+    var actions='<div class="msg-actions" style="display:none;gap:3px;margin-top:3px">'
+      +'<button class="btn sm" onclick="setChatReply('+m.id+',\''+esc((m.message||'').slice(0,40))+'\')" style="font-size:10px;padding:2px 6px">↩</button>'
+      +(canHide&&!m.hidden_by?'<button class="btn sm" onclick="hideMsg('+m.id+')" style="font-size:10px;padding:2px 6px">'+(isAdmin?'Hide':'Retract')+'</button>':'')
+      +(m.hidden_by&&isAdmin?'<button class="btn sm" onclick="unhideMsg('+m.id+')" style="font-size:10px;padding:2px 6px">Unhide</button>':'')
+      +'</div>';
+    var bubble='<div class="chat-msg'+(isMine?' mine':'')+'" id="msg-'+m.id+'" data-id="'+m.id+'" onmouseenter="showMsgActions(this)" onmouseleave="hideMsgActions(this)" ontouchstart="handleMsgTouch(this,event)">'
       +'<div class="chat-avatar">'+initial+'</div>'
       +'<div class="chat-bubble">'
       +(isMine?'':'<div class="chat-bubble-name">'+esc(name)+'</div>')
-      +content
+      +replyHtml+content
+      +hiddenTag
       +'<div class="chat-bubble-time">'+fmtRelative(m.created_at)+'</div>'
+      +actions
       +'</div></div>';
     container.insertAdjacentHTML('beforeend',bubble);
   });
   if(scroll||msgs.length)container.scrollTop=container.scrollHeight;
 }
 
+function showMsgActions(el){var a=el.querySelector('.msg-actions');if(a)a.style.display='flex';}
+function hideMsgActions(el){var a=el.querySelector('.msg-actions');if(a)a.style.display='none';}
+var touchTimer=null;
+function handleMsgTouch(el,e){
+  clearTimeout(touchTimer);
+  touchTimer=setTimeout(function(){showMsgActions(el);},500);
+}
+
+function scrollToMsg(id){
+  var el=document.getElementById('msg-'+id);
+  if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.background='#1e2d45';setTimeout(function(){el.style.background='';},1200);}
+}
+
+function setChatReply(id,preview){
+  chatReplyTo=id;
+  var bar=document.getElementById('chatReplyBar');
+  var txt=document.getElementById('chatReplyText');
+  if(bar){bar.style.display='flex';}
+  if(txt)txt.textContent='↩ Replying to: '+preview+(preview.length>=40?'…':'');
+  document.getElementById('chatInput').focus();
+}
+function clearChatReply(){
+  chatReplyTo=null;
+  var bar=document.getElementById('chatReplyBar');
+  if(bar)bar.style.display='none';
+}
+
+/* ── Chat Search ── */
+function toggleChatSearch(){
+  var bar=document.getElementById('chatSearchBar');
+  if(!bar)return;
+  var visible=bar.style.display!=='none';
+  bar.style.display=visible?'none':'';
+  if(!visible)document.getElementById('chatSearchInput').focus();
+  else{document.getElementById('chatSearchInput').value='';document.getElementById('chatSearchResults').innerHTML='';}
+}
+async function searchChatMessages(query){
+  if(!query||query.length<2){document.getElementById('chatSearchResults').innerHTML='';return;}
+  var msgs=await sbGet('chat_messages','room_id=eq.'+currentRoomId+'&message=ilike.*'+encodeURIComponent(query)+'*&order=created_at.desc&limit=20&select=id,username,message,created_at');
+  if(!msgs.length){document.getElementById('chatSearchResults').innerHTML='<div style="font-size:11px;color:#4a6fa5;padding:4px">No results</div>';return;}
+  document.getElementById('chatSearchResults').innerHTML=msgs.map(function(m){
+    var u=allUsers.find(function(x){return x.username===m.username;})||{};
+    return '<div onclick="scrollToMsg('+m.id+');toggleChatSearch()" style="padding:5px 6px;cursor:pointer;border-radius:4px;margin-bottom:2px;background:#0d1626" onmouseenter="this.style.background=\'#1e2d45\'" onmouseleave="this.style.background=\'#0d1626\'">'
+      +'<div style="font-size:11px;color:#60a5fa">'+(esc(u.display_name||m.username))+'</div>'
+      +'<div style="font-size:12px;color:#e0e6f0">'+esc((m.message||'').slice(0,60))+'</div>'
+      +'<div style="font-size:10px;color:#4a6fa5">'+fmtRelative(m.created_at)+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+/* ── Pin Room ── */
+var pinnedRooms=new Set();
+async function loadPinnedRooms(){
+  try{
+    var rows=await sbGet('chat_pins','username=eq.'+encodeURIComponent(currentUser.username)+'&select=room_id');
+    pinnedRooms=new Set(rows.map(function(r){return r.room_id;}));
+  }catch(e){pinnedRooms=new Set();}
+}
+async function togglePinRoom(){
+  if(!currentRoomId)return;
+  var btn=document.getElementById('chatPinBtn');
+  if(pinnedRooms.has(currentRoomId)){
+    await fetch(SB_URL+'/rest/v1/chat_pins?username=eq.'+encodeURIComponent(currentUser.username)+'&room_id=eq.'+currentRoomId,{method:'DELETE',headers:sbH()});
+    pinnedRooms.delete(currentRoomId);
+    if(btn)btn.style.opacity='0.5';
+    toast('Room unpinned','success');
+  } else {
+    await sbPost('chat_pins',{username:currentUser.username,room_id:currentRoomId});
+    pinnedRooms.add(currentRoomId);
+    if(btn)btn.style.opacity='1';
+    toast('Room pinned 📌','success');
+  }
+}
+
+/* ── Feedback / Report ── */
+function openFeedbackModal(){
+  var el=document.getElementById('fbContent');if(el)el.value='';
+  var anon=document.getElementById('fbAnon');if(anon)anon.checked=false;
+  openModal('feedbackModal');
+}
+async function submitFeedback(){
+  var content=(document.getElementById('fbContent').value||'').trim();
+  if(!content){toast('Please enter a message','error');return;}
+  var isAnon=document.getElementById('fbAnon').checked;
+  await sbPost('feedback_reports',{
+    room_id:currentRoomId,
+    reporter:isAnon?null:currentUser.username,
+    content:content,
+    is_anonymous:isAnon,
+    status:'open'
+  });
+  closeModal('feedbackModal');
+  toast('Feedback sent to admin ✓','success');
+}
+
+async function hideMsg(id){
+  await sbPatch('chat_messages',{id:id},{hidden_by:currentUser.username,hidden_at:new Date().toISOString()});
+  await loadChatMessages(true);toast('Message hidden','success');
+}
+async function unhideMsg(id){
+  await sbPatch('chat_messages',{id:id},{hidden_by:null,hidden_at:null});
+  await loadChatMessages(true);toast('Message restored','success');
+}
+
 async function sendChatMsg(){
   if(!currentRoomId)return;
   var txt=document.getElementById('chatInput').value.trim();
   if(!txt&&!pendingChatImg)return;
+  var base={room_id:currentRoomId,username:currentUser.username,reply_to:chatReplyTo||null};
   if(pendingChatImg){
-    await fetch(SB_URL+'/rest/v1/chat_messages',{
-      method:'POST',
-      headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
-      body:JSON.stringify({room_id:currentRoomId,username:currentUser.username,message:'[image]',message_type:'image',media_data:pendingChatImg})
-    });
+    await fetch(SB_URL+'/rest/v1/chat_messages',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(Object.assign({},base,{message:'[image]',message_type:'image',media_data:pendingChatImg}))});
     clearChatImg();
   }
   if(txt){
-    await fetch(SB_URL+'/rest/v1/chat_messages',{
-      method:'POST',
-      headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
-      body:JSON.stringify({room_id:currentRoomId,username:currentUser.username,message:txt,message_type:'text'})
-    });
+    await fetch(SB_URL+'/rest/v1/chat_messages',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(Object.assign({},base,{message:txt,message_type:'text'}))});
     document.getElementById('chatInput').value='';
     document.getElementById('chatInput').style.height='36px';
   }
+  clearChatReply();
   await loadChatMessages(false);
   var c=document.getElementById('chatMsgs');c.scrollTop=c.scrollHeight;
 }
