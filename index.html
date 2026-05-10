@@ -3543,8 +3543,7 @@ async function saveRole(){
   var id=document.getElementById('rm_id').value;
   var data={name:name,
     description:(document.getElementById('rm_desc').value||'').trim()||null,
-    applies_to:(document.getElementById('rm_applies_to').value)||'all',
-    is_active:true};
+    applies_to:(document.getElementById('rm_applies_to').value)||'all'};
   rmSyncFromDom();
   PERM_DEFS.forEach(function(p){data[p.field]=!!(rmPermState[p.id]&&rmPermState[p.id].checked);});
   if(id){
@@ -5110,7 +5109,7 @@ async function resolvePermissions(user){
   var resolved={};
   PERM_FIELDS.forEach(function(f){resolved[f]=false;});
   resolved.can_view_perf_own=true;
-  var roles=await sbGet('custom_roles','id=eq.'+user.custom_role_id+'&is_active=eq.true&select=*');
+  var roles=await sbGet('custom_roles','id=eq.'+user.custom_role_id+'&select=*');
   if(roles.length){
     var role=roles[0];
     PERM_FIELDS.forEach(function(f){if(role[f]!==undefined&&role[f]!==null)resolved[f]=role[f];});
