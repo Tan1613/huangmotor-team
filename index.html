@@ -377,18 +377,18 @@ body{position:relative}
       <button class="btn sm" onclick="closeModal('newRoomModal')">✕</button>
     </div>
     <div class="modal-body">
-      <div class="form-field"><label>Room Name</label><input type="text" id="rm_name" placeholder="e.g. Sales Team"></div>
-      <div class="form-field"><label>Description (optional)</label><input type="text" id="rm_desc" placeholder="What is this room for?"></div>
+      <div class="form-field"><label>Room Name</label><input type="text" id="cr_name" placeholder="e.g. Sales Team"></div>
+      <div class="form-field"><label>Description (optional)</label><input type="text" id="cr_desc" placeholder="What is this room for?"></div>
       <div class="form-field">
         <label>Type</label>
-        <select id="rm_public">
+        <select id="cr_public">
           <option value="false">Private — select members below</option>
           <option value="true">Public — all staff</option>
         </select>
       </div>
-      <div class="form-field" id="rm_members_wrap">
+      <div class="form-field" id="cr_members_wrap">
         <label>Members</label>
-        <div id="rm_member_list" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:160px;overflow-y:auto;padding:6px;border:1px solid #1e2d45;border-radius:6px"></div>
+        <div id="cr_member_list" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:160px;overflow-y:auto;padding:6px;border:1px solid #1e2d45;border-radius:6px"></div>
       </div>
       <div class="form-actions">
         <button class="btn" onclick="closeModal('newRoomModal')">Cancel</button>
@@ -1412,7 +1412,11 @@ body{position:relative}
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem" id="checkinSessions"></div>
           <div id="checkinGPS" style="font-size:11px;color:#4a6fa5;text-align:center;margin-bottom:8px">📍 Getting location...</div>
-          <div id="checkinPhotoWrap" style="margin-bottom:8px">
+          <!-- Session selector -->
+          <div id="checkinSessionSel" style="margin-bottom:8px;display:none">
+            <label style="font-size:11px;color:#4a6fa5;display:block;margin-bottom:4px">打卡时段 / Session:</label>
+            <select id="checkinSessionSelect" onchange="updateCheckinBtnLabel()" style="width:100%;padding:8px 10px;border:1px solid #1e2d45;border-radius:7px;background:#0d1626;color:#e0e6f0;font-size:12px"></select>
+          </div>
             <label style="font-size:11px;color:#4a6fa5;display:block;margin-bottom:4px">📷 Photo <span style="color:#2a4a6a">(camera only — album not allowed)</span></label>
             <input type="file" id="checkinPhoto" accept="image/*" capture="environment" style="display:none" onchange="onCheckinPhotoSelected(this)">
             <div style="display:flex;gap:8px;align-items:center">
@@ -2648,7 +2652,7 @@ async function loadPerformance(){
   var fType=document.getElementById('perfType').value;
   var fFrom=document.getElementById('perfFrom').value;
   var fTo=document.getElementById('perfTo').value;
-  var q='status=eq.completed&select=assigned_to,task_type,completed_at';
+  var q='status=eq.completed&deleted_at=is.null&select=assigned_to,task_type,completed_at';
   q+='&completed_at=gte.'+(fFrom||since)+'T00:00:00Z';
   if(fTo)q+='&completed_at=lte.'+fTo+'T23:59:59Z';
   if(fUser&&fUser!=='all')q+='&assigned_to=eq.'+encodeURIComponent(fUser);
@@ -4028,22 +4032,21 @@ async function doCheckIn(){
     // Load approved attendance record for today
     var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
     var r=rec.length?rec[0]:{};
-    // Also load pending approvals to know which sessions are already submitted
     var pendingRecs=await sbGet('checkin_approvals','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&status=eq.pending&select=session_field');
     var pendingFields=pendingRecs.map(function(p){return p.session_field;});
-    // Determine next available field (not yet approved AND not pending)
-    var allFields=['check_in','check_out','check_in_2','check_out_2','check_in_3','check_out_3'];
-    var field=null;
-    for(var i=0;i<allFields.length;i++){
-      var f=allFields[i];
-      if(!r[f]&&pendingFields.indexOf(f)<0){field=f;break;}
-    }
+    // Use selected session from dropdown, or fallback to auto-detect
+    var selEl=document.getElementById('checkinSessionSelect');
+    var field=selEl&&selEl.value?selEl.value:null;
     if(!field){
-      // Check if just pending
-      var anyPending=pendingFields.length>0;
-      toast(anyPending?'⏳ Pending admin approval for current session':'✓ All sessions completed today','success');
-      await loadCheckin();return;
+      var allFields=['check_in','check_out','check_in_2','check_out_2','check_in_3','check_out_3'];
+      for(var i=0;i<allFields.length;i++){
+        if(!r[allFields[i]]&&pendingFields.indexOf(allFields[i])<0){field=allFields[i];break;}
+      }
     }
+    if(!field){toast('✓ All sessions completed today','success');await loadCheckin();return;}
+    // Check this specific field isn't already pending
+    if(pendingFields.indexOf(field)>=0){toast('⏳ Already submitted — awaiting approval','success');await loadCheckin();return;}
+    if(r[field]){toast('This session already confirmed','success');await loadCheckin();return;}
     // Build pending data
     var data={field:field,timestamp:new Date().toISOString(),gps:checkinGPSCoords,photo:null};
     if(checkinPhotoDataUrl){
@@ -4152,11 +4155,11 @@ async function loadChatRooms(){
 }
 
 async function openNewRoomModal(){
-  document.getElementById('rm_name').value='';
-  document.getElementById('rm_desc').value='';
-  document.getElementById('rm_public').value='false';
+  document.getElementById('cr_name').value='';
+  document.getElementById('cr_desc').value='';
+  document.getElementById('cr_public').value='false';
   // Populate members (exclude self and admin — admin auto-included)
-  var list=document.getElementById('rm_member_list');
+  var list=document.getElementById('cr_member_list');
   list.innerHTML=allUsers.filter(function(u){return u.username!==currentUser.username&&u.role!=='admin'&&u.is_active!==false;}).map(function(u){
     return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#c9d1d9"><input type="checkbox" value="'+esc(u.username)+'" class="rm_ck"> '+(esc(u.display_name)||esc(u.username))+'</label>';
   }).join('');
@@ -4164,14 +4167,14 @@ async function openNewRoomModal(){
 }
 
 async function createChatRoom(){
-  var name=document.getElementById('rm_name').value.trim();
+  var name=document.getElementById('cr_name').value.trim();
   if(!name){toast('Room name required','error');return;}
-  var isPublic=document.getElementById('rm_public').value==='true';
+  var isPublic=document.getElementById('cr_public').value==='true';
   var members=Array.from(document.querySelectorAll('.rm_ck:checked')).map(function(el){return el.value;});
   // Always include creator and all admins
   members.push(currentUser.username);
   allUsers.filter(function(u){return u.role==='admin'&&u.username!==currentUser.username;}).forEach(function(u){if(members.indexOf(u.username)<0)members.push(u.username);});
-  await sbPost('chat_rooms',{name:name,description:document.getElementById('rm_desc').value.trim()||null,created_by:currentUser.username,members:members,is_public:isPublic});
+  await sbPost('chat_rooms',{name:name,description:document.getElementById('cr_desc').value.trim()||null,created_by:currentUser.username,members:members,is_public:isPublic});
   closeModal('newRoomModal');toast('Room created','success');loadChatRooms();
 }
 
@@ -4829,8 +4832,7 @@ async function loadCheckin(){
   document.getElementById('checkinDate').textContent=fmtDate(today);
   var rec=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=*');
   var r=rec.length?rec[0]:{};
-  // Load pending approvals
-  var pendingRecs=await sbGet('checkin_approvals','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&select=session_field,status,photo');
+  var pendingRecs=await sbGet('checkin_approvals','username=eq.'+encodeURIComponent(currentUser.username)+'&date=eq.'+today+'&status=eq.pending&select=session_field,status,photo');
   var pendingMap={};pendingRecs.forEach(function(p){pendingMap[p.session_field]=p;});
   var sessions=[
     {l:'S1 In',f:'check_in',v:r.check_in,photo:r.checkin_photo},
@@ -4840,41 +4842,54 @@ async function loadCheckin(){
     {l:'S3 In',f:'check_in_3',v:r.check_in_3,photo:r.checkin_photo_3},
     {l:'S3 Out',f:'check_out_3',v:r.check_out_3,photo:null}
   ];
-  // Group into 3 session pairs
   var pairs=[[sessions[0],sessions[1]],[sessions[2],sessions[3]],[sessions[4],sessions[5]]];
   document.getElementById('checkinSessions').innerHTML=pairs.map(function(pair,i){
     return '<div style="background:#0d1626;border:1px solid #1e2d45;border-radius:8px;padding:8px;text-align:center">'
       +'<div style="font-size:10px;color:#4a6fa5;margin-bottom:4px;font-weight:600">Session '+(i+1)+'</div>'
       +pair.map(function(s){
-        var pend=pendingMap[s.f];
-        var isPending=pend&&pend.status==='pending';
+        var pend=pendingMap[s.f];var isPending=pend&&pend.status==='pending';
         var color=s.v?'#34d399':isPending?'#f59e0b':'#4a6fa5';
-        return '<div style="font-size:11px;color:'+color+';margin:1px 0">'
-          +s.l+': '+(s.v?fmtTime(s.v):isPending?'⏳ Pending':'—')+'</div>'
-          +(s.photo||( isPending&&pend.photo)?'<img src="'+(s.photo||pend.photo)+'" style="width:32px;height:32px;object-fit:cover;border-radius:3px;margin-top:2px;cursor:pointer" onclick="viewFullImg(this.src)">':'');
-      }).join('')
-      +'</div>';
+        return '<div style="font-size:11px;color:'+color+';margin:1px 0">'+s.l+': '+(s.v?fmtTime(s.v):isPending?'⏳ Pending':'—')+'</div>'
+          +(s.photo||(isPending&&pend.photo)?'<img src="'+(s.photo||pend.photo)+'" style="width:32px;height:32px;object-fit:cover;border-radius:3px;margin-top:2px;cursor:pointer" onclick="viewFullImg(this.src)">':'');
+      }).join('')+'</div>';
   }).join('');
-  // Determine button state
+
+  // Build list of next available fields (not yet done and not pending)
   var allFields=['check_in','check_out','check_in_2','check_out_2','check_in_3','check_out_3'];
-  var nextField=null;
-  for(var i=0;i<allFields.length;i++){
-    var f=allFields[i];
-    if(!r[f]&&!(pendingMap[f]&&pendingMap[f].status==='pending')){nextField=f;break;}
-  }
+  var availableFields=allFields.filter(function(f){
+    return !r[f]&&!(pendingMap[f]&&pendingMap[f].status==='pending');
+  });
   var btn=document.getElementById('checkinBtn');
   var statusEl=document.getElementById('checkinStatus');
-  if(!nextField){
+  var selWrap=document.getElementById('checkinSessionSel');
+
+  if(!availableFields.length){
     btn.disabled=true;btn.textContent='✓ All done for today';
     statusEl.textContent=Object.keys(pendingMap).length>0?'⏳ Some sessions awaiting admin approval':'✅ All sessions confirmed';
+    if(selWrap)selWrap.style.display='none';
   } else {
     btn.disabled=false;
-    var isIn=nextField.indexOf('out')<0;
-    var sn=(['check_in','check_out'].indexOf(nextField)>=0?1:['check_in_2','check_out_2'].indexOf(nextField)>=0?2:3);
-    btn.textContent=(isIn?'Check In':'Check Out')+' (Session '+sn+')';
-    statusEl.textContent='Next: '+(isIn?'Check In':'Check Out')+' Session '+sn;
+    // Session selector — default to first available
+    if(selWrap){
+      var fieldLabels={check_in:'S1 Check In',check_out:'S1 Check Out',check_in_2:'S2 Check In',check_out_2:'S2 Check Out',check_in_3:'S3 Check In',check_out_3:'S3 Check Out'};
+      selWrap.style.display='';
+      var selEl=document.getElementById('checkinSessionSelect');
+      if(selEl){
+        var prev=selEl.value;
+        selEl.innerHTML=availableFields.map(function(f){return '<option value="'+f+'">'+fieldLabels[f]+'</option>';}).join('');
+        // Keep previous selection if still available
+        if(availableFields.indexOf(prev)>=0)selEl.value=prev;
+        else selEl.value=availableFields[0];
+      }
+      updateCheckinBtnLabel();
+    } else {
+      var nextField=availableFields[0];
+      var isIn=nextField.indexOf('out')<0;
+      var sn=(['check_in','check_out'].indexOf(nextField)>=0?1:['check_in_2','check_out_2'].indexOf(nextField)>=0?2:3);
+      btn.textContent=(isIn?'Check In':'Check Out')+' (Session '+sn+')';
+      statusEl.textContent='Next: '+(isIn?'Check In':'Check Out')+' Session '+sn;
+    }
   }
-  // GPS silently
   if(navigator.geolocation&&!checkinGPSCoords){
     navigator.geolocation.getCurrentPosition(function(pos){
       checkinGPSCoords={lat:pos.coords.latitude,lng:pos.coords.longitude};
@@ -4884,6 +4899,15 @@ async function loadCheckin(){
       var el=document.getElementById('checkinGPS');if(el)el.textContent='📍 GPS unavailable — use photo';
     },{enableHighAccuracy:true,timeout:8000,maximumAge:30000});
   }
+}
+
+function updateCheckinBtnLabel(){
+  var sel=document.getElementById('checkinSessionSelect');
+  var btn=document.getElementById('checkinBtn');
+  if(!sel||!btn)return;
+  var f=sel.value;
+  var labels={check_in:'S1 Check In',check_out:'S1 Check Out',check_in_2:'S2 Check In',check_out_2:'S2 Check Out',check_in_3:'S3 Check In',check_out_3:'S3 Check Out'};
+  btn.textContent=labels[f]||'Check In';
 }
 var checkinPhotoDataUrl=null;
 
