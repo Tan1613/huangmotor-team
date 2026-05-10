@@ -3180,41 +3180,95 @@ async function loadAllRoles(){
 async function loadRolesPage(){
   if(currentUser.role!=='admin'&&!currentUser.can_manage_roles){toast('No permission to manage roles','error');return;}
   await loadAllRoles();
+  var wrap=document.getElementById('rolesPageContent');
   if(!allRoles.length){
-    document.getElementById('rolesPageContent').innerHTML='<div class="empty-state"><div class="icon">🎭</div><p>No roles yet. Create one to get started.</p></div>';
+    wrap.innerHTML='<div class="empty-state"><div class="icon">🎭</div><p>No roles yet. Create one to get started.</p></div>';
     return;
   }
-  // For each role show who is assigned
-  var users=await sbGet('users','select=username,display_name,custom_role_id,is_active&order=username.asc');
-  var html=allRoles.map(function(r){
-    var assigned=users.filter(function(u){return u.custom_role_id===r.id&&u.is_active!==false;});
-    var perms=[];
-    if(r.can_access_tools)perms.push('Tools');
-    if(r.can_access_team)perms.push('Team');
-    if(r.can_edit_pricelist)perms.push('Edit PL');
-    if(r.can_edit_generator)perms.push('Edit Gen');
-    if(r.can_view_attendance)perms.push('Attendance');
-    if(r.can_approve_leave)perms.push('Leave Mgr');
-    if(r.can_view_perf_all)perms.push('Perf All');
-    else if(r.can_view_perf_dept)perms.push('Perf Dept');
-    if(r.is_viewer_mode)perms.push('Viewer Mode');
+  var users=await sbGet('users','is_active=neq.false&select=username,display_name,custom_role_id');
+  // Permission groups for display
+  var PGROUPS=[
+    {label:'Tools',color:'#185fa5',bg:'#0d1e35',fields:[
+      {f:'can_access_tools',l:'Access'},
+      {f:'can_edit_pricelist',l:'Edit Pricelist'},
+      {f:'can_edit_generator',l:'Edit Generator'},
+      {f:'can_edit_mf',l:'Edit Max Finance'},
+      {f:'is_viewer_mode',l:'Viewer Mode'}
+    ]},
+    {label:'Team',color:'#059669',bg:'#0d2318',fields:[
+      {f:'can_access_team',l:'Access'},
+      {f:'can_assign_task_dept',l:'Tasks (dept)'},
+      {f:'can_assign_task_cross',l:'Tasks (cross)'},
+      {f:'can_view_attendance',l:'Attendance'},
+      {f:'can_approve_leave',l:'Approve Leave'},
+      {f:'can_view_perf_own',l:'Perf Own'},
+      {f:'can_view_perf_dept',l:'Perf Dept'},
+      {f:'can_view_perf_all',l:'Perf All'}
+    ]},
+    {label:'Sales & Content',color:'#7c3aed',bg:'#110d20',fields:[
+      {f:'can_view_all_sales',l:'View All Sales'},
+      {f:'can_export_sales',l:'Export Sales'},
+      {f:'can_create_announcement',l:'Create Announce'},
+      {f:'can_pin_announcement',l:'Pin Announce'},
+      {f:'can_create_chat_room',l:'Create Chat'},
+      {f:'can_view_change_log',l:'Change Log'}
+    ]},
+    {label:'Admin',color:'#b45309',bg:'#1a1000',fields:[
+      {f:'can_manage_users',l:'Manage Users'},
+      {f:'can_manage_roles',l:'Manage Roles'},
+      {f:'can_manage_departments',l:'Manage Depts'},
+      {f:'can_export_attendance',l:'Export Att.'}
+    ]},
+    {label:'Future',color:'#6b7280',bg:'#111',fields:[
+      {f:'can_access_benefit',l:'Benefits'},
+      {f:'can_manage_benefit',l:'Manage Benefits'},
+      {f:'can_access_payroll',l:'Payroll'}
+    ]}
+  ];
+  wrap.innerHTML=allRoles.map(function(r){
+    var assigned=users.filter(function(u){return u.custom_role_id===r.id;});
+    var appliesToLabel=r.applies_to==='staff'?'Staff only':r.applies_to==='partner'?'Partner only':'All groups';
+    // Build grouped perm pills
+    var groupHtml=PGROUPS.map(function(g){
+      var active=g.fields.filter(function(f){return !!r[f.f];});
+      if(!active.length)return '';
+      return '<div style="margin-top:6px">'
+        +'<span style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:'+g.color+';margin-right:4px">'+g.label+'</span>'
+        +active.map(function(f){
+          return '<span style="display:inline-block;font-size:10px;padding:1px 7px;border-radius:10px;background:'+g.bg+';color:'+g.color+';margin:1px 2px;border:1px solid '+g.color+'33">'+f.l+'</span>';
+        }).join('')
+        +'</div>';
+    }).join('');
+    // Assigned users avatars
+    var avatarHtml=assigned.length
+      ?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;align-items:center">'
+        +'<span style="font-size:10px;color:#4a6fa5">'+assigned.length+' user'+(assigned.length>1?'s':'')+':</span>'
+        +assigned.slice(0,6).map(function(u){
+          var n=u.display_name||u.username;
+          return '<div title="'+esc(n)+'" style="width:24px;height:24px;border-radius:50%;background:#1d4ed822;border:1px solid #1d4ed855;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#60a5fa">'+n.charAt(0).toUpperCase()+'</div>';
+        }).join('')
+        +(assigned.length>6?'<span style="font-size:10px;color:#4a6fa5">+'+( assigned.length-6)+' more</span>':'')
+        +'</div>'
+      :'<div style="font-size:10px;color:#2a4a6a;margin-top:8px">No users assigned</div>';
     return '<div class="card" style="margin-bottom:.8rem">'
-      +'<div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-bottom:3px">'+esc(r.name)+'</div>'
-      +'<div style="font-size:11px;color:#4a6fa5">'+(r.applies_to&&r.applies_to!=='all'?'Applies to: <strong>'+r.applies_to+'</strong>':'Applies to: all groups')+'</div>'
-      +'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">'
-      +perms.map(function(p){return '<span style="font-size:10px;padding:1px 7px;border-radius:4px;background:#0d1e35;color:#60a5fa">'+p+'</span>';}).join('')
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">'
+      +'<span style="font-size:14px;font-weight:600;color:#f0f6fc">'+esc(r.name)+'</span>'
+      +'<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:#1e2d45;color:#6b8ab0">'+appliesToLabel+'</span>'
+      +(r.is_active===false?'<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:#2a0d0d;color:#f87171">Inactive</span>':'')
       +'</div>'
-      +'<div style="font-size:11px;color:#6b8ab0">'+(assigned.length?'👥 '+assigned.map(function(u){return esc(u.display_name||u.username);}).join(', '):'No users assigned')+'</div>'
+      +(r.description?'<div style="font-size:11px;color:#4a6fa5;margin-bottom:4px">'+esc(r.description)+'</div>':'')
+      +groupHtml
+      +avatarHtml
       +'</div>'
-      +'<div style="display:flex;gap:5px;flex-shrink:0">'
+      +'<div style="display:flex;gap:5px;flex-shrink:0;flex-direction:column;align-items:flex-end">'
       +'<button class="btn sm" onclick="editRole('+r.id+')">Edit</button>'
       +'<button class="btn sm" onclick="openAssignRole('+r.id+',\''+esc(r.name)+'\')">Assign</button>'
       +'<button class="btn sm danger" onclick="deleteRole('+r.id+')">Delete</button>'
-      +'</div></div></div>';
+      +'</div>'
+      +'</div></div>';
   }).join('');
-  document.getElementById('rolesPageContent').innerHTML=html;
 }
 
 var RM_PERM_MAP={
