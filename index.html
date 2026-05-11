@@ -2160,8 +2160,12 @@ async function openTaskDetail(id){
   var isCreator=t.assigned_by===currentUser.username;
   var isAdmin=currentUser.role==='admin';
   var iAmWorker=workers.indexOf(currentUser.username)>=0;
-  var canAct=t.assigned_to===currentUser.username||t.assigned_dept===currentUser.department||
-    (isSaleTask&&isTaskVisible(t))||isAdminOrSuper();
+  // canAct: directly assigned, dept member, worker, sale task participant, or admin
+  var canAct=t.assigned_to===currentUser.username
+    ||t.assigned_dept===currentUser.department
+    ||iAmWorker
+    ||(isSaleTask&&isTaskVisible(t))
+    ||isAdminOrSuper();
 
   // Sale task: find related sale record for masked data
   var saleRec=null;
@@ -2378,6 +2382,18 @@ async function reassignTask(id){
 }
 
 async function updateTaskStatus(taskId,status){
+  var upd={status:status,updated_at:new Date().toISOString()};
+  if(status==='accepted'){
+    // Add acceptor to workers so they can Start Work immediately
+    var tRows=await sbGet('tasks','id=eq.'+taskId+'&select=workers,progress_notes');
+    if(tRows.length){
+      var w=tRows[0].workers||[];
+      if(w.indexOf(currentUser.username)<0)w.push(currentUser.username);
+      var n=tRows[0].progress_notes||[];
+      n.push({username:currentUser.username,note:'✓ Accepted by '+(currentUser.display_name||currentUser.username),ts:new Date().toISOString()});
+      upd.workers=w;upd.progress_notes=n;
+    }
+  }
   if(status==='completed'){
     if(!confirm('Mark as completed?\nYour name will be recorded.'))return;
   }
@@ -5678,7 +5694,7 @@ async function loadMediaManager(){
     +'</div>'
     +'</div>'
     +'<div id="mediaBrowserList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;max-height:400px;overflow-y:auto"></div>'
-    +'<div id="mediaBrowserActions" style="display:none;margin-top:10px;display:flex;gap:8px;align-items:center">'
+    +'<div id="mediaBrowserActions" style="display:none;margin-top:10px;gap:8px;align-items:center">'
     +'<span id="mediaBrowserSelCount" style="font-size:12px;color:#4a6fa5"></span>'
     +'<button class="btn sm danger" onclick="deleteSelectedMedia()">Delete Selected</button>'
     +'<button class="btn sm" onclick="clearMediaSelection()">Deselect All</button>'
@@ -5729,8 +5745,17 @@ async function loadMediaBrowser(tab){
 
 var mediaBrowserSel=new Set();
 function toggleMediaSelect(i,el){
-  if(mediaBrowserSel.has(i)){mediaBrowserSel.delete(i);el.querySelector('img').style.borderColor='#1e2d45';var chk=document.getElementById('mbs-'+i);if(chk)chk.style.display='none';}
-  else{mediaBrowserSel.add(i);el.querySelector('img').style.borderColor='#3b82f6';var chk=document.getElementById('mbs-'+i);if(chk)chk.style.display='flex';}
+  var chk=document.getElementById('mbs-'+i);
+  var img=document.getElementById('mbi-'+i);
+  if(mediaBrowserSel.has(i)){
+    mediaBrowserSel.delete(i);
+    if(img)img.style.borderColor='#1e2d45';
+    if(chk)chk.style.display='none';
+  } else {
+    mediaBrowserSel.add(i);
+    if(img)img.style.borderColor='#3b82f6';
+    if(chk)chk.style.display='flex';
+  }
   updateMediaBrowserActions();
 }
 function updateMediaBrowserActions(){
