@@ -1005,7 +1005,7 @@ body{position:relative}
             <div class="form-field"><label>Date</label><input type="date" id="hol_date"></div>
             <div class="form-field"><label>Name</label><input type="text" id="hol_name" placeholder="e.g. Hari Raya Aidilfitri"></div>
             <div class="form-field"><label>Type</label>
-              <select id="hol_type"><option value="public">Public Holiday</option><option value="rest">Rest Day</option></select>
+              <select id="hol_type"><option value="holiday">Public Holiday</option><option value="rest">Rest Day</option></select>
             </div>
             <div class="form-field"><label>Pay</label>
               <select id="hol_paid">
@@ -2513,7 +2513,7 @@ async function renderCalendar(){
   });
   holidaysCache.forEach(function(h){
     if(!events[h.date])events[h.date]=[];
-    events[h.date].push({type:h.type==='rest'?'rest':'holiday',label:h.name,hid:h.id,hdate:h.date,htype:h.type,hpaid:h.is_paid});
+    events[h.date].push({type:h.type==='rest'?'rest':'holiday',label:h.name,hid:h.id,hdate:h.date,htype:h.type||'holiday',hpaid:h.is_paid});
   });
   // Render
   var html=days.map(function(d){return '<div class="cal-day-hdr">'+d+'</div>';}).join('');
@@ -2661,23 +2661,27 @@ async function saveHoliday(){
   if(!date||!name){toast('Date and name required','error');return;}
   var isPaidEl=document.getElementById('hol_paid');
   var isPaid=isPaidEl?isPaidEl.value==='true':true;
-  var typeVal=document.getElementById('hol_type').value;
+  var typeVal=document.getElementById('hol_type').value||'holiday';
   var editId=document.getElementById('hol_edit_id').value;
-  var data={date:date,name:name,type:typeVal};
   if(editId){
-    var ok=await sbPatch('holidays',{id:parseInt(editId)},data);
-    if(!ok){toast('Update failed','error');return;}
-    toast('Holiday updated','success');
+    var ok=await sbPatch('holidays',{id:parseInt(editId)},{date:date,name:name,type:typeVal,is_paid:isPaid});
+    toast(ok?'Holiday updated':'Update failed — check console',ok?'success':'error');
+    if(!ok)return;
   } else {
-    data.created_by=currentUser.username;
-    // Try with is_paid first, fall back without it
-    var r=await fetch(SB_URL+'/rest/v1/holidays',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(Object.assign({},data,{is_paid:isPaid}))});
+    // Upsert on date conflict
+    var payload={date:date,name:name,type:typeVal,created_by:currentUser.username};
+    try{payload.is_paid=isPaid;}catch(e){}
+    var r=await fetch(SB_URL+'/rest/v1/holidays',{
+      method:'POST',
+      headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body:JSON.stringify(payload)
+    });
     if(!r.ok){
-      // Retry without is_paid (column may not exist yet)
-      var r2=await fetch(SB_URL+'/rest/v1/holidays',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});
-      if(!r2.ok){var err=await r2.json().catch(function(){return {};});toast('Failed: '+(err.message||err.details||'unknown error'),'error');return;}
+      var err=await r.json().catch(function(){return {};});
+      toast('Failed: '+(err.message||err.details||r.status),'error');
+      return;
     }
-    toast('Holiday added','success');
+    toast('Holiday saved ✓','success');
   }
   closeModal('holidayModal');renderCalendar();
 }
@@ -2690,7 +2694,7 @@ function openHolidayModal(date){
   document.getElementById('hol_edit_id').value='';
   document.getElementById('hol_date').value=date||'';
   document.getElementById('hol_name').value='';
-  document.getElementById('hol_type').value='public';
+  document.getElementById('hol_type').value='holiday';
   document.getElementById('hol_paid').value='true';
   document.getElementById('holidayModalTitle').textContent='Add Holiday / Rest Day';
   document.getElementById('hol_save_btn').textContent='Add';
@@ -2700,7 +2704,7 @@ function editHolidayModal(id,date,name,type,isPaid){
   document.getElementById('hol_edit_id').value=id;
   document.getElementById('hol_date').value=date;
   document.getElementById('hol_name').value=name;
-  document.getElementById('hol_type').value=(type==='rest'?'rest':'public');
+  document.getElementById('hol_type').value=(type==='rest'?'rest':'holiday');
   document.getElementById('hol_paid').value=isPaid===false?'false':'true';
   document.getElementById('holidayModalTitle').textContent='Edit Holiday / Rest Day';
   document.getElementById('hol_save_btn').textContent='Save Changes';
@@ -2751,50 +2755,65 @@ async function runAbsenceCheck(){
   if(!absenceAlertEnabled||currentUser.role!=='admin')return;
   var today=new Date();
   var todayStr=today.toISOString().slice(0,10);
-  if(today.getDay()===0)return;
+  if(today.getDay()===0)return;// Sunday
   var hols=await sbGet('holidays','date=eq.'+todayStr+'&select=date');
-  if(hols.length)return;
+  if(hols.length)return;// Public holiday — skip
   var staff=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});
-  var leaves=await sbGet('leave_requests','start_date=lte.'+todayStr+'&end_date=gte.'+todayStr+'&status=eq.approved&select=username');
-  var onLeave=new Set(leaves.map(function(l){return l.username;}));
+  // Full-day approved leaves
+  var leaves=await sbGet('leave_requests','start_date=lte.'+todayStr+'&end_date=gte.'+todayStr+'&status=eq.approved&select=username,is_half_day,half_day_session');
+  // Build per-person leave map: {username: {am:bool, pm:bool}}
+  var leaveMap={};
+  leaves.forEach(function(l){
+    if(!leaveMap[l.username])leaveMap[l.username]={am:false,pm:false,full:false};
+    if(!l.is_half_day){leaveMap[l.username].full=true;leaveMap[l.username].am=true;leaveMap[l.username].pm=true;}
+    else if(l.half_day_session==='am')leaveMap[l.username].am=true;
+    else if(l.half_day_session==='pm')leaveMap[l.username].pm=true;
+  });
   var atts=await sbGet('attendance','date=eq.'+todayStr+'&select=username,check_in,check_out,check_in_2,check_out_2');
   var attMap={};atts.forEach(function(a){attMap[a.username]=a;});
+  // Load all rules once
+  var allRules=await sbGet('attendance_rules','is_active=eq.true&order=scope.asc');
+  var globalRule=allRules.find(function(r){return r.scope==='global';});
   var nowMin=today.getHours()*60+today.getMinutes();
 
   for(var i=0;i<staff.length;i++){
     var u=staff[i];
-    if(onLeave.has(u.username))continue;
-    // Get this person's effective rule → use their role's early-out time
-    var rule=await getEffectiveRule(u.username,u.department);
-    // Threshold: check_out_2_early_before = latest S2 checkout = end of work day
-    var endOfDayMin=timeStrToMin((rule&&rule.check_out_2_early_before)||'17:30');
-    // Don't notify until past their end-of-day
-    if(nowMin<endOfDayMin)continue;
+    var lv=leaveMap[u.username]||{am:false,pm:false,full:false};
+    if(lv.full)continue;// Full day leave approved
+    var rule=allRules.find(function(r){return r.scope==='user'&&(r.applies_to_users||[]).indexOf(u.username)>=0;})
+      ||allRules.find(function(r){return r.scope==='department'&&r.department===u.department;})
+      ||globalRule;
+    var s1EndMin=timeStrToMin((rule&&rule.check_out_1_early_before)||'13:00');// AM ends ~1pm
+    var s2EndMin=timeStrToMin((rule&&rule.check_out_2_early_before)||'17:30');// PM ends ~5:30pm
     var att=attMap[u.username]||{};
-    // Full day done
-    if(att.check_out_2)continue;
 
-    if(att.check_in&&!att.check_in_2){
-      // Morning only — half day / incomplete PM
-      var notifKey='half_day:'+u.username+':'+todayStr;
-      var ex=await sbGet('announcements','target_role=eq.'+encodeURIComponent(u.username)+'&title=eq.'+encodeURIComponent('⚠️ Incomplete attendance — '+todayStr)+'&deleted_at=is.null&select=id');
-      if(ex.length)continue;
-      await sbPost('announcements',{
-        title:'⚠️ Incomplete attendance — '+todayStr,
-        content:'Morning session recorded but afternoon is missing for '+todayStr+'. Please check in for S2 or apply for half-day leave before end of day.',
-        target_role:u.username,is_pinned:false,created_by:'system'
-      });
-    } else if(!att.check_in){
-      // No check-in at all
-      var ex2=await sbGet('announcements','target_role=eq.'+encodeURIComponent(u.username)+'&title=eq.'+encodeURIComponent('⚠️ Missing check-in — '+todayStr)+'&deleted_at=is.null&select=id');
-      if(ex2.length)continue;
-      await sbPost('announcements',{
-        title:'⚠️ Missing check-in — '+todayStr,
-        content:'No attendance recorded for '+todayStr+'. Please check in or apply for leave immediately. Failure to do so will be recorded as absent.',
-        target_role:u.username,is_pinned:false,created_by:'system'
-      });
+    // ── S1 check: after S1 end time, no S1 check-in, not on AM leave ──
+    if(nowMin>=s1EndMin&&!lv.am&&!att.check_in){
+      var t1='⚠️ S1 missing — '+todayStr;
+      var ex1=await sbGet('announcements','target_role=eq.'+encodeURIComponent(u.username)+'&title=eq.'+encodeURIComponent(t1)+'&deleted_at=is.null&select=id');
+      if(!ex1.length){
+        await sbPost('announcements',{
+          title:t1,
+          content:'No morning (Session 1) check-in recorded for '+todayStr+'. Please check in or apply for AM half-day leave. No action = absent for the morning.',
+          target_role:u.username,is_pinned:false,created_by:'system'
+        });
+      }
+    }
+
+    // ── S2 check: after S2 end time, no S2 check-in, not on PM leave ──
+    if(nowMin>=s2EndMin&&!lv.pm&&!att.check_in_2){
+      var t2='⚠️ S2 missing — '+todayStr;
+      var ex2=await sbGet('announcements','target_role=eq.'+encodeURIComponent(u.username)+'&title=eq.'+encodeURIComponent(t2)+'&deleted_at=is.null&select=id');
+      if(!ex2.length){
+        await sbPost('announcements',{
+          title:t2,
+          content:'No afternoon (Session 2) check-in recorded for '+todayStr+'. Please check in or apply for PM half-day leave. No action = absent for the afternoon.',
+          target_role:u.username,is_pinned:false,created_by:'system'
+        });
+      }
     }
   }
+  console.log('[AbsenceCheck] Done',new Date().toLocaleTimeString());
 }
 
 /* ══ END AUTO ABSENCE ══ */
