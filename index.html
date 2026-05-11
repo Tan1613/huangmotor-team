@@ -2130,7 +2130,17 @@ function renderTaskList(tasks,container,isAdmin){
     var prioBar=t.priority==='urgent'?'urgent':t.priority==='high'?'high':t.priority==='low'?'low':'normal';
     var notes=t.progress_notes||[];
     var workers=t.workers||[];
-    var workerNames=workers.map(function(u){var usr=allUsers.find(function(x){return x.username===u;})||{};return esc(usr.display_name||u);}).join(', ');
+    var workerAvatars=workers.length?'<div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">'
+      +workers.map(function(u){
+        var usr=allUsers.find(function(x){return x.username===u;})||{};
+        var initial=(usr.display_name||u||'?').charAt(0).toUpperCase();
+        var dept=usr.department?'<span style="font-size:9px;color:#2a4a6a">('+esc(usr.department)+')</span>':'';
+        return '<div style="display:flex;align-items:center;gap:3px;background:#0d1626;border:1px solid #1e2d45;border-radius:12px;padding:2px 6px 2px 3px">'
+          +'<div style="width:16px;height:16px;border-radius:50%;background:#1d4ed822;border:1px solid #1d4ed855;display:flex;align-items:center;justify-content:center;font-size:9px;color:#60a5fa">'+initial+'</div>'
+          +'<span style="font-size:10px;color:#c9d1d9">'+esc(usr.display_name||u)+'</span>'+dept
+          +'</div>';
+      }).join('')
+      +'</div>':'';
     return '<div class="task-item '+prioBar+'">'
       +'<div class="task-header"><span class="task-title">'+esc(t.title)+'</span><span class="task-type '+t.task_type+'">'+(typeLabels[t.task_type]||t.task_type)+'</span></div>'
       +'<div class="task-meta">'
@@ -2139,7 +2149,7 @@ function renderTaskList(tasks,container,isAdmin){
       +(t.due_date?'<span>📅 '+fmtDate(t.due_date)+'</span>':'')
       +'<span>'+fmtRelative(t.created_at)+'</span>'
       +'</div>'
-      +(workers.length?'<div style="font-size:11px;color:#4a6fa5;margin-bottom:4px">Workers: '+workerNames+'</div>':'')
+      +workerAvatars
       +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
       +'<span class="task-status '+t.status+'">'+t.status.replace('_',' ')+'</span>'
       +(notes.length?'<span style="font-size:11px;color:#4a6fa5">'+notes.length+' note'+(notes.length>1?'s':'')+'</span>':'')
@@ -2206,8 +2216,26 @@ async function openTaskDetail(id){
   if(isSaleTask&&(isSaleOwner||isAdmin)&&t.status!=='completed'&&t.status!=='cancelled')
     statusBtns+='<button class="btn sm danger" onclick="cancelSaleTask('+id+(saleRec?','+saleRec.id:'')+')">✕ Cancel Sale</button>';
 
-  // Workers display
-  var workerNames=workers.map(function(u){var usr=allUsers.find(function(x){return x.username===u;})||{};return esc(usr.display_name||u);}).join(', ');
+  // Workers visual display with dept info
+  var workerChips='';
+  if(workers.length){
+    workerChips='<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">'
+      +'<span style="font-size:10px;color:#4a6fa5;font-weight:600">WORKERS</span>'
+      +workers.map(function(u){
+        var usr=allUsers.find(function(x){return x.username===u;})||{};
+        var initial=(usr.display_name||u||'?').charAt(0).toUpperCase();
+        var deptLabel=usr.department?'<span style="font-size:9px;color:#2a4a6a;margin-left:2px">('+esc(usr.department)+')</span>':'';
+        var reassignBtn=isAdmin
+          ?'<button onclick="reassignWorker('+id+',\''+esc(u)+'\')" title="Replace this worker" style="margin-left:4px;background:none;border:none;color:#4a6fa5;cursor:pointer;font-size:10px;padding:0">↺</button>'
+          :'';
+        return '<div style="display:flex;align-items:center;gap:4px;background:#0d1626;border:1px solid #1e2d45;border-radius:16px;padding:3px 8px 3px 4px">'
+          +'<div style="width:20px;height:20px;border-radius:50%;background:#1d4ed822;border:1px solid #1d4ed855;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#60a5fa;flex-shrink:0">'+initial+'</div>'
+          +'<span style="font-size:11px;color:#c9d1d9">'+esc(usr.display_name||u)+'</span>'
+          +deptLabel+reassignBtn
+          +'</div>';
+      }).join('')
+      +'</div>';
+  }
 
   // Sale data display (masked for non-owner)
   var saleHtml='';
@@ -2236,7 +2264,7 @@ async function openTaskDetail(id){
   var body='<div style="margin-bottom:10px">'
     +'<div style="font-size:15px;font-weight:700;color:#f0f6fc;margin-bottom:6px">'+esc(t.title)+'</div>'
     +'<span class="task-status '+t.status+'">'+t.status.replace('_',' ')+'</span>'
-    +(workers.length?'<div style="font-size:11px;color:#4a6fa5;margin-top:4px">Workers: '+workerNames+'</div>':'')
+    +workerChips
     +'</div>'
     +saleHtml
     +(t.description?'<div style="font-size:12px;color:#6b8ab0;margin-bottom:10px;line-height:1.6">'+esc(t.description)+'</div>':'')
@@ -2252,6 +2280,29 @@ async function openTaskDetail(id){
   openModal('taskDetailModal');
 }
 
+async function reassignWorker(taskId,oldUsername){
+  await loadAllUsersCache();
+  var oldUser=allUsers.find(function(u){return u.username===oldUsername;})||{};
+  var newUsername=prompt('Replace '+esc(oldUser.display_name||oldUsername)+' with:\n\nEnter username or display name:');
+  if(!newUsername||!newUsername.trim())return;
+  var q2=newUsername.trim().toLowerCase();
+  var found=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';})
+    .find(function(u){return u.username.toLowerCase()===q2||(u.display_name||'').toLowerCase()===q2;});
+  if(!found){toast('User "'+newUsername+'" not found','error');return;}
+  if(found.username===oldUsername){toast('Same person selected','error');return;}
+  var rows=await sbGet('tasks','id=eq.'+taskId+'&select=workers,progress_notes');
+  if(!rows.length)return;
+  var workers=(rows[0].workers||[]).filter(function(u){return u!==oldUsername;});
+  if(workers.indexOf(found.username)<0)workers.push(found.username);
+  var notes=rows[0].progress_notes||[];
+  var actor=currentUser.display_name||currentUser.username;
+  notes.push({by:currentUser.username,note:'[Worker replaced] '+esc(oldUser.display_name||oldUsername)+' → '+(found.display_name||found.username)+' by '+actor,ts:new Date().toISOString()});
+  await sbPatch('tasks',{id:taskId},{workers:workers,progress_notes:notes,updated_at:new Date().toISOString()});
+  toast('Replaced with '+(found.display_name||found.username),'success');
+  closeModal('taskDetailModal');
+  if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
+}
+
 async function addProgressNote(taskId){
   var inp=document.getElementById('noteInp_'+taskId);
   if(!inp)return;
@@ -2264,18 +2315,29 @@ async function addProgressNote(taskId){
   if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
 }
 async function startWork(taskId){
-  // Add user to workers list (individual tracking, not changing task status for everyone)
-  var tasks=await sbGet('tasks','id=eq.'+taskId+'&select=workers,progress_notes,status');
+  var tasks=await sbGet('tasks','id=eq.'+taskId+'&select=workers,progress_notes,status,task_type');
   if(!tasks.length)return;
   var t=tasks[0];
   var workers=t.workers||[];
   if(workers.indexOf(currentUser.username)>=0){toast('You are already working on this','success');return;}
+  // Sale tasks: max 2 workers, must be from different departments
+  if(t.task_type==='sale'){
+    if(workers.length>=2){toast('Sale tasks allow max 2 workers','error');return;}
+    if(workers.length===1){
+      var w1=allUsers.find(function(u){return u.username===workers[0];})||{};
+      var myDept=currentUser.department;
+      if(w1.department&&myDept&&w1.department===myDept){
+        toast('Second worker must be from a different department ('+esc(w1.department)+' already has a worker)','error');
+        return;
+      }
+    }
+  }
   workers.push(currentUser.username);
   var notes=t.progress_notes||[];
   var dispName=currentUser.display_name||currentUser.username;
-  notes.push({username:currentUser.username,note:'▶ '+dispName+' started working on this task',ts:new Date().toISOString()});
+  var deptNote=currentUser.department?' ('+currentUser.department+')':'';
+  notes.push({username:currentUser.username,note:'▶ '+dispName+deptNote+' started working',ts:new Date().toISOString()});
   var upd={workers:workers,progress_notes:notes,updated_at:new Date().toISOString()};
-  // Only change status to in_progress if first worker
   if(t.status==='accepted')upd.status='in_progress';
   await sbPatch('tasks',{id:taskId},upd);
   toast('You are now working on this task','success');
