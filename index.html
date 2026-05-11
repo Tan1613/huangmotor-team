@@ -2178,7 +2178,7 @@ async function openTaskDetail(id){
     if(t.status==='pending'&&!isSaleTask)
       statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button>'
         +'<button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
-    if((t.status==='accepted'||t.status==='in_progress')&&!iAmWorker&&(isSaleTask||t.status==='accepted'))
+    if((t.status==='accepted'||t.status==='in_progress')&&!iAmWorker)
       statusBtns+='<button class="btn sm primary" onclick="startWork('+id+')">▶ Start Work</button>';
     if(iAmWorker&&t.status==='in_progress')
       statusBtns+='<button class="btn sm success" onclick="submitTaskComplete('+id+')">✅ Submit Complete</button>';
@@ -2347,11 +2347,11 @@ async function rejectTaskComplete(id){
 
 async function reassignTask(id){
   await loadAllUsersCache();
-  var rows=await sbGet('tasks','id=eq.'+id+'&select=assigned_to,title,progress_notes,status');
+  var rows=await sbGet('tasks','id=eq.'+id+'&select=assigned_to,assigned_dept,title,progress_notes,status,workers');
   if(!rows.length)return;
   var t=rows[0];
   var options=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});
-  var newUsername=prompt('Reassign "'+t.title+'" to:\nCurrent: '+(t.assigned_to||'dept/all')+'\n\nEnter username or display name:');
+  var newUsername=prompt('Reassign "'+t.title+'" to:\nCurrent: '+(t.assigned_to||t.assigned_dept||'all')+'\n\nEnter username or display name:');
   if(!newUsername||!newUsername.trim())return;
   var q2=newUsername.trim().toLowerCase();
   var found=options.find(function(u){return u.username.toLowerCase()===q2||(u.display_name||'').toLowerCase()===q2;});
@@ -2360,8 +2360,16 @@ async function reassignTask(id){
   var notes=(t.progress_notes)||[];
   var actor=currentUser.display_name||currentUser.username;
   notes.push({by:currentUser.username,note:'[Reassigned] to '+(found.display_name||found.username)+' by '+actor,ts:now});
-  var upd={assigned_to:found.username,updated_at:now,progress_notes:notes};
-  if(t.status==='completed'||t.status==='pending_approval')upd.status='in_progress';
+  // Reset workers to new assignee, clear old workers
+  var upd={
+    assigned_to:found.username,
+    assigned_dept:null,
+    workers:[found.username],
+    status:'pending',// reset so new person can accept
+    completed_at:null,
+    updated_at:now,
+    progress_notes:notes
+  };
   await sbPatch('tasks',{id:id},upd);
   toast('Reassigned to '+(found.display_name||found.username),'success');
   closeModal('taskDetailModal');
@@ -3106,16 +3114,16 @@ async function loadPerformance(){
   var fFrom=document.getElementById('perfFrom').value;
   var fTo=document.getElementById('perfTo').value;
   var dateFrom=fFrom||since;
-  var q='status=eq.completed&deleted_at=is.null&select=assigned_to,task_type,completed_at,updated_at';
+  var q='status=eq.completed&deleted_at=is.null&select=assigned_to,assigned_dept,task_type,completed_at,updated_at,workers';
   q+='&or=(completed_at.gte.'+dateFrom+'T00:00:00Z,and(completed_at.is.null,updated_at.gte.'+dateFrom+'T00:00:00Z))';
   if(fTo)q+='&or=(completed_at.lte.'+fTo+'T23:59:59Z,and(completed_at.is.null,updated_at.lte.'+fTo+'T23:59:59Z))';
-  if(fUser&&fUser!=='all')q+='&assigned_to=eq.'+encodeURIComponent(fUser);
+  if(fUser&&fUser!=='all')q+='&or=(assigned_to.eq.'+encodeURIComponent(fUser)+',workers.cs.[\"'+fUser+'\"])';
   if(fType&&fType!=='all')q+='&task_type=eq.'+fType;
   if(!canAll&&canDept&&currentUser.department){
     var deptMembers=allUsers.filter(function(u){return u.department===currentUser.department;}).map(function(u){return u.username;});
-    if(deptMembers.length)q+='&assigned_to=in.('+deptMembers.map(encodeURIComponent).join(',')+')';
+    if(deptMembers.length)q+='&or=('+deptMembers.map(function(u){return 'assigned_to.eq.'+encodeURIComponent(u)+',workers.cs.[\"'+u+'\"]';}).join(',')+')';
   } else if(!canAll&&!canDept){
-    q+='&assigned_to=eq.'+encodeURIComponent(currentUser.username);
+    q+='&or=(assigned_to.eq.'+encodeURIComponent(currentUser.username)+',workers.cs.[\"'+currentUser.username+'\"])';
   }
   var tasks=await sbGet('tasks',q);
   // Populate user filter
@@ -3124,7 +3132,14 @@ async function loadPerformance(){
   var visible=canAll?allUsers:(canDept?allUsers.filter(function(u){return u.department===currentUser.department;}):allUsers.filter(function(u){return u.username===currentUser.username;}));
   visible.forEach(function(u){var o=document.createElement('option');o.value=u.username;o.textContent=u.display_name||u.username;if(u.username===curVal)o.selected=true;sel.appendChild(o);});
   var total=tasks.length;
-  var byUser={};tasks.forEach(function(t){if(!t.assigned_to)return;byUser[t.assigned_to]=(byUser[t.assigned_to]||0)+1;});
+  // Count by worker: use workers array first, fall back to assigned_to
+  var byUser={};
+  tasks.forEach(function(t){
+    var credited=[];
+    if(t.workers&&t.workers.length)credited=t.workers;
+    else if(t.assigned_to)credited=[t.assigned_to];
+    credited.forEach(function(u){byUser[u]=(byUser[u]||0)+1;});
+  });
   var maxVal=Math.max(1,...Object.values(byUser));
   document.getElementById('perfStats').innerHTML=
     '<div class="stat-card green"><div class="label">Tasks Completed</div><div class="value">'+total+'</div></div>'
@@ -5659,6 +5674,7 @@ async function loadMediaManager(){
     +'<div style="display:flex;gap:6px">'
     +'<button class="btn sm primary" id="mbTabChat" onclick="loadMediaBrowser(\'chat\')">Chat Images</button>'
     +'<button class="btn sm" id="mbTabCheckin" onclick="loadMediaBrowser(\'checkin\')">Check-in Photos</button>'
+    +'<button class="btn sm" id="mbTabApprovals" onclick="loadMediaBrowser(\'approvals\')">Approval Photos</button>'
     +'</div>'
     +'</div>'
     +'<div id="mediaBrowserList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;max-height:400px;overflow-y:auto"></div>'
@@ -5676,25 +5692,36 @@ var mediaBrowserTab='chat';var mediaBrowserItems=[];
 
 async function loadMediaBrowser(tab){
   mediaBrowserTab=tab;mediaBrowserItems=[];
-  ['mbTabChat','mbTabCheckin'].forEach(function(id){var b=document.getElementById(id);if(b)b.className='btn sm'+(id==='mbTab'+( tab==='chat'?'Chat':'Checkin')?' primary':'');});
+  var tabMap={chat:'mbTabChat',checkin:'mbTabCheckin',approvals:'mbTabApprovals'};
+  Object.keys(tabMap).forEach(function(t){var b=document.getElementById(tabMap[t]);if(b)b.className='btn sm'+(t===tab?' primary':'');});
   var list=document.getElementById('mediaBrowserList');
   if(!list)return;
   list.innerHTML='<div style="color:#4a6fa5;font-size:12px;padding:1rem">Loading…</div>';
   var items=[];
   if(tab==='chat'){
-    var rows=await sbGet('chat_messages','message_type=eq.image&media_data=not.is.null&order=created_at.desc&limit=60&select=id,media_data,username,created_at');
+    var rows=await sbGet('chat_messages','message_type=eq.image&media_data=not.is.null&order=created_at.desc&limit=80&select=id,media_data,username,created_at');
     items=rows.map(function(r){return {id:r.id,table:'chat_messages',field:'media_data',src:r.media_data,label:(r.username||''),sub:fmtDate(r.created_at)};});
-  } else {
-    var rows2=await sbGet('attendance','checkin_photo=not.is.null&order=date.desc&limit=60&select=id,checkin_photo,username,date');
-    items=rows2.map(function(r){return {id:r.id,table:'attendance',field:'checkin_photo',src:r.checkin_photo,label:r.username,sub:r.date};});
+  } else if(tab==='checkin'){
+    // Load all 3 sessions
+    var r1=await sbGet('attendance','checkin_photo=not.is.null&order=date.desc&limit=40&select=id,checkin_photo,username,date');
+    var r2=await sbGet('attendance','checkin_photo_2=not.is.null&order=date.desc&limit=40&select=id,checkin_photo_2,username,date');
+    var r3=await sbGet('attendance','checkin_photo_3=not.is.null&order=date.desc&limit=20&select=id,checkin_photo_3,username,date');
+    r1.forEach(function(r){items.push({id:r.id,table:'attendance',field:'checkin_photo',src:r.checkin_photo,label:r.username+' S1',sub:r.date});});
+    r2.forEach(function(r){items.push({id:r.id,table:'attendance',field:'checkin_photo_2',src:r.checkin_photo_2,label:r.username+' S2',sub:r.date});});
+    r3.forEach(function(r){items.push({id:r.id,table:'attendance',field:'checkin_photo_3',src:r.checkin_photo_3,label:r.username+' S3',sub:r.date});});
+    items.sort(function(a,b){return b.sub.localeCompare(a.sub);});
+  } else if(tab==='approvals'){
+    var rows2=await sbGet('checkin_approvals','photo=not.is.null&order=created_at.desc&limit=80&select=id,photo,username,date,status,session_field');
+    items=rows2.map(function(r){return {id:r.id,table:'checkin_approvals',field:'photo',src:r.photo,label:r.username+' ('+r.status+')',sub:r.date+' '+( r.session_field||'')};});
   }
   mediaBrowserItems=items;
-  if(!items.length){list.innerHTML='<div style="color:#4a6fa5;font-size:12px;padding:1rem">No media found</div>';return;}
+  mediaBrowserSel=new Set();
+  if(!items.length){list.innerHTML='<div style="color:#4a6fa5;font-size:12px;padding:1rem">No media found</div>';updateMediaBrowserActions();return;}
   list.innerHTML=items.map(function(item,i){
     return '<div style="position:relative;cursor:pointer" onclick="toggleMediaSelect('+i+',this)">'
       +'<img src="'+item.src+'" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;border:2px solid #1e2d45" id="mbi-'+i+'">'
       +'<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);padding:2px 4px;border-radius:0 0 6px 6px;font-size:9px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(item.label)+' '+esc(item.sub)+'</div>'
-      +'<div id="mbs-'+i+'" style="display:none;position:absolute;top:4px;right:4px;background:#3b82f6;border-radius:50%;width:18px;height:18px;color:#fff;font-size:11px;display:none;align-items:center;justify-content:center">✓</div>'
+      +'<div id="mbs-'+i+'" style="display:none;position:absolute;top:4px;right:4px;background:#3b82f6;border-radius:50%;width:18px;height:18px;color:#fff;font-size:11px;align-items:center;justify-content:center">✓</div>'
       +'</div>';
   }).join('');
   updateMediaBrowserActions();
