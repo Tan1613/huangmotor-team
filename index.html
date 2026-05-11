@@ -6865,9 +6865,8 @@ async function onBrAppliesToChange(){
 
 async function openBenefitRuleModal(id){
   try{
-  document.getElementById('br_id').value='';
-  document.getElementById('br_name').value='';
-  document.getElementById('br_desc').value='';
+  // Reset all fields
+  ['br_id','br_name','br_desc'].forEach(function(x){document.getElementById(x).value='';});
   document.getElementById('br_trigger').value='unconditional';
   document.getElementById('br_period').value='monthly';
   document.getElementById('br_payout_type').value='fixed';
@@ -6876,12 +6875,24 @@ async function openBenefitRuleModal(id){
   document.getElementById('br_applies_to').value='all';
   document.getElementById('br_claim_type').value='auto';
   document.getElementById('br_claim_limit').value='0';
+  document.getElementById('br_att_rate').value='90';
+  document.getElementById('br_perf_tasks').value='5';
+  document.getElementById('br_tenure_months').value='3';
   document.getElementById('br_auto_publish').checked=false;
   document.getElementById('brModalTitle').textContent='🎁 New Benefit Rule';
   onBrTriggerChange();onBrPayoutChange();onBrClaimChange();
   document.getElementById('br_applies_dept_wrap').style.display='none';
   document.getElementById('br_applies_role_wrap').style.display='none';
   document.getElementById('br_applies_custom_wrap').style.display='none';
+  // Open modal immediately — don't wait for data
+  openModal('benefitRuleModal');
+  // Load dropdowns after open
+  await loadAllDepts();await loadAllRoles();
+  var depts=allDepts||[];var roles=allRoles||[];
+  var dSel=document.getElementById('br_applies_dept');
+  if(dSel)dSel.innerHTML=depts.map(function(d){return '<option>'+esc(d.name)+'</option>';}).join('');
+  var rSel=document.getElementById('br_applies_role');
+  if(rSel)rSel.innerHTML=roles.map(function(r){return '<option value="'+r.id+'">'+esc(r.name)+'</option>';}).join('');
   if(id){
     var rows=await sbGet('benefit_rules','id=eq.'+id+'&select=*');
     if(rows.length){
@@ -6898,16 +6909,15 @@ async function openBenefitRuleModal(id){
       document.getElementById('br_claim_type').value=r.claim_type||'auto';
       document.getElementById('br_claim_limit').value=r.claim_limit||0;
       document.getElementById('br_auto_publish').checked=!!r.auto_publish;
-      if(r.min_attendance_rate)document.getElementById('br_att_rate').value=r.min_attendance_rate*100;
+      if(r.min_attendance_rate)document.getElementById('br_att_rate').value=Math.round(r.min_attendance_rate*100);
       if(r.min_performance_tasks)document.getElementById('br_perf_tasks').value=r.min_performance_tasks;
-      if(r.min_tenure_months){document.getElementById('br_tenure_months').value=r.min_tenure_months;document.getElementById('br_tenure_next_month').checked=!!r.tenure_effective_next_month;}
+      if(r.min_tenure_months)document.getElementById('br_tenure_months').value=r.min_tenure_months;
       document.getElementById('brModalTitle').textContent='✏️ Edit Benefit Rule';
       onBrTriggerChange();onBrPayoutChange();onBrClaimChange();
       await onBrAppliesToChange();
     }
   }
-  openModal('benefitRuleModal');
-  }catch(e){console.error('openBenefitRuleModal error:',e);toast('Error opening modal: '+e.message,'error');}
+  }catch(e){console.error('openBenefitRuleModal error:',e);toast('Modal error: '+e.message,'error');}
 }
 async function editBenefitRule(id){openBenefitRuleModal(id);}
 
@@ -7123,25 +7133,27 @@ function addToRotationPool(){
 
 async function openRecurringModal(id){
   try{
-  await loadAllUsersCache();await loadAllDepts();
   rtRotationPool=[];
-  document.getElementById('rt_id').value='';
-  document.getElementById('rt_title').value='';
-  document.getElementById('rt_desc').value='';
+  ['rt_id','rt_title','rt_desc','rt_fixed_deadline'].forEach(function(x){document.getElementById(x).value='';});
   document.getElementById('rt_type').value='general';
   document.getElementById('rt_priority').value='normal';
   document.getElementById('rt_max_workers').value='1';
   document.getElementById('rt_recur_type').value='weekly';
   document.getElementById('rt_due_in').value='1';
-  document.getElementById('rt_fixed_deadline').value='';
   document.getElementById('rt_assign_type').value='person';
   document.getElementById('rt_auto_publish').checked=false;
   document.getElementById('rtModalTitle').textContent='🔁 New Recurring Task';
-  // Populate selects
+  onRtRecurChange();onRtAssignChange();renderRotationPool();
+  // Open modal immediately
+  openModal('recurringModal');
+  // Populate selects after open
+  await loadAllUsersCache();await loadAllDepts();
   var toSel=document.getElementById('rt_assigned_to');
-  toSel.innerHTML=allUsers.filter(function(u){return u.is_active!==false;}).map(function(u){return '<option value="'+esc(u.username)+'">'+(esc(u.display_name||u.username))+(u.department?' ('+esc(u.department)+')':'')+'</option>';}).join('');
+  if(toSel)toSel.innerHTML=allUsers.filter(function(u){return u.is_active!==false;}).map(function(u){
+    return '<option value="'+esc(u.username)+'">'+(esc(u.display_name||u.username))+(u.department?' ('+esc(u.department)+')':'')+'</option>';
+  }).join('');
   var dSel=document.getElementById('rt_assigned_dept');
-  dSel.innerHTML=allDepts.map(function(d){return '<option>'+esc(d.name)+'</option>';}).join('');
+  if(dSel)dSel.innerHTML=(allDepts||[]).map(function(d){return '<option>'+esc(d.name)+'</option>';}).join('');
   if(id){
     var rows=await sbGet('recurring_tasks','id=eq.'+id+'&select=*');
     if(rows.length){
@@ -7159,16 +7171,15 @@ async function openRecurringModal(id){
       document.getElementById('rt_due_in').value=t.due_in_days!=null?t.due_in_days:1;
       document.getElementById('rt_fixed_deadline').value=t.fixed_deadline||'';
       document.getElementById('rt_assign_type').value=t.assign_type||'person';
-      if(t.assigned_to)document.getElementById('rt_assigned_to').value=t.assigned_to;
-      if(t.assigned_dept)document.getElementById('rt_assigned_dept').value=t.assigned_dept;
+      if(t.assigned_to&&toSel)toSel.value=t.assigned_to;
+      if(t.assigned_dept&&dSel)dSel.value=t.assigned_dept;
       rtRotationPool=t.rotation_pool||[];
       document.getElementById('rt_auto_publish').checked=!!t.auto_publish;
       document.getElementById('rtModalTitle').textContent='✏️ Edit Recurring Task';
+      onRtRecurChange();onRtAssignChange();renderRotationPool();
     }
   }
-  onRtRecurChange();onRtAssignChange();renderRotationPool();
-  openModal('recurringModal');
-  }catch(e){console.error('openRecurringModal error:',e);toast('Error opening modal: '+e.message,'error');}
+  }catch(e){console.error('openRecurringModal error:',e);toast('Modal error: '+e.message,'error');}
 }
 async function editRecurringTask(id){openRecurringModal(id);}
 
