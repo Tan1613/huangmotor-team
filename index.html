@@ -4837,10 +4837,19 @@ async function saveAllAttChanges(username,month){
     });
     if(!r.ok){
       var errBody=await r.json().catch(function(){return {};});
-      var msg=errBody.message||errBody.details||errBody.hint||r.status;
-      console.error('Att save error '+date+':',msg,JSON.stringify(data));
+      var msg=errBody.message||errBody.details||errBody.hint||errBody.code||('HTTP '+r.status);
+      console.error('Att save error',date,msg,data);
       errs++;
-      if(errs===1)toast('Error on '+date+': '+msg,'error');
+      // Write error to permanent div on page
+      var el=document.getElementById('attSaveErrorLog');
+      if(!el){
+        el=document.createElement('div');el.id='attSaveErrorLog';
+        el.style.cssText='margin-top:10px;padding:10px;background:#1a0505;border:1px solid #ef444466;border-radius:8px;font-size:11px;color:#f87171';
+        var attList=document.getElementById('attList');if(attList)attList.prepend(el);
+      }
+      el.innerHTML=(el.innerHTML||'')
+        +'<div style="margin-bottom:4px"><b>'+date+'</b>: '+esc(msg)+'</div>'
+        +'<div style="font-size:10px;color:#4a6fa5;margin-bottom:6px;word-break:break-all">Payload: '+JSON.stringify(data)+'</div>';
     }
   }
   if(errs)toast('Saved with '+errs+' error(s) — check console','error');
