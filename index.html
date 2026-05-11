@@ -2841,25 +2841,51 @@ async function loadMyAttendance(){
     else if(l.leave_type==='medical')usedMC+=days;
     else if(l.leave_type==='unpaid')usedUnpaid+=days;
   });
-  var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date');
-  var holDates=new Set(hols.map(function(h){return h.date;}));
+  var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date,is_paid');
+  var holMap={};hols.forEach(function(h){holMap[h.date]=h.is_paid!==false;});// true=paid, false=unpaid
   var uInfo=allUsers.find(function(u){return u.username===currentUser.username;})||currentUser;
   var rule=await getEffectiveRule(currentUser.username,uInfo.department||currentUser.department);
   var isMuslimMale=currentUser.gender==='male'&&currentUser.ethnicity==='malay';
-  var present=0,absent=0,onLeave=0,lateCount=0,earlyOutCount=0,workingDays=0;
+  // present counted as fractions: S1 complete=0.5, S2 complete=+0.5, S3 complete=+0.5 extra
+  // workingDays: paid hol = 1, unpaid hol = excluded from denominator
+  var presentScore=0,absent=0,onLeave=0,lateCount=0,earlyOutCount=0,workingDays=0;
   var rows=[];
   for(var d=1;d<=lastDay;d++){
     var key=year+'-'+month.toString().padStart(2,'0')+'-'+d.toString().padStart(2,'0');
     var dt=new Date(year,month-1,d);var dow=dt.getDay();
-    if(dow===0)continue;// Sunday rest
-    var isHol=holDates.has(key);
+    if(dow===0)continue;// Sunday always excluded
+    var isHol=key in holMap;
+    var isPaidHol=isHol&&holMap[key];
+    var isUnpaidHol=isHol&&!holMap[key];
     var rec=attMap[key]||{};
     var st=isHol?'holiday':(rec.status||'absent');
+    if(isUnpaidHol){
+      // Unpaid holiday: excluded from workingDays entirely
+      rows.push({key:key,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],st:'holiday',rec:rec,late:false,earlyOut:false,score:null,unpaidHol:true});
+      continue;
+    }
+    workingDays++;
+    if(isPaidHol){
+      // Paid holiday: counts as full day present automatically
+      presentScore+=1;
+      rows.push({key:key,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],st:'holiday',rec:{},late:false,earlyOut:false,score:1,paidHol:true});
+      continue;
+    }
     var late=false,earlyOut=false;
-    if(rec&&st==='present'&&rule){
+    // S1 complete = both check_in AND check_out recorded
+    var s1ok=!!(rec.check_in&&rec.check_out);
+    // S2 complete = both check_in_2 AND check_out_2 recorded
+    var s2ok=!!(rec.check_in_2&&rec.check_out_2);
+    // S3 complete = both check_in_3 AND check_out_3 recorded
+    var s3ok=!!(rec.check_in_3&&rec.check_out_3);
+    // Score: S1=0.5, S2=+0.5 → full day=1.0; S3=extra 0.5 (overtime)
+    var score=0;
+    if(s1ok)score+=0.5;
+    if(s2ok)score+=0.5;
+    if(s3ok)score+=0.5;// S3 bonus, doesn't increase workingDays denominator
+    // Flags
+    if(st==='present'&&rule){
       if(rec.check_in){var ciT=new Date(rec.check_in).getHours()*60+new Date(rec.check_in).getMinutes();if(ciT>timeStrToMin(rule.check_in_1_late_after))late=true;}
-      if(rec.check_out){var coT=new Date(rec.check_out).getHours()*60+new Date(rec.check_out).getMinutes();if(coT<timeStrToMin(rule.check_out_1_early_before))earlyOut=true;}
-      // Late back from break = actual break duration > max allowed (not time-of-day)
       if(rec.check_out&&rec.check_in_2){
         var breakMin=(new Date(rec.check_in_2)-new Date(rec.check_out))/60000;
         var maxBreak=(rule.max_break_minutes||60)+(isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0);
@@ -2867,16 +2893,18 @@ async function loadMyAttendance(){
       }
       if(rec.check_out_2){var co2T=new Date(rec.check_out_2).getHours()*60+new Date(rec.check_out_2).getMinutes();if(co2T<timeStrToMin(rule.check_out_2_early_before))earlyOut=true;}
     }
-    workingDays++;
-    if(st==='present'){present++;if(late)lateCount++;if(earlyOut)earlyOutCount++;}
-    else if(st==='leave')onLeave++;
-    else if(st!=='holiday')absent++;
-    rows.push({key:key,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],st:st,rec:rec,late:late,earlyOut:earlyOut});
+    if(st==='present'){
+      presentScore+=Math.min(score,1);// cap at 1 for rate calculation (S3 is bonus)
+      if(late)lateCount++;if(earlyOut)earlyOutCount++;
+    } else if(st==='leave'){onLeave++;}
+    else{absent++;}
+    rows.push({key:key,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],st:st,rec:rec,late:late,earlyOut:earlyOut,score:score});
   }
-  var rate=workingDays>0?Math.round(present/workingDays*100):0;
+  var rate=workingDays>0?Math.round(presentScore/workingDays*100):0;
   var al=leaveConfigCache.annual_leave_days||14;
+  var presentDisplay=Number.isInteger(presentScore)?presentScore:presentScore.toFixed(1);
   document.getElementById('myAttStats').innerHTML=
-    '<div class="stat-card blue"><div class="label">Attendance Rate</div><div class="value">'+rate+'%</div><div class="sub">'+present+' / '+workingDays+'</div></div>'
+    '<div class="stat-card blue"><div class="label">Attendance Rate</div><div class="value">'+rate+'%</div><div class="sub">'+presentDisplay+' / '+workingDays+' days</div></div>'
     +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(al-usedAL)+'</div><div class="sub">Used '+usedAL+' / '+al+'</div></div>'
     +'<div class="stat-card '+(lateCount>3?'red':'yellow')+'"><div class="label">Late Arrivals</div><div class="value">'+lateCount+'</div><div class="sub">this month</div></div>'
     +'<div class="stat-card '+(earlyOutCount>3?'red':'yellow')+'"><div class="label">Early Departures</div><div class="value">'+earlyOutCount+'</div><div class="sub">this month</div></div>'
@@ -2886,10 +2914,15 @@ async function loadMyAttendance(){
     +'<th>Status</th><th>S1 In</th><th>S1 Out</th><th>S2 In</th><th>S2 Out</th><th>Flags</th></tr></thead><tbody>';
   rows.forEach(function(r){
     var stC={present:'#34d399',absent:'#f87171',leave:'#fbbf24',holiday:'#a78bfa'}[r.st]||'#6b8ab0';
+    var stLabel=r.paidHol?'holiday 💚':r.unpaidHol?'holiday 🔴':r.st;
+    var scoreStr='';
+    if(r.score!==null&&r.score!==undefined&&r.st==='present'){
+      scoreStr='<span style="font-size:9px;color:#4a6fa5;margin-left:3px">('+( r.score>=1?'full':r.score===0.5?'½ day':r.score===1.5?'+S3':r.score+'d')+')</span>';
+    }
     var flags=(r.late?'<span style="color:#f59e0b;font-weight:600;font-size:10px">LATE</span>':'')+' '+(r.earlyOut?'<span style="color:#f87171;font-weight:600;font-size:10px">EARLY</span>':'');
-    logHtml+='<tr style="border-bottom:1px solid #0d1626">'
+    logHtml+='<tr style="border-bottom:1px solid #0d1626'+(r.unpaidHol?';opacity:.5':'')+'">'
       +'<td style="padding:5px 3px;color:#e0e6f0;white-space:nowrap">'+r.key.slice(5)+' <span style="color:#4a6fa5">'+r.dow+'</span></td>'
-      +'<td style="text-align:center"><span style="color:'+stC+';font-size:10px">'+r.st+'</span></td>'
+      +'<td style="text-align:center"><span style="color:'+stC+';font-size:10px">'+stLabel+'</span>'+scoreStr+'</td>'
       +'<td style="text-align:center;color:#6b8ab0">'+(r.rec.check_in?fmtTime(r.rec.check_in):'—')+'</td>'
       +'<td style="text-align:center;color:#6b8ab0">'+(r.rec.check_out?fmtTime(r.rec.check_out):'—')+'</td>'
       +'<td style="text-align:center;color:#6b8ab0">'+(r.rec.check_in_2?fmtTime(r.rec.check_in_2):'—')+'</td>'
@@ -4243,71 +4276,100 @@ async function loadStaffReport(){
   var leaves=await sbGet('leave_requests','username=eq.'+encodeURIComponent(username)+'&status=eq.approved&start_date=lte.'+to+'&end_date=gte.'+from);
   // Get attendance rule for this user
   var rule=await getEffectiveRule(username,u.department);
-  var leaveSet=new Set();
+  // Get holidays with is_paid
+  var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date,is_paid');
+  var holMap={};hols.forEach(function(h){holMap[h.date]=h.is_paid!==false;});
+  // Build half-day leave map {date: {am,pm,full}}
+  var leaveMap={};
   leaves.forEach(function(l){
-    var d=new Date(l.start_date);var end=new Date(l.end_date);
-    while(d<=end){leaveSet.add(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}
+    var cur=new Date(l.start_date),end=new Date(l.end_date);
+    while(cur<=end){
+      var ds2=cur.toISOString().slice(0,10);
+      if(!leaveMap[ds2])leaveMap[ds2]={am:false,pm:false,full:false};
+      if(!l.is_half_day){leaveMap[ds2].full=true;leaveMap[ds2].am=true;leaveMap[ds2].pm=true;}
+      else if(l.half_day_session==='am')leaveMap[ds2].am=true;
+      else leaveMap[ds2].pm=true;
+      cur.setDate(cur.getDate()+1);
+    }
   });
-  // Calculate stats
-  var present=0,late=0,earlyOut=0,absent=0,onLeave=0,totalWorkMin=0;
+  var presentScore=0,lateCount=0,earlyOutCount=0,absent=0,onLeave=0,totalWorkMin=0,workingDays=0;
   var rows=[];
   var d=new Date(from);
   var isMuslimMale=u.gender==='male'&&u.ethnicity==='malay';
   while(d<=new Date(to)){
     var ds=d.toISOString().slice(0,10);
-    var dow=d.getDay();// 0=Sun
-    var isSunday=dow===0;
+    var dow=d.getDay();
+    if(dow===0){d.setDate(d.getDate()+1);continue;}// Sunday skip
+    var isHol=ds in holMap;
+    var isPaidHol=isHol&&holMap[ds];
+    var isUnpaidHol=isHol&&!holMap[ds];
+    var lv=leaveMap[ds]||{am:false,pm:false,full:false};
     var rec=atts.find(function(a){return a.date===ds;})||null;
-    var isLeave=leaveSet.has(ds);
-    var status=isSunday?'rest':isLeave?'leave':rec?(rec.status||'absent'):'absent';
-    var late1=false,earlyOut1=false,lateBack=false,earlyEnd=false;
-    var workMin=0;
-    if(rec&&status==='present'&&rule){
-      // Check late S1 in
-      if(rec.check_in){var ci=new Date(rec.check_in);var ciT=ci.getHours()*60+ci.getMinutes();var lateT=timeStrToMin(rule.check_in_1_late_after);if(ciT>lateT)late1=true;}
-      // Check early S1 out
-      if(rec.check_out){var co=new Date(rec.check_out);var coT=co.getHours()*60+co.getMinutes();var earlyT=timeStrToMin(rule.check_out_1_early_before);if(coT<earlyT)earlyOut1=true;}
-      // Check late S2 in (with Friday Muslim extension)
-      // Late back = break duration > max allowed
-      if(rec.check_out&&rec.check_in_2){
-        var breakDur=(new Date(rec.check_in_2)-new Date(rec.check_out))/60000;
-        var maxBrk=(rule.max_break_minutes||60)+(isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0);
-        if(breakDur>maxBrk)lateBack=true;
-      }
-      // Check early S2 out
-      if(rec.check_out_2){var co2=new Date(rec.check_out_2);var co2T=co2.getHours()*60+co2.getMinutes();var earlyEnd2T=timeStrToMin(rule.check_out_2_early_before);if(co2T<earlyEnd2T)earlyEnd=true;}
-      // Total work minutes (S1 + S2 + S3)
-      if(rec.check_in&&rec.check_out)workMin+=Math.max(0,(new Date(rec.check_out)-new Date(rec.check_in))/60000);
-      if(rec.check_in_2&&rec.check_out_2)workMin+=Math.max(0,(new Date(rec.check_out_2)-new Date(rec.check_in_2))/60000);
-      if(rec.check_in_3&&rec.check_out_3)workMin+=Math.max(0,(new Date(rec.check_out_3)-new Date(rec.check_in_3))/60000);
+    if(isUnpaidHol){
+      // Excluded from denominator entirely
+      rows.push({date:ds,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],status:'holiday',unpaidHol:true,rec:{}});
+      d.setDate(d.getDate()+1);continue;
     }
-    if(status==='present'){present++;totalWorkMin+=workMin;}
-    if(status==='leave'){onLeave++;}
-    if(status==='absent'&&!isSunday){absent++;}
-    if(late1||lateBack)late++;
-    if(earlyOut1||earlyEnd)earlyOut++;
-    rows.push({date:ds,dow:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow],status:status,rec:rec,late:late1||lateBack,earlyOut:earlyOut1||earlyEnd,workMin:workMin});
+    workingDays++;
+    if(isPaidHol){
+      presentScore+=1;
+      rows.push({date:ds,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],status:'holiday',paidHol:true,score:1,rec:{}});
+      d.setDate(d.getDate()+1);continue;
+    }
+    // Full-day leave
+    if(lv.full){onLeave++;rows.push({date:ds,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],status:'leave',rec:rec||{}});d.setDate(d.getDate()+1);continue;}
+    var status=rec?(rec.status||'absent'):'absent';
+    // S1: check_in AND check_out both present
+    var s1ok=!!(rec&&rec.check_in&&rec.check_out);
+    // S2: check_in_2 AND check_out_2
+    var s2ok=!!(rec&&rec.check_in_2&&rec.check_out_2);
+    var s3ok=!!(rec&&rec.check_in_3&&rec.check_out_3);
+    // Apply half-day leaves — if AM leave, S1 counts as covered
+    var score=0;
+    if(lv.am){score+=0.5;}else if(s1ok){score+=0.5;}
+    if(lv.pm){score+=0.5;}else if(s2ok){score+=0.5;}
+    if(s3ok)score+=0.5;// S3 bonus
+    var late1=false,lateBack=false,earlyOut1=false,earlyEnd=false;
+    var workMin=0;
+    if(rec&&rule){
+      if(rec.check_in){var ciT2=new Date(rec.check_in).getHours()*60+new Date(rec.check_in).getMinutes();if(ciT2>timeStrToMin(rule.check_in_1_late_after))late1=true;}
+      if(rec.check_out&&rec.check_in_2){var brkDur=(new Date(rec.check_in_2)-new Date(rec.check_out))/60000;var maxBrk=(rule.max_break_minutes||60)+(isMuslimMale&&dow===5?(rule.break_overtime_friday_min||30):0);if(brkDur>maxBrk)lateBack=true;}
+      if(rec.check_out_2){var co2T2=new Date(rec.check_out_2).getHours()*60+new Date(rec.check_out_2).getMinutes();if(co2T2<timeStrToMin(rule.check_out_2_early_before))earlyEnd=true;}
+      if(s1ok)workMin+=Math.max(0,(new Date(rec.check_out)-new Date(rec.check_in))/60000);
+      if(s2ok)workMin+=Math.max(0,(new Date(rec.check_out_2)-new Date(rec.check_in_2))/60000);
+      if(s3ok)workMin+=Math.max(0,(new Date(rec.check_out_3)-new Date(rec.check_in_3))/60000);
+    }
+    if(score>0){presentScore+=Math.min(score,1);totalWorkMin+=workMin;if(late1||lateBack)lateCount++;if(earlyEnd)earlyOutCount++;}
+    else if(lv.am||lv.pm){onLeave++;}// half-day leave
+    else{absent++;}
+    rows.push({date:ds,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],status:score>0?'present':'absent',score:score,rec:rec||{},late:late1||lateBack,earlyOut:earlyEnd,workMin:workMin,lv:lv});
     d.setDate(d.getDate()+1);
   }
-  var avgMin=present>0?Math.round(totalWorkMin/present):0;
+  var rate=workingDays>0?Math.round(presentScore/workingDays*100):0;
+  var avgMin=presentScore>0?Math.round(totalWorkMin/Math.max(1,Math.round(presentScore))):0;
+  var presentDisplay=Number.isInteger(presentScore)?presentScore:presentScore.toFixed(1);
   var html='<div class="card" style="margin-bottom:1rem">'
     +'<div style="font-size:13px;font-weight:600;color:#f0f6fc;margin-bottom:10px">'+esc(u.display_name||username)+' — '+month+'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'
-    +'<div class="stat-card green"><div class="label">Present</div><div class="value">'+present+'</div></div>'
-    +'<div class="stat-card yellow"><div class="label">Late/Slow</div><div class="value">'+late+'</div></div>'
-    +'<div class="stat-card '+(earlyOut>0?'red':'blue')+'"><div class="label">Early Out</div><div class="value">'+earlyOut+'</div></div>'
+    +'<div class="stat-card blue"><div class="label">Attendance Rate</div><div class="value">'+rate+'%</div><div class="sub">'+presentDisplay+'/'+workingDays+'d</div></div>'
+    +'<div class="stat-card yellow"><div class="label">Late/Slow</div><div class="value">'+lateCount+'</div></div>'
+    +'<div class="stat-card '+(earlyOutCount>0?'red':'blue')+'"><div class="label">Early Out</div><div class="value">'+earlyOutCount+'</div></div>'
     +'<div class="stat-card blue"><div class="label">On Leave</div><div class="value">'+onLeave+'</div></div>'
     +'<div class="stat-card '+(absent>3?'red':'blue')+'"><div class="label">Absent</div><div class="value">'+absent+'</div></div>'
     +'<div class="stat-card blue"><div class="label">Avg Daily</div><div class="value">'+(avgMin?Math.floor(avgMin/60)+'h'+Math.round(avgMin%60)+'m':'—')+'</div></div>'
     +'</div></div>'
     +'<div class="card" style="overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">'
-    +'<thead><tr style="color:#4a6fa5"><th style="text-align:left;padding:4px 6px">Date</th><th>Status</th><th>S1 In</th><th>S1 Out</th><th>S2 In</th><th>S2 Out</th><th>S3</th><th>Hours</th><th>Flags</th></tr></thead>'
-    +'<tbody>'+rows.filter(function(r){return r.dow!=='Sun';}).map(function(r){
-      var rec=r.rec||{};var tc=r.status==='present'?'#34d399':r.status==='leave'?'#fbbf24':r.status==='rest'?'#4a6fa5':'#f87171';
+    +'<thead><tr style="color:#4a6fa5"><th style="text-align:left;padding:4px 6px">Date</th><th>Status</th><th>Score</th><th>S1 In</th><th>S1 Out</th><th>S2 In</th><th>S2 Out</th><th>S3</th><th>Hours</th><th>Flags</th></tr></thead>'
+    +'<tbody>'+rows.map(function(r){
+      var rec=r.rec||{};
+      var tc=r.paidHol?'#a78bfa':r.unpaidHol?'#6b8ab0':r.status==='present'?'#34d399':r.status==='leave'?'#fbbf24':'#f87171';
+      var stLabel=r.paidHol?'holiday 💚':r.unpaidHol?'holiday 🔴':r.status;
+      var scoreLabel=r.paidHol?'1.0':r.unpaidHol?'—':r.score!=null?(r.score>=1.5?'1.0+S3':r.score===1?'1.0':r.score===0.5?'0.5':'0'):'—';
       var flags=(r.late?'<span style="color:#f59e0b;font-size:10px">LATE </span>':'')+(r.earlyOut?'<span style="color:#ef4444;font-size:10px">EARLY </span>':'');
-      return '<tr style="border-bottom:1px solid #1e2d45">'
-        +'<td style="padding:4px 6px">'+r.date+' <span style="color:#4a6fa5">'+r.dow+'</span></td>'
-        +'<td style="text-align:center;color:'+tc+'">'+r.status+'</td>'
+      return '<tr style="border-bottom:1px solid #1e2d45'+(r.unpaidHol?';opacity:.4':'')+'">'
+        +'<td style="padding:4px 6px">'+r.date.slice(5)+' <span style="color:#4a6fa5">'+r.dow+'</span></td>'
+        +'<td style="text-align:center;color:'+tc+'">'+stLabel+'</td>'
+        +'<td style="text-align:center;color:#60a5fa;font-weight:600">'+scoreLabel+'</td>'
         +'<td style="text-align:center">'+(rec.check_in?fmtTime(rec.check_in):'—')+'</td>'
         +'<td style="text-align:center">'+(rec.check_out?fmtTime(rec.check_out):'—')+'</td>'
         +'<td style="text-align:center">'+(rec.check_in_2?fmtTime(rec.check_in_2):'—')+'</td>'
