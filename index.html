@@ -559,14 +559,14 @@ body{position:relative}
       </div>
       <div class="form-field"><label>Description</label><input type="text" id="br_desc" placeholder="Brief description"></div>
       <!-- Trigger -->
-      <div class="form-field"><label>Trigger Type</label>
-        <select id="br_trigger" onchange="onBrTriggerChange()">
-          <option value="unconditional">Unconditional (always pay)</option>
-          <option value="full_attendance">Full Attendance (100% in period)</option>
-          <option value="attendance_rate">Attendance Rate ≥ threshold</option>
-          <option value="performance">Performance Tasks ≥ threshold</option>
-          <option value="tenure">Minimum Tenure</option>
-        </select>
+      <div class="form-field"><label>Trigger Conditions <span style="font-size:10px;color:#4a6fa5">ALL selected conditions must be met</span></label>
+        <div style="background:#0a0f1a;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_unconditional" onchange="onBrTriggerChange()"> Always pay (no conditions)</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_full_attendance" onchange="onBrTriggerChange()"> Full Attendance (100% in period)</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_attendance_rate" onchange="onBrTriggerChange()"> Attendance Rate ≥ threshold</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_performance" onchange="onBrTriggerChange()"> Performance Tasks ≥ threshold</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_tenure" onchange="onBrTriggerChange()"> Minimum Tenure</label>
+        </div>
       </div>
       <div id="br_trigger_opts" style="display:none;background:#0a0f1a;border-radius:8px;padding:8px 10px;margin-bottom:8px">
         <div id="br_att_rate_wrap" style="display:none" class="form-field"><label>Min attendance rate (%)</label><input type="number" id="br_att_rate" min="1" max="100" value="90" style="width:100px"> %</div>
@@ -6671,6 +6671,12 @@ async function loadBenefitRules(){
   }
   if(!rules.length){document.getElementById('adminBenefitContent').innerHTML='<div class="empty-state"><div class="icon">🎁</div><p>No benefit rules yet. Create one with + New Rule.</p></div>';return;}
   var trigLabels={unconditional:'Always',full_attendance:'Full Att.',attendance_rate:'Att. Rate',performance:'Performance',tenure:'Tenure'};
+  function fmtTriggers(tt){
+    var types=tt;
+    try{if(typeof tt==='string')types=JSON.parse(tt);}catch(e){types=[tt];}
+    if(!Array.isArray(types))types=[types];
+    return types.map(function(t){return trigLabels[t]||t;}).join(' + ');
+  }
   var html='<div style="display:flex;flex-direction:column;gap:8px">';
   rules.forEach(function(r){
     html+='<div class="card" style="padding:10px 12px">'
@@ -6679,7 +6685,7 @@ async function loadBenefitRules(){
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
       +'<span style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.name)+'</span>'
       +'<span style="font-size:10px;color:#4a6fa5;background:#0a0f1a;border-radius:4px;padding:1px 6px">'+r.period+'</span>'
-      +'<span style="font-size:10px;color:#60a5fa;background:#0a0f1a;border-radius:4px;padding:1px 6px">'+(trigLabels[r.trigger_type]||r.trigger_type)+'</span>'
+      +'<span style="font-size:10px;color:#60a5fa;background:#0a0f1a;border-radius:4px;padding:1px 6px">'+fmtTriggers(r.trigger_type)+'</span>'
       +(r.is_active?'':'<span style="font-size:10px;color:#f87171">INACTIVE</span>')
       +'</div>'
       +'<div style="font-size:11px;color:#4a6fa5">'
@@ -6693,6 +6699,7 @@ async function loadBenefitRules(){
       +'<button class="btn sm" onclick="editBenefitRule('+r.id+')">✏️</button>'
       +'<button class="btn sm success" onclick="publishBenefitRule('+r.id+',\'manual\')" title="Publish now">▶ Now</button>'
       +'<button class="btn sm danger" onclick="toggleBenefitRule('+r.id+','+r.is_active+')">'+( r.is_active?'Pause':'Resume')+'</button>'
+      +'<button class="btn sm danger" onclick="deleteBenefitRule('+r.id+')" title="Delete rule">🗑️</button>'
       +'</div></div></div>';
   });
   html+='</div>';
@@ -6823,12 +6830,34 @@ async function publishBenefitRule(ruleId,mode){
 
 // ── Benefit Rule Modal ──
 function onBrTriggerChange(){
-  var v=document.getElementById('br_trigger').value;
-  var opts=document.getElementById('br_trigger_opts');
-  opts.style.display=v==='unconditional'||v==='full_attendance'?'none':'';
-  document.getElementById('br_att_rate_wrap').style.display=v==='attendance_rate'?'':'none';
-  document.getElementById('br_perf_wrap').style.display=v==='performance'?'':'none';
-  document.getElementById('br_tenure_wrap').style.display=v==='tenure'?'':'none';
+  var hasRate=document.getElementById('br_t_attendance_rate').checked;
+  var hasPerf=document.getElementById('br_t_performance').checked;
+  var hasTenure=document.getElementById('br_t_tenure').checked;
+  var hasOpts=hasRate||hasPerf||hasTenure;
+  document.getElementById('br_trigger_opts').style.display=hasOpts?'':'none';
+  document.getElementById('br_att_rate_wrap').style.display=hasRate?'':'none';
+  document.getElementById('br_perf_wrap').style.display=hasPerf?'':'none';
+  document.getElementById('br_tenure_wrap').style.display=hasTenure?'':'none';
+  // Unconditional is mutually exclusive
+  var uncond=document.getElementById('br_t_unconditional');
+  if(uncond.checked&&(hasRate||hasPerf||hasTenure)){
+    uncond.checked=false;
+  }
+}
+function getBrTriggers(){
+  var types=[];
+  ['unconditional','full_attendance','attendance_rate','performance','tenure'].forEach(function(t){
+    if(document.getElementById('br_t_'+t).checked)types.push(t);
+  });
+  return types.length?types:['unconditional'];
+}
+function setBrTriggers(types){
+  if(!Array.isArray(types))types=[types];// backward compat
+  ['unconditional','full_attendance','attendance_rate','performance','tenure'].forEach(function(t){
+    var el=document.getElementById('br_t_'+t);
+    if(el)el.checked=types.indexOf(t)>=0;
+  });
+  onBrTriggerChange();
 }
 function onBrPayoutChange(){
   var v=document.getElementById('br_payout_type').value;
@@ -6867,7 +6896,11 @@ async function openBenefitRuleModal(id){
   try{
   // Reset all fields
   ['br_id','br_name','br_desc'].forEach(function(x){document.getElementById(x).value='';});
-  document.getElementById('br_trigger').value='unconditional';
+  // Reset trigger checkboxes
+  ['unconditional','full_attendance','attendance_rate','performance','tenure'].forEach(function(t){
+    var el=document.getElementById('br_t_'+t);if(el)el.checked=false;
+  });
+  document.getElementById('br_t_unconditional').checked=true;// default
   document.getElementById('br_period').value='monthly';
   document.getElementById('br_payout_type').value='fixed';
   document.getElementById('br_amount').value='0';
@@ -6913,6 +6946,10 @@ async function openBenefitRuleModal(id){
       if(r.min_performance_tasks)document.getElementById('br_perf_tasks').value=r.min_performance_tasks;
       if(r.min_tenure_months)document.getElementById('br_tenure_months').value=r.min_tenure_months;
       document.getElementById('brModalTitle').textContent='✏️ Edit Benefit Rule';
+      // Parse trigger_type (may be JSON array string or plain string)
+      var savedTriggers=r.trigger_type||'unconditional';
+      try{savedTriggers=JSON.parse(savedTriggers);}catch(e){savedTriggers=[savedTriggers];}
+      setBrTriggers(Array.isArray(savedTriggers)?savedTriggers:[savedTriggers]);
       onBrTriggerChange();onBrPayoutChange();onBrClaimChange();
       await onBrAppliesToChange();
     }
@@ -6924,13 +6961,18 @@ async function editBenefitRule(id){openBenefitRuleModal(id);}
 async function saveBenefitRule(){
   var name=document.getElementById('br_name').value.trim();
   if(!name){toast('Name required','error');return;}
-  var trigger=document.getElementById('br_trigger').value;
+  var triggers=getBrTriggers();
+  var trigger=triggers[0];// primary trigger for backward compat
+  var hasRate=triggers.indexOf('attendance_rate')>=0;
+  var hasPerf=triggers.indexOf('performance')>=0;
+  var hasTenure=triggers.indexOf('tenure')>=0;
   var payoutType=document.getElementById('br_payout_type').value;
   var appliesTo=document.getElementById('br_applies_to').value;
   var customUsers=Array.from(document.querySelectorAll('.br_custom_ck:checked')).map(function(el){return el.value;});
   var data={
     name:name,description:document.getElementById('br_desc').value.trim(),
-    trigger_type:trigger,period:document.getElementById('br_period').value,
+    trigger_type:JSON.stringify(triggers),
+    period:document.getElementById('br_period').value,
     payout_type:payoutType,
     payout_amount:payoutType==='fixed'?parseFloat(document.getElementById('br_amount').value)||0:null,
     payout_percentage:payoutType==='percentage'?parseFloat(document.getElementById('br_pct').value)||0:null,
@@ -6941,10 +6983,10 @@ async function saveBenefitRule(){
     claim_type:document.getElementById('br_claim_type').value,
     claim_limit:parseInt(document.getElementById('br_claim_limit').value)||0,
     auto_publish:document.getElementById('br_auto_publish').checked,
-    min_attendance_rate:trigger==='attendance_rate'?parseFloat(document.getElementById('br_att_rate').value)/100:null,
-    min_performance_tasks:trigger==='performance'?parseInt(document.getElementById('br_perf_tasks').value)||null:null,
-    min_tenure_months:trigger==='tenure'?parseInt(document.getElementById('br_tenure_months').value)||null:null,
-    tenure_effective_next_month:trigger==='tenure'?document.getElementById('br_tenure_next_month').checked:null,
+    min_attendance_rate:hasRate?parseFloat(document.getElementById('br_att_rate').value)/100:null,
+    min_performance_tasks:hasPerf?parseInt(document.getElementById('br_perf_tasks').value)||null:null,
+    min_tenure_months:hasTenure?parseInt(document.getElementById('br_tenure_months').value)||null:null,
+    tenure_effective_next_month:hasTenure?document.getElementById('br_tenure_next_month').checked:null,
     created_by:currentUser.username
   };
   var editId=document.getElementById('br_id').value;
@@ -7006,12 +7048,24 @@ async function loadRecurringPage(){
       +'<button class="btn sm success" onclick="publishRecurringNow('+t.id+')" title="Publish now">▶ Now</button>'
       +'<button class="btn sm" onclick="editRecurringTask('+t.id+')">✏️</button>'
       +'<button class="btn sm danger" onclick="toggleRecurringTask('+t.id+','+t.is_active+')">'+( t.is_active?'Pause':'Resume')+'</button>'
+      +'<button class="btn sm danger" onclick="deleteRecurringTask('+t.id+')" title="Delete template">🗑️</button>'
       +'</div></div></div>';
   });
   html+='</div>';
   document.getElementById('recurringList').innerHTML=html;
 }
 
+async function deleteBenefitRule(id){
+  if(!confirm('Delete this benefit rule?\nExisting records will be kept but unlinked.'))return;
+  await fetch(SB_URL+'/rest/v1/benefit_rules?id=eq.'+id,{method:'DELETE',headers:sbH()});
+  toast('Rule deleted','success');loadBenefitRules();
+}
+
+async function deleteRecurringTask(id){
+  if(!confirm('Delete this recurring task template?\nAlready published tasks are not affected.'))return;
+  await fetch(SB_URL+'/rest/v1/recurring_tasks?id=eq.'+id,{method:'DELETE',headers:sbH()});
+  toast('Template deleted','success');loadRecurringPage();
+}
 async function toggleRecurringTask(id,isActive){
   await sbPatch('recurring_tasks',{id:id},{is_active:!isActive});
   toast(isActive?'Template paused':'Template resumed','success');loadRecurringPage();
