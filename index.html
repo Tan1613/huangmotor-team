@@ -4831,8 +4831,8 @@ async function saveAllAttChanges(username,month){
       var hasTime=fields.some(function(f){return data[f];});
       data.status=hasTime?'present':'absent';
     }
-    var r=await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',
-      headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates,return=minimal','Content-Type':'application/json'}),
+    var r=await fetch(SB_URL+'/rest/v1/attendance?on_conflict=username,date',{method:'POST',
+      headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates,return=minimal'}),
       body:JSON.stringify(data)
     });
     if(!r.ok){
