@@ -1380,6 +1380,7 @@ body{position:relative}
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_roles" onchange="onNuPermChange()"> Manage roles</label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_depts" onchange="onNuPermChange()"> Manage departments</label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_export_att" onchange="onNuPermChange()"> Export attendance</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_approve_tasks" onchange="onNuPermChange()"> Approve Task Completion</label>
               </div>
             </div>
             <div style="margin-top:8px;border:1px solid #2a1a2a;border-radius:8px;overflow:hidden">
@@ -2190,6 +2191,13 @@ async function openTaskDetail(id){
         +'<button class="btn sm danger" onclick="rejectTaskComplete('+id+')">↩ Reject & Return</button>';
     }
   }
+  // Admin: revoke completed + reassign any task
+  if(isAdmin&&t.status==='completed'){
+    statusBtns+='<button class="btn sm danger" onclick="rejectTaskComplete('+id+')" style="margin-top:4px">Revoke Completion</button>';
+  }
+  if(isAdmin&&t.status!=='cancelled'){
+    statusBtns+='<button class="btn sm" onclick="reassignTask('+id+')" style="margin-top:4px">Reassign</button>';
+  }
   // Sale owner can cancel
   if(isSaleTask&&(isSaleOwner||isAdmin)&&t.status!=='completed'&&t.status!=='cancelled')
     statusBtns+='<button class="btn sm danger" onclick="cancelSaleTask('+id+(saleRec?','+saleRec.id:'')+')">✕ Cancel Sale</button>';
@@ -2314,14 +2322,48 @@ async function approveTaskComplete(id){
 }
 
 async function rejectTaskComplete(id){
-  var reason=prompt('Reason for rejection\n(This note will be added and task returned to in-progress):');
+  var statusRows=await sbGet('tasks','id=eq.'+id+'&select=status');
+  var curStatus=statusRows.length?statusRows[0].status:'';
+  var isRevoke=curStatus==='completed';
+  var reason=prompt(isRevoke
+    ?'Reason for revoking completion (task returns to in-progress):'
+    :'Reason for rejection (note added, task returns to in-progress):');
   if(reason===null)return;
   var now=new Date().toISOString();
   var rows=await sbGet('tasks','id=eq.'+id+'&select=progress_notes');
   var notes=(rows.length&&rows[0].progress_notes)||[];
-  notes.push({by:currentUser.username,note:'↩ Rejected: '+(reason.trim()||'No reason given')+'. Please revise and resubmit.',ts:now,type:'rejection'});
-  await sbPatch('tasks',{id:id},{status:'in_progress',updated_at:now,progress_notes:notes});
-  toast('Task returned to in-progress','success');
+  var actor=currentUser.display_name||currentUser.username;
+  var msg=reason.trim()||'No reason given';
+  var noteText=isRevoke
+    ?'[Revoked] by '+actor+': '+msg+'. Returned to in-progress.'
+    :'[Rejected] by '+actor+': '+msg+'. Please revise and resubmit.';
+  notes.push({by:currentUser.username,note:noteText,ts:now,type:'rejection'});
+  await sbPatch('tasks',{id:id},{status:'in_progress',completed_at:null,updated_at:now,progress_notes:notes});
+  toast(isRevoke?'Completion revoked':'Task returned to in-progress','success');
+  closeModal('taskDetailModal');
+  if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
+  loadDashboard();
+}
+
+async function reassignTask(id){
+  await loadAllUsersCache();
+  var rows=await sbGet('tasks','id=eq.'+id+'&select=assigned_to,title,progress_notes,status');
+  if(!rows.length)return;
+  var t=rows[0];
+  var options=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});
+  var newUsername=prompt('Reassign "'+t.title+'" to:\nCurrent: '+(t.assigned_to||'dept/all')+'\n\nEnter username or display name:');
+  if(!newUsername||!newUsername.trim())return;
+  var q2=newUsername.trim().toLowerCase();
+  var found=options.find(function(u){return u.username.toLowerCase()===q2||(u.display_name||'').toLowerCase()===q2;});
+  if(!found){toast('User "'+newUsername+'" not found','error');return;}
+  var now=new Date().toISOString();
+  var notes=(t.progress_notes)||[];
+  var actor=currentUser.display_name||currentUser.username;
+  notes.push({by:currentUser.username,note:'[Reassigned] to '+(found.display_name||found.username)+' by '+actor,ts:now});
+  var upd={assigned_to:found.username,updated_at:now,progress_notes:notes};
+  if(t.status==='completed'||t.status==='pending_approval')upd.status='in_progress';
+  await sbPatch('tasks',{id:id},upd);
+  toast('Reassigned to '+(found.display_name||found.username),'success');
   closeModal('taskDetailModal');
   if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
   loadDashboard();
@@ -3063,9 +3105,10 @@ async function loadPerformance(){
   var fType=document.getElementById('perfType').value;
   var fFrom=document.getElementById('perfFrom').value;
   var fTo=document.getElementById('perfTo').value;
-  var q='status=eq.completed&deleted_at=is.null&select=assigned_to,task_type,completed_at';
-  q+='&completed_at=gte.'+(fFrom||since)+'T00:00:00Z';
-  if(fTo)q+='&completed_at=lte.'+fTo+'T23:59:59Z';
+  var dateFrom=fFrom||since;
+  var q='status=eq.completed&deleted_at=is.null&select=assigned_to,task_type,completed_at,updated_at';
+  q+='&or=(completed_at.gte.'+dateFrom+'T00:00:00Z,and(completed_at.is.null,updated_at.gte.'+dateFrom+'T00:00:00Z))';
+  if(fTo)q+='&or=(completed_at.lte.'+fTo+'T23:59:59Z,and(completed_at.is.null,updated_at.lte.'+fTo+'T23:59:59Z))';
   if(fUser&&fUser!=='all')q+='&assigned_to=eq.'+encodeURIComponent(fUser);
   if(fType&&fType!=='all')q+='&task_type=eq.'+fType;
   if(!canAll&&canDept&&currentUser.department){
@@ -3128,7 +3171,8 @@ var NU_PERM_MAP={
   nu_manage_depts:'can_manage_departments',nu_export_att:'can_export_attendance',
   nu_export_sales:'can_export_sales',nu_view_log:'can_view_change_log',
   nu_access_benefit:'can_access_benefit',nu_manage_benefit:'can_manage_benefit',
-  nu_access_payroll:'can_access_payroll'
+  nu_access_payroll:'can_access_payroll',
+  nu_approve_tasks:'can_approve_tasks'
 };
 
 function onNuRoleChange(){
