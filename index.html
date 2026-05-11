@@ -2170,6 +2170,12 @@ async function openTaskDetail(id){
   var isCreator=t.assigned_by===currentUser.username;
   var isAdmin=currentUser.role==='admin';
   var iAmWorker=workers.indexOf(currentUser.username)>=0;
+  // For sale tasks: count only non-admin workers for the 2-person limit
+  var nonAdminWorkers=workers.filter(function(u){
+    var usr=allUsers.find(function(x){return x.username===u;})||{};
+    return usr.role!=='admin';
+  });
+  var saleFull=isSaleTask&&nonAdminWorkers.length>=2&&currentUser.role!=='admin';
   // canAct: directly assigned, dept member, worker, sale task participant, or admin
   var canAct=t.assigned_to===currentUser.username
     ||t.assigned_dept===currentUser.department
@@ -2192,10 +2198,12 @@ async function openTaskDetail(id){
     if(t.status==='pending'&&!isSaleTask)
       statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button>'
         +'<button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
-    if((t.status==='accepted'||t.status==='in_progress')&&!iAmWorker&&(t.assigned_to===currentUser.username||t.assigned_dept===currentUser.department||isSaleTask))
+    if((t.status==='accepted'||t.status==='in_progress')&&!iAmWorker&&!saleFull&&(t.assigned_to===currentUser.username||t.assigned_dept===currentUser.department||isSaleTask))
       statusBtns+='<button class="btn sm primary" onclick="startWork('+id+')">▶ Start Work</button>';
     if(iAmWorker&&t.status==='in_progress')
       statusBtns+='<button class="btn sm success" onclick="submitTaskComplete('+id+')">✅ Submit Complete</button>';
+    if(saleFull&&!iAmWorker)
+      statusBtns+='<div style="font-size:11px;color:#4a6fa5;padding:4px 0">Full — 2 workers from different depts already assigned</div>';
   }
   // Pending approval — show approve/reject for managers
   if(t.status==='pending_approval'){
@@ -2224,16 +2232,19 @@ async function openTaskDetail(id){
       +workers.map(function(u){
         var usr=allUsers.find(function(x){return x.username===u;})||{};
         var initial=(usr.display_name||u||'?').charAt(0).toUpperCase();
+        var isAdminUser=usr.role==='admin';
         var deptLabel=usr.department?'<span style="font-size:9px;color:#2a4a6a;margin-left:2px">('+esc(usr.department)+')</span>':'';
+        var adminTag=isAdminUser?'<span style="font-size:9px;color:#f0a040;margin-left:2px">admin</span>':'';
         var reassignBtn=isAdmin
           ?'<button onclick="reassignWorker('+id+',\''+esc(u)+'\')" title="Replace this worker" style="margin-left:4px;background:none;border:none;color:#4a6fa5;cursor:pointer;font-size:10px;padding:0">↺</button>'
           :'';
         return '<div style="display:flex;align-items:center;gap:4px;background:#0d1626;border:1px solid #1e2d45;border-radius:16px;padding:3px 8px 3px 4px">'
-          +'<div style="width:20px;height:20px;border-radius:50%;background:#1d4ed822;border:1px solid #1d4ed855;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#60a5fa;flex-shrink:0">'+initial+'</div>'
+          +'<div style="width:20px;height:20px;border-radius:50%;background:#1d4ed822;border:1px solid '+(isAdminUser?'#f0a04055':'#1d4ed855')+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:'+(isAdminUser?'#f0a040':'#60a5fa')+';flex-shrink:0">'+initial+'</div>'
           +'<span style="font-size:11px;color:#c9d1d9">'+esc(usr.display_name||u)+'</span>'
-          +deptLabel+reassignBtn
+          +deptLabel+adminTag+reassignBtn
           +'</div>';
       }).join('')
+      +(isSaleTask&&nonAdminWorkers.length>=2?'<span style="font-size:10px;color:#34d399;font-weight:600">✓ FULL</span>':'')
       +'</div>';
   }
 
@@ -2320,15 +2331,22 @@ async function startWork(taskId){
   var t=tasks[0];
   var workers=t.workers||[];
   if(workers.indexOf(currentUser.username)>=0){toast('You are already working on this','success');return;}
-  // Sale tasks: max 2 workers, must be from different departments (admin exempt)
-  if(t.task_type==='sale'&&currentUser.role!=='admin'){
-    if(workers.length>=2){toast('Sale tasks allow max 2 workers','error');return;}
-    if(workers.length===1){
-      var w1=allUsers.find(function(u){return u.username===workers[0];})||{};
-      var myDept=currentUser.department;
-      if(w1.department&&myDept&&w1.department===myDept){
-        toast('Second worker must be from a different department ('+esc(w1.department)+' already has a worker)','error');
-        return;
+  // Sale tasks: max 2 non-admin workers, must be from different departments (admin exempt from limit)
+  if(t.task_type==='sale'){
+    // Count only non-admin workers for the limit
+    var nonAdminWorkers=workers.filter(function(u){
+      var usr=allUsers.find(function(x){return x.username===u;})||{};
+      return usr.role!=='admin';
+    });
+    if(currentUser.role!=='admin'){
+      if(nonAdminWorkers.length>=2){toast('Sale tasks allow max 2 workers','error');return;}
+      if(nonAdminWorkers.length===1){
+        var w1=allUsers.find(function(u){return u.username===nonAdminWorkers[0];})||{};
+        var myDept=currentUser.department;
+        if(w1.department&&myDept&&w1.department===myDept){
+          toast('Second worker must be from a different department ('+esc(w1.department)+' already has a worker)','error');
+          return;
+        }
       }
     }
   }
@@ -5533,14 +5551,13 @@ async function saveSale(){
   closeModal('saleModal');toast('Sale created — '+recNo,'success');loadMySales();
 }
 async function loadMySales(){
-  // Load all sales visible to current user
   var isTrash=salesFilter==='trash';
   var rows;
-  var q='order=created_at.desc';
+  var q;
   if(isTrash){
     q='deleted_at=not.is.null&order=deleted_at.desc';
   } else {
-    q+='&deleted_at=is.null';
+    q='deleted_at=is.null&order=created_at.desc';
     if(salesFilter!=='all')q+='&status=eq.'+salesFilter;
   }
   if(currentUser.role==='admin'||currentUser.can_view_all_sales){
