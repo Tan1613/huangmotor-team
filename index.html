@@ -2070,10 +2070,11 @@ function openPage(name){
   else if(name==='admin-dept')loadDeptPage();
   else if(name==='admin-leave'){loadAllLeave();loadLeaveConfig();}
   else if(name==='admin-attendance'){switchAttTab('day');if(currentUser.role==='admin')loadAbsenceAlertSetting();}
+  else if(name==='admin-att-rules')loadAttRules();
+  else if(name==='admin-media')loadMediaManager();
   else if(name==='benefit')loadBenefitPage();
   else if(name==='admin-benefits'){switchAdminBenefitTab('rules');}
-  else if(name==='admin-recurring'){loadRecurringPage();}
-  else if(name==='benefit'){}// placeholder, nothing to load
+  else if(name==='admin-recurring')loadRecurringPage();
   else if(name==='admin-roles')loadRolesPage();
   else if(name==='performance')loadPerformance();
   else if(name==='admin-users')loadAdminUsers();
@@ -4714,6 +4715,11 @@ async function loadPersonAttendance(){
   var holMap={};hols.forEach(function(h){holMap[h.date]={name:h.name,is_paid:h.is_paid!==false};});
   var rule=await getEffectiveRule(username,u.department);
   var isMuslimMale=u.gender==='male'&&u.ethnicity==='malay';
+  // Save All button
+  var saveBar='<div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:6px">'
+    +'<button class="btn sm" onclick="loadPersonAttendance()">↺ Refresh</button>'
+    +'<button class="btn sm primary" onclick="saveAllAttChanges(\''+username+'\',\''+month+'\')">💾 Save All Changes</button>'
+    +'</div>';
   var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
     +'<thead><tr style="color:#4a6fa5;font-size:10px;background:#0a0f1a">'
     +'<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #1e2d45">Date</th>'
@@ -4751,11 +4757,13 @@ async function loadPersonAttendance(){
     }
     // Inline time inputs for admin editing
     var mkInput=function(field,val){
-      return '<input type="time" value="'+(val?fmtTime(val):'')+'" onchange="adminEditAtt(\''+username+'\',\''+key+'\',\''+field+'\',this.value)" style="width:65px;padding:1px 3px;border:1px solid #1e2d45;border-radius:3px;background:#0d1626;color:#e0e6f0;font-size:10px">';
+      return '<input type="time" value="'+(val?fmtTime(val):'')+'" id="att-edit-'+key+'-'+field+'" '
+        +'onchange="markAttChanged(this)" '
+        +'style="width:65px;padding:1px 3px;border:1px solid #1e2d45;border-radius:3px;background:#0d1626;color:#e0e6f0;font-size:10px">';
     };
     html+='<tr style="border-bottom:1px solid #0d1626'+(isWeekend?';opacity:.5':'')+'">'
       +'<td style="padding:5px 8px;white-space:nowrap;color:#e0e6f0">'+key.slice(5)+' <span style="color:#4a6fa5">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dow]+'</span>'+(isHol?'<br><span style="font-size:9px;color:#a78bfa">'+esc(holMap[key].name)+(isHolPaid?' 💚':' 🔴 Unpaid')+'</span>':'')+'</td>'
-      +'<td style="text-align:center"><select onchange="adminEditAttStatus(\''+username+'\',\''+key+'\',this.value)" style="font-size:10px;padding:1px 3px;border:1px solid #1e2d45;border-radius:3px;background:#0d1626;color:'+stColor+'">'
+      +'<td style="text-align:center"><select id="att-status-'+key+'" onchange="markAttChanged(this)" style="font-size:10px;padding:1px 3px;border:1px solid #1e2d45;border-radius:3px;background:#0d1626;color:'+stColor+'">'
       +'<option value="present"'+(st==='present'?' selected':'')+'>✓ Present</option>'
       +'<option value="absent"'+(st==='absent'?' selected':'')+'>✗ Absent</option>'
       +'<option value="leave"'+(st==='leave'?' selected':'')+'>🌴 Leave</option>'
@@ -4772,15 +4780,56 @@ async function loadPersonAttendance(){
       +'</tr>';
   }
   html+='</tbody></table></div>';
-  document.getElementById('attList').innerHTML=html;
+  document.getElementById('attList').innerHTML=saveBar+html;
 }
 
-async function adminEditAtt(username,date,field,value){
-  var data={username:username,date:date};
-  data[field]=value?date+'T'+value+':00':null;
-  if(value)data.status='present';
-  await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify(data)});
-  await sbPost('change_log',{username:currentUser.username,action:'admin_edit_attendance',table_name:'attendance',record_id:username+':'+date,after_data:{field:field,value:value,edited_by:currentUser.username,manual:true}});
+function markAttChanged(el){
+  el.style.borderColor='#f59e0b';// orange = unsaved
+}
+
+async function saveAllAttChanges(username,month){
+  var inputs=document.querySelectorAll('[id^="att-edit-"]');
+  if(!inputs.length){toast('Nothing to save','success');return;}
+  // Group by date
+  var byDate={};
+  inputs.forEach(function(el){
+    var parts=el.id.split('-');// att-edit-YYYY-MM-DD-fieldname
+    // id format: att-edit-2025-01-15-check_in
+    var fieldSplit=el.id.replace('att-edit-','');
+    var dateMatch=fieldSplit.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+    if(!dateMatch)return;
+    var date=dateMatch[1];var field=dateMatch[2];
+    if(!byDate[date])byDate[date]={};
+    byDate[date][field]=el.value;
+  });
+  // Also collect status selects
+  document.querySelectorAll('[id^="att-status-"]').forEach(function(el){
+    var date=el.id.replace('att-status-','');
+    if(!byDate[date])byDate[date]={};
+    byDate[date]['__status']=el.value;
+  });
+  var now=new Date().toISOString();
+  var count=0;
+  for(var date in byDate){
+    var row=byDate[date];
+    var data={username:username,date:date};
+    var fields=['check_in','check_out','check_in_2','check_out_2','check_in_3','check_out_3'];
+    fields.forEach(function(f){if(f in row)data[f]=row[f]?date+'T'+row[f]+':00':null;});
+    if(row['__status'])data.status=row['__status'];
+    // Auto-set present if any time is filled
+    var hasTime=fields.some(function(f){return data[f];});
+    if(hasTime&&!data.status)data.status='present';
+    await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',
+      headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      body:JSON.stringify(data)
+    });
+    count++;
+  }
+  await sbPost('change_log',{username:currentUser.username,action:'admin_edit_attendance_bulk',table_name:'attendance',
+    record_id:username+':'+month,after_data:{edited_by:currentUser.username,rows:count,manual:true}});
+  // Reset border colors
+  document.querySelectorAll('[id^="att-edit-"]').forEach(function(el){el.style.borderColor='#1e2d45';});
+  toast('Saved '+count+' day'+(count!==1?'s':''),'success');
 }
 
 async function adminEditAttStatus(username,date,status){
