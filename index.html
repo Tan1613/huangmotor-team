@@ -2182,7 +2182,7 @@ async function openTaskDetail(id){
     if(t.status==='pending'&&!isSaleTask)
       statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button>'
         +'<button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
-    if((t.status==='accepted'||t.status==='in_progress')&&!iAmWorker)
+    if((t.status==='accepted'||t.status==='in_progress')&&!iAmWorker&&(t.assigned_to===currentUser.username||t.assigned_dept===currentUser.department||isSaleTask))
       statusBtns+='<button class="btn sm primary" onclick="startWork('+id+')">▶ Start Work</button>';
     if(iAmWorker&&t.status==='in_progress')
       statusBtns+='<button class="btn sm success" onclick="submitTaskComplete('+id+')">✅ Submit Complete</button>';
@@ -2364,12 +2364,12 @@ async function reassignTask(id){
   var notes=(t.progress_notes)||[];
   var actor=currentUser.display_name||currentUser.username;
   notes.push({by:currentUser.username,note:'[Reassigned] to '+(found.display_name||found.username)+' by '+actor,ts:now});
-  // Reset workers to new assignee, clear old workers
+  // Clear workers — new assignee must Accept then Start Work themselves
   var upd={
     assigned_to:found.username,
     assigned_dept:null,
-    workers:[found.username],
-    status:'pending',// reset so new person can accept
+    workers:[],
+    status:'pending',
     completed_at:null,
     updated_at:now,
     progress_notes:notes
