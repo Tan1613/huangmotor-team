@@ -381,7 +381,7 @@ body{position:relative}
       <div class="form-field"><label>Description (optional)</label><input type="text" id="cr_desc" placeholder="What is this room for?"></div>
       <div class="form-field">
         <label>Type</label>
-        <select id="cr_public">
+        <select id="cr_public" onchange="toggleRoomMembersWrap()">
           <option value="false">Private — select members below</option>
           <option value="true">Public — all staff</option>
         </select>
@@ -1863,7 +1863,18 @@ async function loadAnnouncements(){
   var reads=await sbGet('announcement_reads','username=eq.'+encodeURIComponent(currentUser.username)+'&select=announcement_id,confirmed');
   var readMap={};reads.forEach(function(r){readMap[r.announcement_id]={read:true,confirmed:r.confirmed};});
   if(!anns.length){document.getElementById('annList').innerHTML='<div class="empty-state"><div class="icon">📭</div><p>No announcements yet</p></div>';return;}
-  // For admin, also load all reads per announcement
+  // Auto-mark all visible announcements as read (so Confirm button always shows)
+  var unreadIds=anns.filter(function(a){return !readMap[a.id];}).map(function(a){return a.id;});
+  if(unreadIds.length){
+    await Promise.all(unreadIds.map(function(id){
+      return fetch(SB_URL+'/rest/v1/announcement_reads',{
+        method:'POST',
+        headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates,return=minimal'}),
+        body:JSON.stringify({announcement_id:id,username:currentUser.username,read_at:new Date().toISOString()})
+      });
+    }));
+    unreadIds.forEach(function(id){readMap[id]={read:true,confirmed:false};});
+  }
   var allReads={};
   if(isAdminOrSuper()){
     var ar=await sbGet('announcement_reads','select=announcement_id,username,confirmed');
@@ -1871,19 +1882,19 @@ async function loadAnnouncements(){
   }
   document.getElementById('annList').innerHTML=anns.map(function(a){
     var myRead=readMap[a.id]||{};
-    var isRead=!!myRead.read;var isConfirmed=!!myRead.confirmed;
+    var isConfirmed=!!myRead.confirmed;
     var isPin=a.is_pinned;var isAdmin=isAdminOrSuper();
     var readsArr=allReads[a.id]||[];
     var readCount=readsArr.length;var confirmCount=readsArr.filter(function(r){return r.confirmed;}).length;
     var readNames=readsArr.slice(0,5).map(function(r){var u=allUsers.find(function(x){return x.username===r.username;})||{};return esc(u.display_name||r.username);}).join(', ');
     var confirmNames=readsArr.filter(function(r){return r.confirmed;}).slice(0,5).map(function(r){var u=allUsers.find(function(x){return x.username===r.username;})||{};return esc(u.display_name||r.username);}).join(', ');
-    return '<div class="ann-item'+(isPin?' pinned':'')+(isRead?'':' unread')+'" id="ann-'+a.id+'">'
+    return '<div class="ann-item'+(isPin?' pinned':'')+(isConfirmed?'':' unread')+'" id="ann-'+a.id+'">'
       +(isPin?'<div class="ann-pin">📌 Pinned</div>':'')
-      +'<div class="ann-title" onclick="markRead('+a.id+')">'+esc(a.title)+(isRead?'':' <span style="color:#3b82f6;font-size:11px">●</span>')+'</div>'
+      +'<div class="ann-title">'+esc(a.title)+(isConfirmed?'':' <span style="color:#3b82f6;font-size:11px">●</span>')+'</div>'
       +'<div class="ann-content">'+esc(a.content||'')+'</div>'
       +'<div class="ann-meta"><span>'+fmtRelative(a.created_at)+'</span><span>by '+esc(a.created_by)+'</span><span class="ann-target">'+esc(a.target_role)+'</span></div>'
       +'<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
-      +(isRead&&!isConfirmed?'<button class="btn sm success" onclick="confirmAnn('+a.id+',event)">✓ Confirm Read</button>':'')
+      +(!isConfirmed?'<button class="btn sm success" onclick="confirmAnn('+a.id+',event)">✓ Confirm Read</button>':'')
       +(isConfirmed?'<span style="font-size:11px;color:#34d399">✓ Confirmed</span>':'')
       +(isAdmin&&readCount>0?'<span style="font-size:10px;color:#4a6fa5" title="'+readNames+'">👁 '+readCount+' read</span>':'')
       +(isAdmin&&confirmCount>0?'<span style="font-size:10px;color:#34d399" title="'+confirmNames+'">✓ '+confirmCount+' confirmed</span>':'')
@@ -1892,7 +1903,7 @@ async function loadAnnouncements(){
       +'</div>'
       +'</div>';
   }).join('');
-  updateUnreadCount(anns.length-reads.length);
+  updateUnreadCount(anns.filter(function(a){return !(readMap[a.id]&&readMap[a.id].confirmed);}).length);
 }
 
 async function confirmAnn(id,e){
@@ -4661,12 +4672,42 @@ async function openNewRoomModal(){
   document.getElementById('cr_name').value='';
   document.getElementById('cr_desc').value='';
   document.getElementById('cr_public').value='false';
-  // Populate members (exclude self and admin — admin auto-included)
+  toggleRoomMembersWrap();
   var list=document.getElementById('cr_member_list');
   list.innerHTML=allUsers.filter(function(u){return u.username!==currentUser.username&&u.role!=='admin'&&u.is_active!==false;}).map(function(u){
     return '<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#c9d1d9"><input type="checkbox" value="'+esc(u.username)+'" class="rm_ck"> '+(esc(u.display_name)||esc(u.username))+'</label>';
   }).join('');
   openModal('newRoomModal');
+}
+
+function toggleRoomMembersWrap(){
+  var isPublic=document.getElementById('cr_public').value==='true';
+  var wrap=document.getElementById('cr_members_wrap');
+  if(wrap)wrap.style.display=isPublic?'none':'';
+}
+
+async function createChatRoom(){
+  var name=document.getElementById('cr_name').value.trim();
+  if(!name){toast('Room name required','error');return;}
+  var isPublic=document.getElementById('cr_public').value==='true';
+  var members;
+  if(isPublic){
+    // All active staff
+    members=allUsers.filter(function(u){return u.is_active!==false;}).map(function(u){return u.username;});
+  } else {
+    members=Array.from(document.querySelectorAll('.rm_ck:checked')).map(function(el){return el.value;});
+    if(!members.length){toast('Select at least one member','error');return;}
+    members.push(currentUser.username);
+    allUsers.filter(function(u){return u.role==='admin'&&u.username!==currentUser.username;}).forEach(function(u){if(members.indexOf(u.username)<0)members.push(u.username);});
+  }
+  var res=await sbPost('chat_rooms',{name:name,description:document.getElementById('cr_desc').value.trim()||null,created_by:currentUser.username,members:members,is_public:isPublic});
+  if(res&&res.length){
+    var roomId=res[0].id;
+    var creatorName=currentUser.display_name||currentUser.username;
+    var memberStr=isPublic?'All staff':members.slice(0,5).map(function(u){var usr=allUsers.find(function(x){return x.username===u;});return usr?(usr.display_name||u):u;}).join(', ')+(members.length>5?'…':'');
+    await postSystemMsg(roomId,'🎉 Room created by '+creatorName+'. Members: '+memberStr);
+  }
+  closeModal('newRoomModal');toast('Room created','success');loadChatRooms();
 }
 
 async function postSystemMsg(roomId,text){
@@ -4703,7 +4744,8 @@ async function openChatRoom(roomId,roomName){
   var memberNames=room.is_public?'All staff':members.map(function(u){var usr=allUsers.find(function(x){return x.username===u;});return usr?(usr.display_name||usr.username):u;}).join(', ');
   document.getElementById('chatRoomMembers').textContent=(room.is_closed?'🔒 Closed · ':'')+memberNames;
   var manBtn=document.getElementById('chatManageBtn');
-  if(manBtn)manBtn.style.display=(currentUser.role==='admin'||room.created_by===currentUser.username)?'':'none';
+  var isFeedbackDM=room.description==='_feedback_dm_';
+  if(manBtn)manBtn.style.display=(currentUser.role==='admin'||room.created_by===currentUser.username)&&!isFeedbackDM?'':'none';
   // Update pin button
   var pinBtn=document.getElementById('chatPinBtn');
   if(pinBtn)pinBtn.style.opacity=pinnedRooms.has(roomId)?'1':'0.5';
@@ -4751,7 +4793,8 @@ async function openRoomManage(){
 
 async function addChatMember(){
   var sel=document.getElementById('addMemberSel');var username=sel.value;if(!username)return;
-  var rooms=await sbGet('chat_rooms','id=eq.'+currentRoomId+'&select=members');
+  var rooms=await sbGet('chat_rooms','id=eq.'+currentRoomId+'&select=members,description');
+  if(rooms.length&&rooms[0].description==='_feedback_dm_'){toast('Cannot add members to feedback channels','error');return;}
   var members=rooms.length?(rooms[0].members||[]):[];
   if(members.indexOf(username)<0)members.push(username);
   await sbPatch('chat_rooms',{id:currentRoomId},{members:members});
@@ -4946,31 +4989,32 @@ async function togglePinRoom(){
 
 /* ── Feedback / Report ── */
 async function openFeedbackModal(){
-  // Find admin users
   var admins=allUsers.filter(function(u){return u.role==='admin';});
   if(!admins.length){toast('No admin available','error');return;}
   var admin=admins[0];
-  // Check if a private feedback room already exists between this user and admin
-  var rooms=await sbGet('chat_rooms','is_public=eq.false&select=id,name,members,created_by');
+  if(admin.username===currentUser.username){toast('You are admin','error');return;}
+  var rooms=await sbGet('chat_rooms','is_public=eq.false&select=id,name,members,description');
   var dmRoom=rooms.find(function(r){
-    var members=r.members||[];
-    return members.indexOf(currentUser.username)>=0&&members.indexOf(admin.username)>=0&&r.members.length===2;
+    var m=r.members||[];
+    return m.length===2&&m.indexOf(currentUser.username)>=0&&m.indexOf(admin.username)>=0
+      &&r.description==='_feedback_dm_';
   });
   if(!dmRoom){
-    // Create one
     var res=await sbPost('chat_rooms',{
-      name:'Feedback: '+( currentUser.display_name||currentUser.username)+' ↔ Admin',
+      name:'\uD83D\uDCE3 Feedback — '+(currentUser.display_name||currentUser.username),
       created_by:currentUser.username,
       members:[currentUser.username,admin.username],
       is_public:false,
-      description:'Private feedback channel'
+      description:'_feedback_dm_'
     });
-    if(res&&res.length)dmRoom=res[0];
+    if(res&&res.length){
+      dmRoom=res[0];
+      await postSystemMsg(dmRoom.id,'\uD83D\uDD12 Private feedback channel. Messages are confidential between you and Admin.');
+    }
   }
   if(!dmRoom){toast('Could not open feedback channel','error');return;}
-  // Open the DM room
   backToRooms();
-  await openChatRoom(dmRoom.id,dmRoom.name);
+  await openChatRoom(dmRoom.id,dmRoom.name||(dmRoom.id+''));
 }
 
 async function hideMsg(id){
