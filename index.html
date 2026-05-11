@@ -647,6 +647,7 @@ body{position:relative}
       <button class="btn sm" onclick="closeModal('annModal')">✕</button>
     </div>
     <div class="modal-body">
+      <input type="hidden" id="ann_edit_id">
       <div class="form-field">
         <label>Title</label>
         <input type="text" id="ann_title" placeholder="Announcement title...">
@@ -678,7 +679,7 @@ body{position:relative}
       <div id="annAudiencePreview" style="font-size:11px;color:#4a6fa5;background:#0a0f1a;border-radius:6px;padding:6px 10px;margin-bottom:8px;display:none"></div>
       <div class="form-actions">
         <button class="btn" onclick="closeModal('annModal')">Cancel</button>
-        <button class="btn primary" onclick="saveAnnouncement()">Publish</button>
+        <button class="btn primary" onclick="saveAnnouncement()" id="annSaveBtn">Publish</button>
       </div>
     </div>
   </div>
@@ -1112,6 +1113,10 @@ body{position:relative}
             <div class="form-field" style="margin:0">
               <label>Minimum advance notice (days) <span style="font-size:10px;color:#4a6fa5">提前申请天数</span></label>
               <input type="number" id="leaveMinDays" min="0" max="30" value="1" style="width:120px">
+            </div>
+            <div class="form-field" style="margin:0">
+              <label>Annual leave entitlement (days/year) <span style="font-size:10px;color:#4a6fa5">每年年假天数</span></label>
+              <input type="number" id="leaveAnnualDays" min="1" max="60" value="14" style="width:120px">
             </div>
             <div class="form-field" style="margin:0;padding-bottom:.1rem">
               <button class="btn primary" onclick="saveLeaveConfig()">Save</button>
@@ -1939,6 +1944,7 @@ async function loadAnnouncements(){
       +(isConfirmed?'<span style="font-size:11px;color:#34d399">✓ Confirmed</span>':'')
       +(isAdmin&&readCount>0?'<span style="font-size:10px;color:#4a6fa5" title="'+readNames+'">👁 '+readCount+' read</span>':'')
       +(isAdmin&&confirmCount>0?'<span style="font-size:10px;color:#34d399" title="'+confirmNames+'">✓ '+confirmCount+' confirmed</span>':'')
+      +(isAdmin||currentUser.can_create_announcement?'<button class="btn sm" onclick="editAnn('+a.id+')">✏️ Edit</button>':'')
       +(isAdmin||currentUser.can_create_announcement?'<button class="btn sm danger" style="margin-left:auto" onclick="deleteAnn('+a.id+',event)">Delete</button>':'')
       +(isAdmin||currentUser.can_create_announcement?'<button class="btn sm" onclick="viewAnnReads('+a.id+',event)">👥 Details</button>':'')
       +'</div>'
@@ -1997,10 +2003,11 @@ async function deleteAnn(id,e){
 }
 
 async function openAnnModal(){
+  document.getElementById('ann_edit_id').value='';
   document.getElementById('ann_title').value='';document.getElementById('ann_content').value='';
   document.getElementById('ann_pinned').value='false';
   document.getElementById('annModalTitle').textContent='📢 New Announcement';
-  // Populate dept options
+  document.getElementById('annSaveBtn').textContent='Publish';
   await loadAllDepts();await loadAllRoles();
   var dg=document.getElementById('ann_dept_group');
   if(dg){dg.innerHTML='';allDepts.forEach(function(d){var o=document.createElement('option');o.value='dept:'+d.name;o.textContent='🏬 '+d.name;dg.appendChild(o);});}
@@ -2011,24 +2018,24 @@ async function openAnnModal(){
   openModal('annModal');
 }
 
-function updateAnnAudiencePreview(){
-  var val=document.getElementById('ann_target').value;
-  var prev=document.getElementById('annAudiencePreview');
-  if(!prev)return;
-  var who=[];
-  if(val==='all'){who=allUsers.filter(function(u){return u.is_active!==false;});}
-  else if(val==='admin'){who=allUsers.filter(function(u){return u.role==='admin';});}
-  else if(val==='staff'){who=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});}
-  else if(val==='partner'){who=allUsers.filter(function(u){return u.role==='partner';});}
-  else if(val.startsWith('dept:')){var dn=val.slice(5);who=allUsers.filter(function(u){return u.department===dn&&u.is_active!==false;});}
-  else if(val.startsWith('role:')){
-    var rn=val.slice(5);var role=allRoles.find(function(r){return r.name===rn;});
-    if(role)who=allUsers.filter(function(u){return u.custom_role_id===role.id&&u.is_active!==false;});
-  }
-  if(!who.length){prev.style.display='none';return;}
-  var names=who.slice(0,6).map(function(u){return esc(u.display_name||u.username);}).join(', ')+(who.length>6?'… +'+( who.length-6)+' more':'');
-  prev.style.display='';
-  prev.innerHTML='👁 <strong>'+who.length+' people</strong> will see this: '+names;
+async function editAnn(id){
+  var rows=await sbGet('announcements','id=eq.'+id+'&select=*');
+  if(!rows.length)return;
+  var a=rows[0];
+  await loadAllDepts();await loadAllRoles();
+  var dg=document.getElementById('ann_dept_group');
+  if(dg){dg.innerHTML='';allDepts.forEach(function(d){var o=document.createElement('option');o.value='dept:'+d.name;o.textContent='🏬 '+d.name;dg.appendChild(o);});}
+  var rg=document.getElementById('ann_role_group');
+  if(rg){rg.innerHTML='';allRoles.forEach(function(r){var o=document.createElement('option');o.value='role:'+r.name;o.textContent='🎭 '+r.name;rg.appendChild(o);});}
+  document.getElementById('ann_edit_id').value=id;
+  document.getElementById('ann_title').value=a.title||'';
+  document.getElementById('ann_content').value=a.content||'';
+  document.getElementById('ann_pinned').value=a.is_pinned?'true':'false';
+  document.getElementById('ann_target').value=a.target_role||'all';
+  document.getElementById('annModalTitle').textContent='✏️ Edit Announcement';
+  document.getElementById('annSaveBtn').textContent='Save Changes';
+  updateAnnAudiencePreview();
+  openModal('annModal');
 }
 
 async function saveAnnouncement(){
@@ -2036,9 +2043,15 @@ async function saveAnnouncement(){
   var content=document.getElementById('ann_content').value.trim();
   if(!title){toast('Title is required','error');return;}
   var targetVal=document.getElementById('ann_target').value;
-  // For dept/role targets, store as-is — query uses exact match
-  await sbPost('announcements',{title:title,content:content,target_role:targetVal,is_pinned:document.getElementById('ann_pinned').value==='true',created_by:currentUser.username});
-  closeModal('annModal');loadAnnouncements();toast('Announcement published','success');
+  var isPinned=document.getElementById('ann_pinned').value==='true';
+  var editId=document.getElementById('ann_edit_id').value;
+  if(editId){
+    await sbPatch('announcements',{id:parseInt(editId)},{title:title,content:content,target_role:targetVal,is_pinned:isPinned});
+    closeModal('annModal');loadAnnouncements();toast('Announcement updated','success');
+  } else {
+    await sbPost('announcements',{title:title,content:content,target_role:targetVal,is_pinned:isPinned,created_by:currentUser.username});
+    closeModal('annModal');loadAnnouncements();toast('Announcement published','success');
+  }
 }
 
 /* ══ DEPARTMENTS ══ */
@@ -2843,14 +2856,16 @@ var leaveConfigCache={min_advance_days:1,annual_leave_days:14,allow_backdated_le
 async function loadLeaveConfig(){
   var rows=await sbGet('leave_config','');
   rows.forEach(function(r){leaveConfigCache[r.key]=r.value;});
-  var el1=document.getElementById('leaveMinDays');var el2=document.getElementById('leaveAnnualDays');
+  var el1=document.getElementById('leaveMinDays');
+  var el2=document.getElementById('leaveAnnualDays');
   if(el1)el1.value=parseInt(leaveConfigCache.min_advance_days)||1;
   if(el2)el2.value=parseInt(leaveConfigCache.annual_leave_days)||14;
   updateLeaveBackdateToggleUI();
 }
 
 function updateLeaveBackdateToggleUI(){
-  var enabled=leaveConfigCache.allow_backdated_leave===true||leaveConfigCache.allow_backdated_leave==='true';
+  var v=leaveConfigCache.allow_backdated_leave;
+  var enabled=(v===true||v==='true'||v===1||v==='1');
   var cb=document.getElementById('leaveBackdateToggle');
   var track=document.getElementById('leaveBackdateTrack');
   var thumb=document.getElementById('leaveBackdateThumb');
@@ -2861,13 +2876,19 @@ function updateLeaveBackdateToggleUI(){
 
 async function saveLeaveConfig(){
   var min=parseInt(document.getElementById('leaveMinDays').value)||1;
+  var annual=parseInt(document.getElementById('leaveAnnualDays').value)||14;
   var backdateEl=document.getElementById('leaveBackdateToggle');
   var allowBackdate=backdateEl?backdateEl.checked:false;
   await fetch(SB_URL+'/rest/v1/leave_config',{method:'POST',
     headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),
-    body:JSON.stringify([{key:'min_advance_days',value:min},{key:'allow_backdated_leave',value:allowBackdate}])
+    body:JSON.stringify([
+      {key:'min_advance_days',value:min},
+      {key:'annual_leave_days',value:annual},
+      {key:'allow_backdated_leave',value:allowBackdate}
+    ])
   });
   leaveConfigCache.min_advance_days=min;
+  leaveConfigCache.annual_leave_days=annual;
   leaveConfigCache.allow_backdated_leave=allowBackdate;
   updateLeaveBackdateToggleUI();
   toast('Leave settings saved','success');
@@ -3220,7 +3241,7 @@ async function loadMyAttendance(){
   var presentDisplay=Number.isInteger(presentScore)?presentScore:presentScore.toFixed(1);
   document.getElementById('myAttStats').innerHTML=
     '<div class="stat-card blue"><div class="label">Attendance Rate</div><div class="value">'+rate+'%</div><div class="sub">'+presentDisplay+' / '+workingDays+' days</div></div>'
-    +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(al-usedAL)+'</div><div class="sub">Used '+usedAL+' / '+al+'</div></div>'
+    +'<div class="stat-card green"><div class="label">AL Balance</div><div class="value">'+(al-usedAL)+'</div><div class="sub">Used '+usedAL+' / '+al+' · Resets Jan 1</div></div>'
     +'<div class="stat-card '+(lateCount>3?'red':'yellow')+'"><div class="label">Late Arrivals</div><div class="value">'+lateCount+'</div><div class="sub">this month</div></div>'
     +'<div class="stat-card '+(earlyOutCount>3?'red':'yellow')+'"><div class="label">Early Departures</div><div class="value">'+earlyOutCount+'</div><div class="sub">this month</div></div>'
     +'<div class="stat-card '+(absent>3?'red':'blue')+'"><div class="label">Absent</div><div class="value">'+absent+'</div><div class="sub">Unpaid: '+usedUnpaid+' · MC: '+usedMC+'</div></div>';
