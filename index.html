@@ -4814,20 +4814,34 @@ async function saveAllAttChanges(username,month){
   var errs=0;
   for(var i=0;i<changedDates.length;i++){
     var date=changedDates[i];var row=byDate[date];
-    var data={username:username,date:date};
+    var data={username:username,date:date,self_checkin:false};
     var fields=['check_in','check_out','check_in_2','check_out_2','check_in_3','check_out_3'];
     fields.forEach(function(f){
-      if(f in row)data[f]=row[f]?(date+'T'+row[f]+':00+08:00'):null;
+      if(f in row){
+        if(row[f]){
+          // Store as ISO timestamp — date + time + timezone
+          data[f]=date+'T'+row[f]+':00+08:00';
+        } else {
+          data[f]=null;
+        }
+      }
     });
     if(row['__status'])data.status=row['__status'];
-    // Auto-present if any time filled
-    var hasTime=fields.some(function(f){return data[f];});
-    if(hasTime&&!data.status)data.status='present';
+    else if(!data.status){
+      var hasTime=fields.some(function(f){return data[f];});
+      data.status=hasTime?'present':'absent';
+    }
     var r=await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',
-      headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates,return=minimal'}),
+      headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates,return=minimal','Content-Type':'application/json'}),
       body:JSON.stringify(data)
     });
-    if(!r.ok)errs++;
+    if(!r.ok){
+      var errBody=await r.json().catch(function(){return {};});
+      var msg=errBody.message||errBody.details||errBody.hint||r.status;
+      console.error('Att save error '+date+':',msg,JSON.stringify(data));
+      errs++;
+      if(errs===1)toast('Error on '+date+': '+msg,'error');
+    }
   }
   if(errs)toast('Saved with '+errs+' error(s) — check console','error');
   else{
