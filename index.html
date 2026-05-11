@@ -6948,9 +6948,24 @@ async function saveBenefitRule(){
     created_by:currentUser.username
   };
   var editId=document.getElementById('br_id').value;
-  if(editId){await sbPatch('benefit_rules',{id:parseInt(editId)},data);toast('Rule updated','success');}
-  else{await sbPost('benefit_rules',data);toast('Rule created','success');}
-  closeModal('benefitRuleModal');loadBenefitRules();
+  var result;
+  if(editId){
+    result=await sbPatch('benefit_rules',{id:parseInt(editId)},data);
+    var ok=result!==false;
+    if(ok){closeModal('benefitRuleModal');loadBenefitRules();toast('Rule updated ✓','success');}
+    else toast('Update failed — check console','error');
+  } else {
+    result=await sbPost('benefit_rules',data);
+    if(result&&result.length){closeModal('benefitRuleModal');loadBenefitRules();toast('Rule created ✓','success');}
+    else{
+      // Get actual error
+      var r2=await fetch(SB_URL+'/rest/v1/benefit_rules',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=representation'}),body:JSON.stringify(data)});
+      var errBody=await r2.json().catch(function(){return {};});
+      var msg=errBody.message||errBody.details||errBody.hint||JSON.stringify(errBody);
+      toast('Failed: '+msg,'error');
+      console.error('saveBenefitRule error:',msg,data);
+    }
+  }
 }
 
 /* ══ RECURRING TASKS ══ */
@@ -7209,9 +7224,21 @@ async function saveRecurringTask(){
   };
   if(autoPublish)data.next_publish_at=computeNextPublish(data);
   var editId=document.getElementById('rt_id').value;
-  if(editId){await sbPatch('recurring_tasks',{id:parseInt(editId)},data);toast('Template updated','success');}
-  else{await sbPost('recurring_tasks',data);toast('Template created','success');}
-  closeModal('recurringModal');loadRecurringPage();
+  if(editId){
+    await sbPatch('recurring_tasks',{id:parseInt(editId)},data);
+    closeModal('recurringModal');loadRecurringPage();toast('Template updated ✓','success');
+  } else {
+    var result=await sbPost('recurring_tasks',data);
+    if(result&&result.length){
+      closeModal('recurringModal');loadRecurringPage();toast('Template created ✓','success');
+    } else {
+      var r2=await fetch(SB_URL+'/rest/v1/recurring_tasks',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=representation'}),body:JSON.stringify(data)});
+      var errBody=await r2.json().catch(function(){return {};});
+      var msg=errBody.message||errBody.details||errBody.hint||JSON.stringify(errBody);
+      toast('Failed: '+msg,'error');
+      console.error('saveRecurringTask error:',msg,data);
+    }
+  }
 }
 
 /* ══ TASK VISIBILITY ══ */
