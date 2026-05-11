@@ -124,6 +124,7 @@ body{position:relative}
 .task-status.accepted{background:#0d1a2d;color:#60a5fa}
 .task-status.in_progress{background:#0d2d1a;color:#34d399}
 .task-status.completed{background:#0d2d0d;color:#86efac}
+.task-status.pending_approval{background:#1a1200;color:#f59e0b;border:1px solid #f59e0b44}
 .task-status.rejected{background:#2d0d0d;color:#fca5a5}
 .task-progress{margin-top:8px;border-top:1px solid #1e2d45;padding-top:8px}
 .progress-note{font-size:11px;color:#4a6fa5;padding:4px 0;border-bottom:1px solid #0a0f1a}
@@ -968,6 +969,7 @@ body{position:relative}
           <button class="btn sm" onclick="filterTasks('pending')" id="tf-pending">Pending</button>
           <button class="btn sm" onclick="filterTasks('accepted')" id="tf-accepted">Accepted</button>
           <button class="btn sm" onclick="filterTasks('in_progress')" id="tf-in_progress">In Progress</button>
+          <button class="btn sm" onclick="filterTasks('pending_approval')" id="tf-pending_approval" style="color:#f59e0b">⏳ Awaiting</button>
           <button class="btn sm" onclick="filterTasks('completed')" id="tf-completed">Completed</button>
         </div>
         <div id="taskList"></div>
@@ -1086,6 +1088,7 @@ body{position:relative}
             <option value="pending">Pending</option>
             <option value="accepted">Accepted</option>
             <option value="in_progress">In Progress</option>
+            <option value="pending_approval">⏳ Awaiting Approval</option>
             <option value="completed">Completed</option>
           </select>
           <select class="btn" id="adminTaskTypeFilter" onchange="loadAllTasks()">
@@ -1680,7 +1683,7 @@ async function doLogin(){
   document.getElementById('loginErr').textContent='';
   try{
     var hash=await sha256(pass);
-    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity');
+    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity');
     if(!rows||!rows.length||rows[0].password_hash!==hash){
       document.getElementById('loginErr').textContent='Invalid username or password.';
       btn.disabled=false;btn.textContent='Sign In';return;
@@ -1838,7 +1841,7 @@ async function loadDashboard(){
   document.getElementById('dashGreeting').textContent=greet+', '+name+' 👋';
   // Tasks: assigned directly OR to my department, not deleted, not completed
   var myDept=currentUser.department;
-  var taskQ='status=neq.completed&deleted_at=is.null&order=created_at.desc';
+  var taskQ='status=in.(pending,accepted,in_progress,pending_approval)&deleted_at=is.null&order=created_at.desc';
   var directTasks=await sbGet('tasks','assigned_to=eq.'+encodeURIComponent(currentUser.username)+'&'+taskQ);
   var deptTasks=myDept?await sbGet('tasks','assigned_dept=eq.'+encodeURIComponent(myDept)+'&assigned_to=is.null&'+taskQ):[];
   // Merge dedup by id
@@ -2167,17 +2170,25 @@ async function openTaskDetail(id){
   }
   var isSaleOwner=saleRec&&saleRec.salesperson===currentUser.username;
 
+  var canApproveTasks=currentUser.role==='admin'||currentUser.can_approve_tasks;
   // Status buttons
   var statusBtns='';
-  if(canAct&&t.status!=='completed'&&t.status!=='cancelled'){
+  if(canAct&&t.status!=='completed'&&t.status!=='cancelled'&&t.status!=='pending_approval'){
     if(t.status==='pending'&&!isSaleTask)
       statusBtns='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'accepted\')">Accept</button>'
         +'<button class="btn sm danger" onclick="updateTaskStatus('+id+',\'rejected\')">Decline</button>';
-    // Start Work: show to everyone who hasn't started yet, regardless of how many others started
     if((t.status==='accepted'||t.status==='in_progress')&&!iAmWorker&&(isSaleTask||t.status==='accepted'))
       statusBtns+='<button class="btn sm primary" onclick="startWork('+id+')">▶ Start Work</button>';
     if(iAmWorker&&t.status==='in_progress')
-      statusBtns+='<button class="btn sm success" onclick="updateTaskStatus('+id+',\'completed\')">✅ Mark Complete</button>';
+      statusBtns+='<button class="btn sm success" onclick="submitTaskComplete('+id+')">✅ Submit Complete</button>';
+  }
+  // Pending approval — show approve/reject for managers
+  if(t.status==='pending_approval'){
+    statusBtns+='<div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:6px;padding:6px 10px;font-size:11px;color:#f59e0b;margin-bottom:6px">⏳ Awaiting completion approval</div>';
+    if(canApproveTasks){
+      statusBtns+='<button class="btn sm success" onclick="approveTaskComplete('+id+')">✅ Approve Complete</button>'
+        +'<button class="btn sm danger" onclick="rejectTaskComplete('+id+')">↩ Reject & Return</button>';
+    }
   }
   // Sale owner can cancel
   if(isSaleTask&&(isSaleOwner||isAdmin)&&t.status!=='completed'&&t.status!=='cancelled')
@@ -2275,6 +2286,45 @@ async function cancelSaleTask(taskId,saleId){
   if(currentPage==='tasks')loadMyTasks();
   else if(currentPage==='admin-tasks')loadAllTasks();
   if(currentPage==='mysales')loadMySales();
+}
+
+async function submitTaskComplete(id){
+  if(!confirm('Submit for completion approval?\nManager or admin will review before it\'s finalised.'))return;
+  var now=new Date().toISOString();
+  var rows=await sbGet('tasks','id=eq.'+id+'&select=progress_notes');
+  var notes=(rows.length&&rows[0].progress_notes)||[];
+  notes.push({by:currentUser.username,note:'⏳ Submitted for completion approval',ts:now});
+  await sbPatch('tasks',{id:id},{status:'pending_approval',updated_at:now,progress_notes:notes});
+  toast('Submitted for approval ✓','success');
+  closeModal('taskDetailModal');
+  if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
+  loadDashboard();
+}
+
+async function approveTaskComplete(id){
+  var now=new Date().toISOString();
+  var rows=await sbGet('tasks','id=eq.'+id+'&select=progress_notes');
+  var notes=(rows.length&&rows[0].progress_notes)||[];
+  notes.push({by:currentUser.username,note:'✅ Completion approved by '+(currentUser.display_name||currentUser.username),ts:now});
+  await sbPatch('tasks',{id:id},{status:'completed',completed_at:now,updated_at:now,progress_notes:notes});
+  toast('Task completion approved ✓','success');
+  closeModal('taskDetailModal');
+  if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
+  loadDashboard();
+}
+
+async function rejectTaskComplete(id){
+  var reason=prompt('Reason for rejection\n(This note will be added and task returned to in-progress):');
+  if(reason===null)return;
+  var now=new Date().toISOString();
+  var rows=await sbGet('tasks','id=eq.'+id+'&select=progress_notes');
+  var notes=(rows.length&&rows[0].progress_notes)||[];
+  notes.push({by:currentUser.username,note:'↩ Rejected: '+(reason.trim()||'No reason given')+'. Please revise and resubmit.',ts:now,type:'rejection'});
+  await sbPatch('tasks',{id:id},{status:'in_progress',updated_at:now,progress_notes:notes});
+  toast('Task returned to in-progress','success');
+  closeModal('taskDetailModal');
+  if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
+  loadDashboard();
 }
 
 async function updateTaskStatus(taskId,status){
@@ -3801,6 +3851,7 @@ var PERM_DEFS=[
   {id:'rm_access_benefit',field:'can_access_benefit',label:'Access Benefits',short:'访问福利模块',mod:'team',status:'future',desc:'Access the Benefits module (placeholder). Will cover benefit claims when built.'},
   {id:'rm_manage_benefit',field:'can_manage_benefit',label:'Manage Benefits',short:'管理福利 / 审批申请',mod:'team',status:'future',desc:'Approve benefit claims and configure entitlement rules. HR manager level.'},
   {id:'rm_access_payroll',field:'can_access_payroll',label:'Access Payroll',short:'访问薪资模拟器',mod:'team',status:'future',desc:'Access Salary Simulator — gross to nett with EPF, SOCSO, EIS, PCB. Read-only simulation.'},
+  {id:'rm_approve_tasks',field:'can_approve_tasks',label:'Approve Task Completion',short:'审批任务完成',mod:'team',status:'live',desc:'Review staff "Mark Complete" submissions. Approve to finalise, or reject with a note to return the task to in-progress.'},
 ];
 
 var rmPermState={};
@@ -5883,7 +5934,8 @@ var PERM_FIELDS=['can_access_tools','can_access_team','can_edit_pricelist','can_
   'can_view_all_sales','can_create_announcement','can_pin_announcement','can_create_chat_room',
   'can_manage_users','can_manage_roles','can_manage_departments',
   'can_export_attendance','can_export_sales','can_view_change_log',
-  'can_access_benefit','can_manage_benefit','can_access_payroll'];
+  'can_access_benefit','can_manage_benefit','can_access_payroll',
+  'can_approve_tasks'];
 
 async function resolvePermissions(user){
   if(user.role==='admin'){
@@ -5936,7 +5988,7 @@ async function resolvePermissions(user){
   if(!sess){showTeamLoginPrompt();return;}
   try{
     var s=JSON.parse(sess);
-    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity',{headers:sbH()});
+    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity',{headers:sbH()});
     var rows=await r.json();
     if(!rows.length||rows[0].is_active===false){
       sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;
