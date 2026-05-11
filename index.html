@@ -1470,7 +1470,7 @@ body{position:relative}
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn primary" onclick="openSaleModal()">+ New Sale</button>
-            <button class="btn" onclick="openDataRequests()">🔍 Requests</button>
+            <button class="btn" onclick="openDataRequests()" style="position:relative">🔍 Requests <span id="dataReqBadge" style="display:none;background:#ef4444;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;margin-left:4px"></span></button>
           </div>
         </div>
         <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
@@ -2320,8 +2320,8 @@ async function startWork(taskId){
   var t=tasks[0];
   var workers=t.workers||[];
   if(workers.indexOf(currentUser.username)>=0){toast('You are already working on this','success');return;}
-  // Sale tasks: max 2 workers, must be from different departments
-  if(t.task_type==='sale'){
+  // Sale tasks: max 2 workers, must be from different departments (admin exempt)
+  if(t.task_type==='sale'&&currentUser.role!=='admin'){
     if(workers.length>=2){toast('Sale tasks allow max 2 workers','error');return;}
     if(workers.length===1){
       var w1=allUsers.find(function(u){return u.username===workers[0];})||{};
@@ -4273,13 +4273,11 @@ async function refreshBadges(){
       if(mnLeave){var existing=mnLeave.querySelector('.mi-badge');if(existing)existing.remove();if(pendingLeave.length>0){var b=document.createElement('span');b.className='mi-badge';b.style.cssText='margin-left:auto;background:#ef4444;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px';b.textContent=pendingLeave.length;mnLeave.appendChild(b);}}
     }catch(e){}
   }
-  // Admin: pending attendance approvals
-  if(currentUser.role==='admin'||currentUser.can_view_attendance){
-    try{
-      var pendingAtt=await sbGet('checkin_approvals','status=eq.pending&select=id');
-      setBadge('attBadge',pendingAtt.length);
-    }catch(e){}
-  }
+  // Data View Requests pending (for sale owners)
+  try{
+    var dvr=await sbGet('data_view_requests','owner=eq.'+encodeURIComponent(currentUser.username)+'&status=eq.pending&select=id');
+    setBadge('dataReqBadge',dvr.length);
+  }catch(e){}
 }
 
 function setBadge(id,count){
