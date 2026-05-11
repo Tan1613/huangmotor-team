@@ -6540,10 +6540,13 @@ function switchBenefitTab(tab){
 }
 
 async function loadMyBenefits(){
-  var now=new Date();var yr=now.getFullYear();var mo=now.getMonth()+1;
+  var now=new Date();var yr=now.getFullYear();
   var records=await sbGet('benefit_records','username=eq.'+encodeURIComponent(currentUser.username)+'&period_year=eq.'+yr+'&order=created_at.desc&select=*');
-  var rules=await sbGet('benefit_rules','is_active=eq.true&select=id,name,period,trigger_type,payout_type,payout_amount,payout_percentage,claim_type');
+  var rules=await sbGet('benefit_rules','is_active=eq.true&select=id,name,period,trigger_type,payout_type,payout_amount,payout_percentage,claim_type,claim_limit');
   var ruleMap={};rules.forEach(function(r){ruleMap[r.id]=r;});
+  // Get total claimed per rule this year (all staff, for quota display)
+  var allClaimed=await sbGet('benefit_records','period_year=eq.'+yr+'&status=neq.rejected&select=rule_id');
+  var claimedCounts={};allClaimed.forEach(function(r){claimedCounts[r.rule_id]=(claimedCounts[r.rule_id]||0)+1;});
   var html='';
   if(!records.length){
     html='<div class="empty-state"><div class="icon">🎁</div><p>No benefits for '+yr+' yet</p></div>';
@@ -6552,10 +6555,13 @@ async function loadMyBenefits(){
     records.forEach(function(rec){
       var rule=ruleMap[rec.rule_id]||{name:'Unknown Rule'};
       var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171'}[rec.status]||'#4a6fa5';
+      var totalClaimed=claimedCounts[rec.rule_id]||0;
+      var limit=rule.claim_limit||0;
+      var quotaStr=limit>0?'<span style="font-size:10px;color:#4a6fa5">'+totalClaimed+' / '+limit+' claimed</span>':'';
       html+='<div class="card" style="padding:10px 12px">'
         +'<div style="display:flex;justify-content:space-between;align-items:center">'
         +'<div><div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(rule.name)+'</div>'
-        +'<div style="font-size:11px;color:#4a6fa5">'+( rec.period_year||'')+( rec.period_month?' / '+String(rec.period_month).padStart(2,'0'):'')+'</div></div>'
+        +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+(rec.period_year||'')+( rec.period_month?' / '+String(rec.period_month).padStart(2,'0'):'')+( quotaStr?' · '+quotaStr:'')+'</div></div>'
         +'<div style="text-align:right">'
         +'<div style="font-size:14px;font-weight:700;color:#34d399">RM '+parseFloat(rec.amount||0).toFixed(2)+'</div>'
         +'<span style="font-size:10px;color:'+stColor+';font-weight:600">'+rec.status.toUpperCase()+'</span>'
@@ -6570,18 +6576,36 @@ async function loadMyBenefits(){
 
 async function loadClaimableBenefits(){
   var rules=await sbGet('benefit_rules','is_active=eq.true&claim_type=eq.manual&select=*');
-  var now=new Date();var yr=now.getFullYear();var mo=now.getMonth()+1;
-  // Get already claimed this period
+  var now=new Date();var yr=now.getFullYear();
   var existing=await sbGet('benefit_records','username=eq.'+encodeURIComponent(currentUser.username)+'&period_year=eq.'+yr+'&select=rule_id');
-  var claimedIds=new Set(existing.map(function(r){return r.rule_id;}));
+  var claimedByMe=new Set(existing.map(function(r){return r.rule_id;}));
+  var allClaimed=await sbGet('benefit_records','period_year=eq.'+yr+'&status=neq.rejected&select=rule_id');
+  var claimedCounts={};allClaimed.forEach(function(r){claimedCounts[r.rule_id]=(claimedCounts[r.rule_id]||0)+1;});
   if(!rules.length){
     document.getElementById('benefitTabContent').innerHTML='<div class="empty-state"><div class="icon">📋</div><p>No claimable benefits available</p></div>';
     return;
   }
   var html='<div style="display:flex;flex-direction:column;gap:8px">';
   rules.forEach(function(r){
-    var alreadyClaimed=claimedIds.has(r.id);
-    var eligible=checkBenefitEligibility(r);
+    var alreadyClaimed=claimedByMe.has(r.id);
+    var totalClaimed=claimedCounts[r.id]||0;
+    var limit=r.claim_limit||0;
+    var isFull=limit>0&&totalClaimed>=limit;
+    var eligible=!alreadyClaimed&&!isFull&&checkBenefitEligibility(r);
+    var quotaHtml='';
+    if(limit>0){
+      var pct=Math.min(100,Math.round(totalClaimed/limit*100));
+      var remaining=Math.max(0,limit-totalClaimed);
+      quotaHtml='<div style="margin-top:6px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:2px">'
+        +'<span>已获得 / 奖励上限</span><span>'+totalClaimed+' / '+limit+'</span></div>'
+        +'<div style="background:#1e2d45;border-radius:4px;height:6px">'
+        +'<div style="background:'+(isFull?'#ef4444':'#34d399')+';width:'+pct+'%;height:6px;border-radius:4px"></div>'
+        +'</div>'
+        +(remaining>0&&!isFull?'<div style="font-size:10px;color:#34d399;margin-top:2px">'+remaining+' spot'+(remaining>1?'s':'')+' remaining</div>':'')
+        +(isFull?'<div style="font-size:10px;color:#f87171;margin-top:2px">Quota full</div>':'')
+        +'</div>';
+    }
     html+='<div class="card" style="padding:10px 12px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
       +'<div style="flex:1">'
@@ -6589,9 +6613,14 @@ async function loadClaimableBenefits(){
       +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+esc(r.description||'')+'</div>'
       +'<div style="font-size:11px;color:#4a6fa5;margin-top:4px">'
       +(r.payout_type==='fixed'?'RM '+parseFloat(r.payout_amount||0).toFixed(2):parseFloat(r.payout_percentage||0)+'% of base')
-      +' · '+r.period+'</div></div>'
-      +'<button class="btn sm'+(alreadyClaimed?' ':' success')+'" '+(alreadyClaimed||!eligible?'disabled':' onclick="claimBenefit('+r.id+')"')+'>'
-      +(alreadyClaimed?'Claimed':eligible?'Claim':'Not eligible')+'</button>'
+      +' · '+r.period+'</div>'
+      +quotaHtml
+      +'</div>'
+      +'<button class="btn sm'+(eligible?' success':'')+'" '
+      +(eligible?'onclick="claimBenefit('+r.id+')"  '  :'disabled')
+      +' style="margin-left:8px;flex-shrink:0">'
+      +(alreadyClaimed?'✓ Claimed':isFull?'Full':eligible?'Claim':'Not eligible')
+      +'</button>'
       +'</div></div>';
   });
   html+='</div>';
@@ -6838,11 +6867,7 @@ function onBrTriggerChange(){
   document.getElementById('br_att_rate_wrap').style.display=hasRate?'':'none';
   document.getElementById('br_perf_wrap').style.display=hasPerf?'':'none';
   document.getElementById('br_tenure_wrap').style.display=hasTenure?'':'none';
-  // Unconditional is mutually exclusive
-  var uncond=document.getElementById('br_t_unconditional');
-  if(uncond.checked&&(hasRate||hasPerf||hasTenure)){
-    uncond.checked=false;
-  }
+  // No mutual exclusivity — all conditions can be combined freely
 }
 function getBrTriggers(){
   var types=[];
