@@ -4788,48 +4788,54 @@ function markAttChanged(el){
 }
 
 async function saveAllAttChanges(username,month){
-  var inputs=document.querySelectorAll('[id^="att-edit-"]');
-  if(!inputs.length){toast('Nothing to save','success');return;}
-  // Group by date
+  // Only collect inputs that have been changed (orange border)
+  var allInputs=document.querySelectorAll('[id^="att-edit-"],[id^="att-status-"]');
+  if(!allInputs.length){toast('Nothing to save','success');return;}
   var byDate={};
-  inputs.forEach(function(el){
-    var parts=el.id.split('-');// att-edit-YYYY-MM-DD-fieldname
-    // id format: att-edit-2025-01-15-check_in
+  // Collect ALL inputs (save full row to avoid partial overwrites)
+  document.querySelectorAll('[id^="att-edit-"]').forEach(function(el){
     var fieldSplit=el.id.replace('att-edit-','');
     var dateMatch=fieldSplit.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
     if(!dateMatch)return;
     var date=dateMatch[1];var field=dateMatch[2];
-    if(!byDate[date])byDate[date]={};
+    if(!byDate[date])byDate[date]={changed:false};
     byDate[date][field]=el.value;
+    if(el.style.borderColor==='rgb(245, 158, 11)'||el.style.borderColor==='#f59e0b')byDate[date].changed=true;
   });
-  // Also collect status selects
   document.querySelectorAll('[id^="att-status-"]').forEach(function(el){
     var date=el.id.replace('att-status-','');
-    if(!byDate[date])byDate[date]={};
+    if(!byDate[date])byDate[date]={changed:false};
     byDate[date]['__status']=el.value;
+    if(el.style.borderColor==='rgb(245, 158, 11)'||el.style.borderColor==='#f59e0b')byDate[date].changed=true;
   });
-  var now=new Date().toISOString();
-  var count=0;
-  for(var date in byDate){
-    var row=byDate[date];
+  // Filter to only changed dates
+  var changedDates=Object.keys(byDate).filter(function(d){return byDate[d].changed;});
+  if(!changedDates.length){toast('No changes to save','success');return;}
+  var errs=0;
+  for(var i=0;i<changedDates.length;i++){
+    var date=changedDates[i];var row=byDate[date];
     var data={username:username,date:date};
     var fields=['check_in','check_out','check_in_2','check_out_2','check_in_3','check_out_3'];
-    fields.forEach(function(f){if(f in row)data[f]=row[f]?date+'T'+row[f]+':00':null;});
+    fields.forEach(function(f){
+      if(f in row)data[f]=row[f]?(date+'T'+row[f]+':00+08:00'):null;
+    });
     if(row['__status'])data.status=row['__status'];
-    // Auto-set present if any time is filled
+    // Auto-present if any time filled
     var hasTime=fields.some(function(f){return data[f];});
     if(hasTime&&!data.status)data.status='present';
-    await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',
+    var r=await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',
       headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates,return=minimal'}),
       body:JSON.stringify(data)
     });
-    count++;
+    if(!r.ok)errs++;
   }
-  await sbPost('change_log',{username:currentUser.username,action:'admin_edit_attendance_bulk',table_name:'attendance',
-    record_id:username+':'+month,after_data:{edited_by:currentUser.username,rows:count,manual:true}});
-  // Reset border colors
-  document.querySelectorAll('[id^="att-edit-"]').forEach(function(el){el.style.borderColor='#1e2d45';});
-  toast('Saved '+count+' day'+(count!==1?'s':''),'success');
+  if(errs)toast('Saved with '+errs+' error(s) — check console','error');
+  else{
+    await sbPost('change_log',{username:currentUser.username,action:'admin_edit_attendance_bulk',table_name:'attendance',
+      record_id:username+':'+month,after_data:{edited_by:currentUser.username,rows:changedDates.length,manual:true}});
+    document.querySelectorAll('[id^="att-edit-"],[id^="att-status-"]').forEach(function(el){el.style.borderColor='';});
+    toast('Saved '+changedDates.length+' day'+(changedDates.length!==1?'s':''),'success');
+  }
 }
 
 async function adminEditAttStatus(username,date,status){
@@ -6636,6 +6642,10 @@ function switchAdminBenefitTab(tab){
 
 async function loadBenefitRules(){
   var rules=await sbGet('benefit_rules','order=created_at.desc');
+  if(rules===null||rules.error){
+    document.getElementById('adminBenefitContent').innerHTML='<div class="card" style="border:1px solid #f59e0b44;padding:1rem"><div style="color:#f59e0b;font-weight:600;margin-bottom:4px">⚠️ Table not ready</div><div style="font-size:12px;color:#4a6fa5">Run the SQL setup in Supabase first:<br><code style="font-size:10px;color:#60a5fa">create table if not exists benefit_rules (...)</code></div></div>';
+    return;
+  }
   if(!rules.length){document.getElementById('adminBenefitContent').innerHTML='<div class="empty-state"><div class="icon">🎁</div><p>No benefit rules yet. Create one with + New Rule.</p></div>';return;}
   var trigLabels={unconditional:'Always',full_attendance:'Full Att.',attendance_rate:'Att. Rate',performance:'Performance',tenure:'Tenure'};
   var html='<div style="display:flex;flex-direction:column;gap:8px">';
@@ -6831,6 +6841,7 @@ async function onBrAppliesToChange(){
 }
 
 async function openBenefitRuleModal(id){
+  try{
   document.getElementById('br_id').value='';
   document.getElementById('br_name').value='';
   document.getElementById('br_desc').value='';
@@ -6873,6 +6884,7 @@ async function openBenefitRuleModal(id){
     }
   }
   openModal('benefitRuleModal');
+  }catch(e){console.error('openBenefitRuleModal error:',e);toast('Error opening modal: '+e.message,'error');}
 }
 async function editBenefitRule(id){openBenefitRuleModal(id);}
 
@@ -6912,8 +6924,12 @@ async function saveBenefitRule(){
 
 async function loadRecurringPage(){
   await loadAllUsersCache();await loadAllDepts();
-  var templates=await sbGet('recurring_tasks','order=created_at.desc');
-  if(!templates.length){document.getElementById('recurringList').innerHTML='<div class="empty-state"><div class="icon">🔁</div><p>No recurring task templates yet.</p></div>';return;}
+  var templates=[];
+  try{templates=await sbGet('recurring_tasks','order=created_at.desc');}catch(e){}
+  if(!templates||!templates.length){
+    document.getElementById('recurringList').innerHTML='<div class="empty-state"><div class="icon">🔁</div><p>No recurring task templates yet. Click + New Template to create one.</p></div>';
+    return;
+  }
   var dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var html='<div style="display:flex;flex-direction:column;gap:8px">';
   templates.forEach(function(t){
@@ -7083,6 +7099,7 @@ function addToRotationPool(){
 }
 
 async function openRecurringModal(id){
+  try{
   await loadAllUsersCache();await loadAllDepts();
   rtRotationPool=[];
   document.getElementById('rt_id').value='';
@@ -7128,6 +7145,7 @@ async function openRecurringModal(id){
   }
   onRtRecurChange();onRtAssignChange();renderRotationPool();
   openModal('recurringModal');
+  }catch(e){console.error('openRecurringModal error:',e);toast('Error opening modal: '+e.message,'error');}
 }
 async function editRecurringTask(id){openRecurringModal(id);}
 
