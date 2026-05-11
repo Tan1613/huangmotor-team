@@ -1817,7 +1817,7 @@ function openPage(name){
   if(name==='announcements')loadAnnouncements();
   else if(name==='tasks')loadMyTasks();
   else if(name==='chat'){loadChatRooms();}
-  else if(name==='mysales')loadMySales();
+  else if(name==='mysales'){salesFilter='all';var sfb=document.getElementById('sf-all');if(sfb){document.querySelectorAll('[id^="sf-"]').forEach(function(b){b.classList.remove('primary')});sfb.classList.add('primary');}loadMySales();}
   else if(name==='mycheckin')loadCheckin();
   else if(name==='calendar')renderCalendar();
   else if(name==='leave')loadMyLeave();
@@ -2395,13 +2395,22 @@ async function submitTaskComplete(id){
 
 async function approveTaskComplete(id){
   var now=new Date().toISOString();
-  var rows=await sbGet('tasks','id=eq.'+id+'&select=progress_notes');
-  var notes=(rows.length&&rows[0].progress_notes)||[];
+  var rows=await sbGet('tasks','id=eq.'+id+'&select=progress_notes,task_type');
+  var t=rows.length?rows[0]:{};
+  var notes=(t.progress_notes)||[];
   notes.push({by:currentUser.username,note:'✅ Completion approved by '+(currentUser.display_name||currentUser.username),ts:now});
   await sbPatch('tasks',{id:id},{status:'completed',completed_at:now,updated_at:now,progress_notes:notes});
+  // Sync linked sale record to 'delivered' if this is a sale task
+  if(t.task_type==='sale'){
+    var saleRows=await sbGet('sales_records','task_id=eq.'+id+'&select=id,status');
+    if(saleRows.length&&saleRows[0].status!=='cancelled'){
+      await sbPatch('sales_records',{id:saleRows[0].id},{status:'delivered',updated_at:now});
+    }
+  }
   toast('Task completion approved ✓','success');
   closeModal('taskDetailModal');
   if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
+  if(currentPage==='mysales')loadMySales();
   loadDashboard();
 }
 
@@ -3236,6 +3245,17 @@ async function loadPerformance(){
     else if(t.assigned_to)credited=[t.assigned_to];
     credited.forEach(function(u){byUser[u]=(byUser[u]||0)+1;});
   });
+  // Filter byUser to only users current user is allowed to see
+  var visibleUsernames=new Set(visible.map(function(u){return u.username;}));
+  // own-only: only show self
+  if(!canAll&&!canDept){
+    Object.keys(byUser).forEach(function(u){if(u!==currentUser.username)delete byUser[u];});
+  } else if(!canAll&&canDept){
+    Object.keys(byUser).forEach(function(u){if(!visibleUsernames.has(u))delete byUser[u];});
+  }
+  // Also hide "All Staff" dropdown option for own-only users
+  var allOpt=sel.querySelector('option[value="all"]');
+  if(allOpt&&!canAll&&!canDept)allOpt.remove();
   var maxVal=Math.max(1,...Object.values(byUser));
   document.getElementById('perfStats').innerHTML=
     '<div class="stat-card green"><div class="label">Tasks Completed</div><div class="value">'+total+'</div></div>'
@@ -4754,6 +4774,7 @@ async function deleteAttRule(id){
   loadAttRules();toast('Rule deleted','success');
 }
 
+var salesFilter='all';
 function filterSales(f){
   salesFilter=f;
   document.querySelectorAll('[id^="sf-"]').forEach(function(b){b.classList.remove('primary');});
