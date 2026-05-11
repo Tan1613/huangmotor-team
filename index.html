@@ -6557,7 +6557,7 @@ async function loadMyBenefits(){
       var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171'}[rec.status]||'#4a6fa5';
       var totalClaimed=claimedCounts[rec.rule_id]||0;
       var limit=rule.claim_limit||0;
-      var quotaStr=limit>0?'<span style="font-size:10px;color:#4a6fa5">'+totalClaimed+' / '+limit+' claimed</span>':'';
+      var quotaStr='<span style="font-size:10px;color:#4a6fa5">已获得: '+totalClaimed+(limit>0?' / '+limit:'')+'</span>';
       html+='<div class="card" style="padding:10px 12px">'
         +'<div style="display:flex;justify-content:space-between;align-items:center">'
         +'<div><div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(rule.name)+'</div>'
@@ -6592,20 +6592,21 @@ async function loadClaimableBenefits(){
     var limit=r.claim_limit||0;
     var isFull=limit>0&&totalClaimed>=limit;
     var eligible=!alreadyClaimed&&!isFull&&checkBenefitEligibility(r);
-    var quotaHtml='';
+    var quotaHtml='<div style="margin-top:6px">'
+      +'<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:2px">'
+      +'<span>已获得 / 奖励上限</span>'
+      +'<span style="color:'+(totalClaimed>0?'#34d399':'#4a6fa5')+'">'+totalClaimed+(limit>0?' / '+limit:' (no limit)')+'</span>'
+      +'</div>';
     if(limit>0){
       var pct=Math.min(100,Math.round(totalClaimed/limit*100));
       var remaining=Math.max(0,limit-totalClaimed);
-      quotaHtml='<div style="margin-top:6px">'
-        +'<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:2px">'
-        +'<span>已获得 / 奖励上限</span><span>'+totalClaimed+' / '+limit+'</span></div>'
-        +'<div style="background:#1e2d45;border-radius:4px;height:6px">'
-        +'<div style="background:'+(isFull?'#ef4444':'#34d399')+';width:'+pct+'%;height:6px;border-radius:4px"></div>'
+      quotaHtml+='<div style="background:#1e2d45;border-radius:4px;height:6px">'
+        +'<div style="background:'+(isFull?'#ef4444':'#34d399')+';width:'+pct+'%;height:6px;border-radius:4px;transition:width .3s"></div>'
         +'</div>'
         +(remaining>0&&!isFull?'<div style="font-size:10px;color:#34d399;margin-top:2px">'+remaining+' spot'+(remaining>1?'s':'')+' remaining</div>':'')
-        +(isFull?'<div style="font-size:10px;color:#f87171;margin-top:2px">Quota full</div>':'')
-        +'</div>';
+        +(isFull?'<div style="font-size:10px;color:#f87171;margin-top:2px">Quota full — no more claims accepted</div>':'');
     }
+    quotaHtml+='</div>';
     html+='<div class="card" style="padding:10px 12px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
       +'<div style="flex:1">'
