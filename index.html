@@ -1476,9 +1476,7 @@ body{position:relative}
         <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
           <button class="btn sm primary" id="sf-all" onclick="filterSales('all')">All</button>
           <button class="btn sm" id="sf-pending" onclick="filterSales('pending')">Pending</button>
-          <button class="btn sm" id="sf-confirmed" onclick="filterSales('confirmed')">Confirmed</button>
           <button class="btn sm" id="sf-delivered" onclick="filterSales('delivered')">Delivered</button>
-          <button class="btn sm" id="sf-completed" onclick="filterSales('completed')">Completed</button>
           <button class="btn sm" id="sf-cancelled" onclick="filterSales('cancelled')">Cancelled</button>
           <button class="btn sm" id="sf-trash" onclick="filterSales('trash')" style="margin-left:auto">🗑️ Trash</button>
         </div>
@@ -2404,8 +2402,8 @@ async function approveTaskComplete(id){
   // Sync linked sale record status forward when task is completed
   if(t.task_type==='sale'){
     var saleRows=await sbGet('sales_records','task_id=eq.'+id+'&select=id,status');
-    if(saleRows.length&&saleRows[0].status!=='cancelled'&&saleRows[0].status!=='completed'){
-      await sbPatch('sales_records',{id:saleRows[0].id},{status:'completed',updated_at:now});
+    if(saleRows.length&&saleRows[0].status!=='cancelled'&&saleRows[0].status!=='delivered'){
+      await sbPatch('sales_records',{id:saleRows[0].id},{status:'delivered',updated_at:now});
     }
   }
   toast('Task completion approved ✓','success');
@@ -5589,10 +5587,8 @@ async function loadMySales(){
   }
   if(!rows.length){document.getElementById('mySalesList').innerHTML='<div class="empty-state"><div class="icon">🏍️</div><p>No sales records yet</p></div>';return;}
   var statusInfo={
-    pending:{color:'#fbbf24',label:'Pending',desc:'Awaiting confirmation'},
-    confirmed:{color:'#60a5fa',label:'Confirmed',desc:'Deal confirmed, processing'},
+    pending:{color:'#fbbf24',label:'Pending',desc:'Awaiting processing'},
     delivered:{color:'#34d399',label:'Delivered',desc:'Vehicle delivered to customer'},
-    completed:{color:'#a78bfa',label:'Completed',desc:'Sale fully completed and verified'},
     cancelled:{color:'#f87171',label:'Cancelled',desc:'Sale cancelled'}
   };
   // Load task participants for each sale's task
