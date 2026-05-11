@@ -1108,14 +1108,25 @@ body{position:relative}
         <div class="page-sub">Review and approve leave requests</div>
         <div class="card" style="margin-bottom:1rem" id="leaveConfigCard">
           <div class="card-title">⚙ Leave Settings</div>
-          <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+          <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:10px">
             <div class="form-field" style="margin:0">
-              <label>Minimum advance notice (days)</label>
+              <label>Minimum advance notice (days) <span style="font-size:10px;color:#4a6fa5">提前申请天数</span></label>
               <input type="number" id="leaveMinDays" min="0" max="30" value="1" style="width:120px">
             </div>
             <div class="form-field" style="margin:0;padding-bottom:.1rem">
               <button class="btn primary" onclick="saveLeaveConfig()">Save</button>
             </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#0a0f1a;border-radius:8px">
+            <div>
+              <div style="font-size:12px;color:#e0e6f0;font-weight:500">Allow backdated leave applications</div>
+              <div style="font-size:11px;color:#4a6fa5">允许申请已过去的日期请假（例如补假）</div>
+            </div>
+            <label style="position:relative;display:inline-block;width:40px;height:22px;cursor:pointer;flex-shrink:0">
+              <input type="checkbox" id="leaveBackdateToggle" onchange="saveLeaveConfig()" style="opacity:0;width:0;height:0">
+              <span id="leaveBackdateTrack" style="position:absolute;inset:0;background:#1e2d45;border-radius:11px;transition:.2s"></span>
+              <span id="leaveBackdateThumb" style="position:absolute;width:16px;height:16px;background:#4a6fa5;border-radius:50%;top:3px;left:3px;transition:.2s"></span>
+            </label>
           </div>
         </div>
         <div id="adminLeaveList"></div>
@@ -2689,10 +2700,21 @@ async function submitLeave(){
   // Emergency and medical are exempt from advance notice
   var exemptTypes=['emergency','medical'];
   if(currentUser.role!=='admin'&&exemptTypes.indexOf(leaveType)<0){
-    var cfg=await sbGet('leave_config','key=eq.min_advance_days&select=value');
-    var minAdv=cfg.length?parseInt(cfg[0].value):1;
+    var cfg=await sbGet('leave_config','key=in.(min_advance_days,allow_backdated_leave)&select=key,value');
+    var cfgMap2={};cfg.forEach(function(r){cfgMap2[r.key]=r.value;});
+    var minAdv=parseInt(cfgMap2.min_advance_days)||1;
+    var allowBackdate=cfgMap2.allow_backdated_leave===true||cfgMap2.allow_backdated_leave==='true';
     var daysAhead=Math.round((new Date(s)-new Date())/86400000);
-    if(daysAhead<minAdv){toast('Must apply at least '+minAdv+' day'+(minAdv>1?'s':'')+' in advance\n(Emergency & Medical are exempt)','error');return;}
+    if(daysAhead<0){
+      // Past date
+      if(!allowBackdate){
+        toast('Backdated leave applications are currently not allowed.\n(Contact admin to enable)','error');return;
+      }
+      // Backdating allowed — no advance check needed
+    } else if(daysAhead<minAdv){
+      // Future but not enough advance notice
+      toast('Must apply at least '+minAdv+' day'+(minAdv>1?'s':'')+' in advance\n(Emergency & Medical are exempt)','error');return;
+    }
   }
   await sbPost('leave_requests',{
     username:currentUser.username,
@@ -2816,18 +2838,38 @@ async function renderCalendar(){
 }
 
 /* ══ ATTENDANCE ══ */
-var leaveConfigCache={min_advance_days:1,annual_leave_days:14};
+var leaveConfigCache={min_advance_days:1,annual_leave_days:14,allow_backdated_leave:false};
+
 async function loadLeaveConfig(){
   var rows=await sbGet('leave_config','');
-  rows.forEach(function(r){leaveConfigCache[r.key]=parseInt(r.value)||r.value;});
+  rows.forEach(function(r){leaveConfigCache[r.key]=r.value;});
   var el1=document.getElementById('leaveMinDays');var el2=document.getElementById('leaveAnnualDays');
-  if(el1)el1.value=leaveConfigCache.min_advance_days||1;
-  if(el2)el2.value=leaveConfigCache.annual_leave_days||14;
+  if(el1)el1.value=parseInt(leaveConfigCache.min_advance_days)||1;
+  if(el2)el2.value=parseInt(leaveConfigCache.annual_leave_days)||14;
+  updateLeaveBackdateToggleUI();
 }
+
+function updateLeaveBackdateToggleUI(){
+  var enabled=leaveConfigCache.allow_backdated_leave===true||leaveConfigCache.allow_backdated_leave==='true';
+  var cb=document.getElementById('leaveBackdateToggle');
+  var track=document.getElementById('leaveBackdateTrack');
+  var thumb=document.getElementById('leaveBackdateThumb');
+  if(cb)cb.checked=enabled;
+  if(track)track.style.background=enabled?'#1d4ed8':'#1e2d45';
+  if(thumb){thumb.style.left=enabled?'21px':'3px';thumb.style.background=enabled?'#fff':'#4a6fa5';}
+}
+
 async function saveLeaveConfig(){
   var min=parseInt(document.getElementById('leaveMinDays').value)||1;
-  await fetch(SB_URL+'/rest/v1/leave_config',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),body:JSON.stringify([{key:'min_advance_days',value:min}])});
+  var backdateEl=document.getElementById('leaveBackdateToggle');
+  var allowBackdate=backdateEl?backdateEl.checked:false;
+  await fetch(SB_URL+'/rest/v1/leave_config',{method:'POST',
+    headers:Object.assign({},sbH(),{'Prefer':'resolution=merge-duplicates'}),
+    body:JSON.stringify([{key:'min_advance_days',value:min},{key:'allow_backdated_leave',value:allowBackdate}])
+  });
   leaveConfigCache.min_advance_days=min;
+  leaveConfigCache.allow_backdated_leave=allowBackdate;
+  updateLeaveBackdateToggleUI();
   toast('Leave settings saved','success');
 }
 function setAttToday(){
