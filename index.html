@@ -983,6 +983,41 @@ body{position:relative}
 </div>
 
 <!-- Task Detail / Progress -->
+<!-- Deduction Rule Modal -->
+<div class="modal-overlay" id="deductRuleModal" style="display:none">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-hdr"><h3 id="deductRuleTitle">➕ Deduction Rule</h3><button class="btn sm" onclick="closeModal('deductRuleModal')">✕</button></div>
+    <input type="hidden" id="dr_id" value="">
+    <div class="form-field"><label>Type</label>
+      <select id="dr_type">
+        <option value="late">Late arrival</option>
+        <option value="early_leave">Early leave</option>
+        <option value="absent">Absent (true absent only)</option>
+      </select>
+    </div>
+    <div class="form-field"><label>From occurrence <span style="font-size:10px;color:#4a6fa5">— applies from the Nth time onwards</span></label>
+      <input type="number" id="dr_occurrence" min="1" value="1" style="width:80px">
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Deduct type</label>
+        <select id="dr_deduct_type" onchange="document.getElementById('dr_unit').textContent=this.value==='percentage'?'%':'RM'">
+          <option value="percentage">Percentage (%)</option>
+          <option value="fixed">Fixed (RM)</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Amount <span id="dr_unit" style="color:#4a6fa5">%</span></label>
+        <input type="number" id="dr_value" min="0" step="0.1" value="5" style="width:80px">
+      </div>
+    </div>
+    <div style="font-size:10px;color:#4a6fa5;margin-bottom:10px;padding:6px 8px;background:#0a0f1a;border-radius:6px">
+      Example: "Late, from 2nd time, 10%" means 1st late = no deduction, 2nd late onwards = 10% off benefit amount
+    </div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeModal('deductRuleModal')">Cancel</button>
+      <button class="btn primary" onclick="saveDeductRule()">Save</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="taskDetailModal">
   <div class="modal">
     <div class="modal-hdr">
@@ -1465,6 +1500,17 @@ body{position:relative}
           <button class="btn primary" onclick="openNewRuleModal()">+ Add Rule</button>
         </div>
         <div id="attRulesContent"></div>
+        <!-- Benefit Deduction Rules -->
+        <div class="card" style="margin-top:1.2rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#f0f6fc">Benefit Deduction Rules</div>
+              <div style="font-size:11px;color:#4a6fa5">Late / early leave / absent deductions from benefit payout</div>
+            </div>
+            <button class="btn sm primary" onclick="openDeductRuleModal()">+ Add</button>
+          </div>
+          <div id="deductRulesContent"><div style="font-size:11px;color:#4a6fa5">Loading...</div></div>
+        </div>
       </div>
 
       <!-- PERFORMANCE -->
@@ -1898,7 +1944,7 @@ body{position:relative}
   <div class="more-section" id="mnAdminSection" style="display:none">Admin</div>
   <div class="more-item" id="mn-admin-tasks" onclick="openPage('admin-tasks');closeMobileMore()" style="display:none"><span class="mi-icon">📊</span>All Tasks</div>
   <div class="more-item" id="mn-admin-attendance" onclick="openPage('admin-attendance');closeMobileMore()" style="display:none"><span class="mi-icon">🕐</span>Attendance</div>
-  <div class="more-item" id="mn-admin-leave" onclick="openPage('admin-leave');closeMobileMore()" style="display:none"><span class="mi-icon">📋</span>Leave Approvals</div>
+  <div class="more-item" id="mn-admin-leave" onclick="openPage('admin-leave');closeMobileMore()" style="display:none"><span class="mi-icon">📋</span>Leave Approvals<span id="mnLeaveBadge" style="display:none;margin-left:auto;background:#ef4444;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px">0</span></div>
   <div class="more-item" id="mn-performance" onclick="openPage('performance');closeMobileMore()" style="display:none"><span class="mi-icon">📈</span>Performance</div>
   <div class="more-item" id="mn-admin-dept" onclick="openPage('admin-dept');closeMobileMore()" style="display:none"><span class="mi-icon">🏬</span>Departments</div>
   <div class="more-item" id="mn-admin-users" onclick="openPage('admin-users');closeMobileMore()" style="display:none"><span class="mi-icon">👥</span>Users</div>
@@ -4930,6 +4976,7 @@ async function refreshBadges(){
     try{
       var pendingLeave=await sbGet('leave_requests','status=eq.pending&select=id');
       setBadge('leaveBadge',pendingLeave.length);
+      setBadge('mnLeaveBadge',pendingLeave.length);
       // Also update more drawer
       var mnLeave=document.getElementById('mn-admin-leave');
       if(mnLeave){var existing=mnLeave.querySelector('.mi-badge');if(existing)existing.remove();if(pendingLeave.length>0){var b=document.createElement('span');b.className='mi-badge';b.style.cssText='margin-left:auto;background:#ef4444;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px';b.textContent=pendingLeave.length;mnLeave.appendChild(b);}}
@@ -5204,7 +5251,7 @@ async function approveCheckinItem(id){
   var existing=await sbGet('attendance','username=eq.'+encodeURIComponent(r.username)+'&date=eq.'+r.date+'&select=id');
   if(existing.length){await sbPatch('attendance',{username:r.username,date:r.date},data);}
   else{data.username=r.username;data.date=r.date;await fetch(SB_URL+'/rest/v1/attendance',{method:'POST',headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),body:JSON.stringify(data)});}
-  toast('Approved ✓','success');loadPendingCheckins();
+  toast('Approved ✓','success');loadPendingCheckins();updateAttPendingBadge();
 }
 function showForceChangePassword(){
   document.getElementById('loginScreen').innerHTML=
@@ -5250,19 +5297,29 @@ async function rejectCheckinItem(id){
   if(reason===null)return;
   var rows=await sbGet('checkin_approvals','id=eq.'+id+'&select=username,session_field,date');
   await sbPatch('checkin_approvals',{id:id},{status:'rejected',reviewed_by:currentUser.username,reviewed_at:new Date().toISOString(),notes:reason||'Rejected'});
-  // Create announcement targeted at the specific user as notification
+  // Remove the rejected session field from attendance record
   if(rows.length){
     var r=rows[0];
+    var existing=await sbGet('attendance','username=eq.'+encodeURIComponent(r.username)+'&date=eq.'+r.date+'&select=id');
+    if(existing.length){
+      var nullPatch={};nullPatch[r.session_field]=null;
+      // Also clear photo if was set
+      var photoFieldMap={check_in:'checkin_photo',check_in_2:'checkin_photo_2',check_in_3:'checkin_photo_3',check_out:'checkin_photo',check_out_2:'checkin_photo_2',check_out_3:'checkin_photo_3'};
+      var pf=photoFieldMap[r.session_field];if(pf)nullPatch[pf]=null;
+      await sbPatch('attendance',{username:r.username,date:r.date},nullPatch);
+    }
     var fieldLabel={check_in:'S1 Check-In',check_out:'S1 Check-Out',check_in_2:'S2 Check-In',check_out_2:'S2 Check-Out',check_in_3:'S3 Check-In',check_out_3:'S3 Check-Out'}[r.session_field]||r.session_field;
     await sbPost('announcements',{
-      title:'⚠️ Your check-in was rejected — '+fmtDate(r.date),
+      title:'\u26a0\ufe0f Your check-in was rejected \u2014 '+fmtDate(r.date),
       content:'Your '+fieldLabel+' on '+fmtDate(r.date)+' was rejected.\nReason: '+(reason||'No reason given')+'\n\nPlease contact your manager if you have questions.',
-      target_role:r.username,// use username as target so only they see it
+      target_role:r.username,
       is_pinned:false,
       created_by:'system'
     });
   }
-  toast('Rejected — staff notified','success');loadPendingCheckins();
+  toast('Rejected — attendance updated, staff notified','success');
+  loadPendingCheckins();
+  updateAttPendingBadge();
 }
 
 function populateReportUserList(){
@@ -5412,7 +5469,8 @@ async function getEffectiveRule(username,dept){
 /* ══ ATTENDANCE RULES ══ */
 async function loadAttRules(){
   var rules=await sbGet('attendance_rules','order=scope.asc,created_at.asc');
-  if(!rules.length){document.getElementById('attRulesContent').innerHTML='<div class="empty-state"><p>No rules yet. Add a global rule to get started.</p></div>';return;}
+  if(!rules.length){document.getElementById('attRulesContent').innerHTML='<div class="empty-state"><p>No rules yet. Add a global rule to get started.</p></div>';}
+  else{
   document.getElementById('attRulesContent').innerHTML=rules.map(function(r){
     return '<div class="card" style="margin-bottom:.6rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:0">'
@@ -5428,6 +5486,67 @@ async function loadAttRules(){
       +'</div>'
       +'</div>';
   }).join('');
+  }// end else
+  loadDeductRules();
+}
+
+async function loadDeductRules(){
+  var el=document.getElementById('deductRulesContent');if(!el)return;
+  var rules=await sbGet('benefit_deduction_rules','order=type.asc,occurrence.asc').catch(function(){return[];});
+  if(!rules.length){el.innerHTML='<div style="font-size:11px;color:#4a6fa5">No deduction rules set. Staff get full benefit amount regardless of late/absent.</div>';return;}
+  var typeLabel={late:'Late',early_leave:'Early leave',absent:'Absent'};
+  el.innerHTML=rules.map(function(r){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #0d1626">'
+      +'<span style="font-size:11px;color:#f0f6fc;min-width:80px">'+esc(typeLabel[r.type]||r.type)+'</span>'
+      +'<span style="font-size:11px;color:#4a6fa5">From '+r.occurrence+'× onwards</span>'
+      +'<span style="font-size:11px;color:#f87171;font-weight:600;margin-left:auto">-'+(r.deduct_value)+(r.deduct_type==='percentage'?'%':' RM')+'</span>'
+      +'<button class="btn sm" onclick="openDeductRuleModal('+r.id+')">Edit</button>'
+      +'<button class="btn sm danger" onclick="deleteDeductRule('+r.id+')">Del</button>'
+      +'</div>';
+  }).join('');
+}
+async function openDeductRuleModal(id){
+  document.getElementById('dr_id').value=id||'';
+  document.getElementById('deductRuleTitle').textContent=id?'✏️ Edit Deduction Rule':'➕ Deduction Rule';
+  if(id){
+    var rows=await sbGet('benefit_deduction_rules','id=eq.'+id+'&select=*');
+    if(rows.length){
+      var r=rows[0];
+      document.getElementById('dr_type').value=r.type||'late';
+      document.getElementById('dr_occurrence').value=r.occurrence||1;
+      document.getElementById('dr_deduct_type').value=r.deduct_type||'percentage';
+      document.getElementById('dr_value').value=r.deduct_value||5;
+      document.getElementById('dr_unit').textContent=r.deduct_type==='fixed'?'RM':'%';
+    }
+  } else {
+    document.getElementById('dr_type').value='late';
+    document.getElementById('dr_occurrence').value='1';
+    document.getElementById('dr_deduct_type').value='percentage';
+    document.getElementById('dr_value').value='5';
+    document.getElementById('dr_unit').textContent='%';
+  }
+  openModal('deductRuleModal');
+}
+async function saveDeductRule(){
+  var id=document.getElementById('dr_id').value;
+  var data={
+    type:document.getElementById('dr_type').value,
+    occurrence:parseInt(document.getElementById('dr_occurrence').value)||1,
+    deduct_type:document.getElementById('dr_deduct_type').value,
+    deduct_value:parseFloat(document.getElementById('dr_value').value)||0,
+    created_by:currentUser.username
+  };
+  if(id){await sbPatch('benefit_deduction_rules',{id:parseInt(id)},data);}
+  else{await sbPost('benefit_deduction_rules',data);}
+  toast('Saved ✓','success');
+  closeModal('deductRuleModal');
+  loadDeductRules();
+}
+async function deleteDeductRule(id){
+  if(!confirm('Delete this deduction rule?'))return;
+  await fetch(SB_URL+'/rest/v1/benefit_deduction_rules?id=eq.'+id,{method:'DELETE',headers:sbH()});
+  toast('Deleted','success');
+  loadDeductRules();
 }
 async function openNewRuleModal(){
   await loadAllDepts();await loadAllUsersCache();
@@ -5734,7 +5853,8 @@ async function openChatRoom(roomId,roomName){
   document.getElementById('chatRoomMembers').textContent=(room.is_closed?'🔒 Closed · ':'')+memberNames;
   var manBtn=document.getElementById('chatManageBtn');
   var isFeedbackDM=room.description==='_feedback_dm_';
-  if(manBtn)manBtn.style.display=(currentUser.role==='admin'||room.created_by===currentUser.username)&&!isFeedbackDM?'':'none';
+  // Admin can manage ALL rooms including feedback DMs (to delete them)
+  if(manBtn)manBtn.style.display=(currentUser.role==='admin'||room.created_by===currentUser.username)?'':'none';
   // Update pin button
   var pinBtn=document.getElementById('chatPinBtn');
   if(pinBtn)pinBtn.style.opacity=pinnedRooms.has(roomId)?'1':'0.5';
@@ -5814,9 +5934,19 @@ async function toggleRoomClosed(closed){
   await openChatRoom(currentRoomId,document.getElementById('chatRoomName').textContent);
 }
 async function deleteRoom(){
-  if(!confirm('Delete this room and all messages? This cannot be undone.'))return;
+  var rooms=await sbGet('chat_rooms','id=eq.'+currentRoomId+'&select=description,name');
+  var room=rooms.length?rooms[0]:{};
+  var isFeedback=room.description==='_feedback_dm_';
+  var confirmMsg=isFeedback
+    ?'Delete this feedback channel and all messages?\nThis removes the staff feedback history.'
+    :'Delete this room and all messages? This cannot be undone.';
+  if(!confirm(confirmMsg))return;
+  // Delete messages first, then room
+  await fetch(SB_URL+'/rest/v1/chat_messages?room_id=eq.'+currentRoomId,{method:'DELETE',headers:sbH()});
+  await fetch(SB_URL+'/rest/v1/chat_pins?room_id=eq.'+currentRoomId,{method:'DELETE',headers:sbH()});
   await fetch(SB_URL+'/rest/v1/chat_rooms?id=eq.'+currentRoomId,{method:'DELETE',headers:sbH()});
   closeModal('roomManageModal');backToRooms();toast('Room deleted','success');
+  loadChatRooms();
 }
 
 function backToRooms(){
@@ -6833,6 +6963,7 @@ function switchBenefitTab(tab){
 
 async function loadMyBenefits(){
   var now=new Date();var yr=now.getFullYear();var mo=now.getMonth()+1;
+  var todayStr=now.toISOString().slice(0,10);
   var isAdmin=currentUser.role==='admin';
   var rules=await sbGet('benefit_rules','is_active=eq.true&order=name.asc&select=*');
   var myRecords=await sbGet('benefit_records','username=eq.'+encodeURIComponent(currentUser.username)+'&period_year=eq.'+yr+'&select=*');
@@ -6843,10 +6974,54 @@ async function loadMyBenefits(){
   var lastDay=new Date(yr,mo,0).getDate();
   var to=yr+'-'+String(mo).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
   var myAtt=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=gte.'+from+'&date=lte.'+to+'&select=date,status,check_in,check_out,check_in_2,check_out_2');
-  var s1Days=myAtt.filter(function(a){return a.check_in&&a.check_out;}).length;
-  var absentDays=myAtt.filter(function(a){return a.status==='absent';}).length;
-  var workDays=Math.max(s1Days+absentDays,lastDay-Math.ceil(lastDay/7)*2,1);
-  var attRate=s1Days/workDays;
+  // Attendance rules for late/early detection
+  var attRules=await sbGet('attendance_rules','is_active=eq.true&order=scope.asc');
+  var globalRule=attRules.find(function(r){return r.scope==='global';})||attRules[0]||{};
+  var lateAfterMin=timeStrToMin((globalRule.check_in_1_late_after)||'09:00');
+  var earlyBeforeMin=timeStrToMin((globalRule.check_out_1_early_before)||'18:00');
+  // Deduction rules
+  var deductRules=await sbGet('benefit_deduction_rules','order=type.asc,occurrence.asc').catch(function(){return[];});
+  // Count business days in full month
+  var totalBizDays=0;
+  for(var d=1;d<=lastDay;d++){
+    var dow=new Date(yr,mo-1,d).getDay();
+    if(dow!==0&&dow!==6)totalBizDays++;
+  }
+  // Count business days so far (up to today)
+  var todayDate=new Date(todayStr);
+  var bizDaysSoFar=0;
+  for(var d=1;d<=Math.min(lastDay,now.getDate()+(now.getMonth()+1===mo&&now.getFullYear()===yr?0:lastDay));d++){
+    var dow=new Date(yr,mo-1,d).getDay();
+    if(dow!==0&&dow!==6)bizDaysSoFar++;
+  }
+  var remainingBizDays=totalBizDays-bizDaysSoFar;
+  // Classify past attendance days
+  var presentDays=0,absentDays=0,lateTimes=0,earlyTimes=0,leaveDays=0;
+  myAtt.forEach(function(a){
+    if(a.date>todayStr)return;// skip future
+    var dow=new Date(a.date).getDay();
+    if(dow===0||dow===6)return;// skip weekends
+    var s=a.status||'';
+    if(['annual','medical','emergency','unpaid'].indexOf(s)>=0){leaveDays++;return;}
+    if(s==='absent'){absentDays++;return;}
+    if(a.check_in&&a.check_out){
+      presentDays++;
+      var ciMin=new Date(a.check_in).getHours()*60+new Date(a.check_in).getMinutes();
+      var coMin=new Date(a.check_out).getHours()*60+new Date(a.check_out).getMinutes();
+      if(ciMin>lateAfterMin)lateTimes++;
+      if(coMin<earlyBeforeMin)earlyTimes++;
+    }
+  });
+  var attRate=bizDaysSoFar>0?presentDays/bizDaysSoFar:1;
+  // Deduction calculator
+  function calcDeduction(baseAmt,type,count){
+    var rules=deductRules.filter(function(r){return r.type===type;}).sort(function(a,b){return b.occurrence-a.occurrence;});
+    if(!rules.length||count<=0)return 0;
+    var applicable=rules.find(function(r){return count>=r.occurrence;});
+    if(!applicable)return 0;
+    if(applicable.deduct_type==='fixed')return Math.min(baseAmt,applicable.deduct_value);
+    return Math.min(baseAmt,baseAmt*applicable.deduct_value/100);
+  }
   var myTasks=await sbGet('tasks','status=eq.completed&deleted_at=is.null&or=(workers.cs.["'+currentUser.username+'"],assigned_to.eq.'+encodeURIComponent(currentUser.username)+')&completed_at=gte.'+from+'T00:00:00Z&select=id');
   var taskCount=myTasks.length;
   var tenureMonths=currentUser.joined_date?(Date.now()-new Date(currentUser.joined_date).getTime())/(1000*60*60*24*30.44):0;
@@ -6862,22 +7037,31 @@ async function loadMyBenefits(){
     if(!isUnconditional){
       if(triggers.indexOf('full_attendance')>=0){
         var fa=absentDays===0;if(!fa)allMet=false;
-        condResults.push({label:'Full Attendance',met:fa,progress:Math.round((1-absentDays/Math.max(1,workDays))*100),detail:(fa?'No absences':'Absent '+absentDays+' day'+(absentDays>1?'s':'')+' this month')});
+        condResults.push({label:'Full Attendance',met:fa,
+          progress:Math.round((1-absentDays/Math.max(1,bizDaysSoFar))*100),
+          detail:(fa?'No absences this month':'Absent '+absentDays+' day'+(absentDays>1?'s':'')+' · '+remainingBizDays+' working days left')});
       }
       if(triggers.indexOf('attendance_rate')>=0){
         var minRate=parseFloat(r.min_attendance_rate)||0.9;
         var ar=attRate>=minRate;if(!ar)allMet=false;
-        condResults.push({label:'Attendance Rate',met:ar,progress:Math.round(attRate/minRate*100),detail:Math.round(attRate*100)+'% / '+Math.round(minRate*100)+'% required'});
+        condResults.push({label:'Attendance Rate',met:ar,
+          progress:Math.min(100,Math.round(attRate/minRate*100)),
+          detail:Math.round(attRate*100)+'% / '+Math.round(minRate*100)+'% required'
+            +(remainingBizDays>0?' · '+remainingBizDays+' days remaining':'')});
       }
       if(triggers.indexOf('performance')>=0){
         var minT=r.min_performance_tasks||1;
         var pt=taskCount>=minT;if(!pt)allMet=false;
-        condResults.push({label:'Tasks Completed',met:pt,progress:Math.round(taskCount/minT*100),detail:taskCount+' / '+minT+' tasks this month'});
+        condResults.push({label:'Tasks Completed',met:pt,
+          progress:Math.min(100,Math.round(taskCount/minT*100)),
+          detail:taskCount+' / '+minT+' tasks this month'});
       }
       if(triggers.indexOf('tenure')>=0){
         var minM=r.min_tenure_months||1;
         var te=tenureMonths>=minM;if(!te)allMet=false;
-        condResults.push({label:'Tenure',met:te,progress:Math.round(tenureMonths/minM*100),detail:Math.floor(tenureMonths)+' / '+minM+' months'+(r.tenure_effective_next_month?' (effective next month)':'')});
+        condResults.push({label:'Tenure',met:te,
+          progress:Math.min(100,Math.round(tenureMonths/minM*100)),
+          detail:Math.floor(tenureMonths)+' / '+minM+' months'+(r.tenure_effective_next_month?' (effective next month)':'')});
       }
     }
     if(vis==='eligible_only'&&!allMet&&!isAdmin)return;
@@ -6886,18 +7070,53 @@ async function loadMyBenefits(){
     var limit=r.claim_limit||0;
     var isFull=limit>0&&totalClaimed>=limit;
     var canClaim=!isAdmin&&allMet&&!rec&&!isFull&&r.claim_type==='manual';
+    // Deduction calculation
+    var baseAmt=parseFloat(r.payout_amount||0);
+    var deductLate=calcDeduction(baseAmt,'late',lateTimes);
+    var deductEarly=calcDeduction(baseAmt,'early_leave',earlyTimes);
+    var deductAbsent=calcDeduction(baseAmt,'absent',absentDays);
+    var totalDeduct=Math.min(baseAmt,deductLate+deductEarly+deductAbsent);
+    var netAmt=Math.max(0,baseAmt-totalDeduct);
+    // Deduction breakdown HTML
+    var deductHtml='';
+    if(allMet&&baseAmt>0&&(deductLate||deductEarly||deductAbsent)){
+      deductHtml='<div style="margin-top:6px;padding:6px 8px;background:#1a0f0d;border:1px solid #7c2d1244;border-radius:6px">';
+      deductHtml+='<div style="font-size:10px;color:#f87171;font-weight:600;margin-bottom:4px">Deductions this month</div>';
+      if(deductLate)deductHtml+='<div style="font-size:10px;color:#fca5a5;display:flex;justify-content:space-between"><span>Late ×'+lateTimes+'</span><span>-RM '+deductLate.toFixed(2)+'</span></div>';
+      if(deductEarly)deductHtml+='<div style="font-size:10px;color:#fca5a5;display:flex;justify-content:space-between"><span>Early leave ×'+earlyTimes+'</span><span>-RM '+deductEarly.toFixed(2)+'</span></div>';
+      if(deductAbsent)deductHtml+='<div style="font-size:10px;color:#fca5a5;display:flex;justify-content:space-between"><span>Absent ×'+absentDays+'</span><span>-RM '+deductAbsent.toFixed(2)+'</span></div>';
+      deductHtml+='</div>';
+    }
+    // Summary amount bar
+    var amtHtml='';
+    if(allMet&&baseAmt>0){
+      var netPct=Math.round(netAmt/baseAmt*100);
+      amtHtml='<div style="margin-top:8px;padding:8px;background:#0a0f1a;border-radius:6px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px">'
+        +'<span style="color:#4a6fa5">Theoretical: <span style="color:#c9d1d9">RM '+baseAmt.toFixed(2)+'</span></span>'
+        +(totalDeduct?'<span style="color:#f87171">-RM '+totalDeduct.toFixed(2)+'</span>':'')
+        +'<span style="color:#34d399;font-weight:600">Est. net: RM '+netAmt.toFixed(2)+'</span>'
+        +'</div>'
+        +'<div style="background:#1e2d45;border-radius:99px;height:6px">'
+        +'<div style="background:'+(netPct>=90?'#34d399':netPct>=70?'#f59e0b':'#f87171')+';width:'+netPct+'%;height:6px;border-radius:99px"></div>'
+        +'</div></div>';
+    }
     // Condition progress
     var condHtml='';
-    condResults.forEach(function(c){
-      var pct=Math.min(100,c.progress||0);
-      var col=c.met?'#34d399':'#f59e0b';
-      condHtml+='<div style="margin-bottom:5px">'
-        +'<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">'
-        +'<span style="color:'+col+'">'+(c.met?'\u2713 ':'\u26a0 ')+c.label+'</span>'
-        +'<span style="color:#4a6fa5">'+c.detail+'</span></div>'
-        +'<div style="background:#1e2d45;border-radius:99px;height:4px">'
-        +'<div style="background:'+col+';width:'+pct+'%;height:4px;border-radius:99px"></div></div></div>';
-    });
+    if(isUnconditional){
+      condHtml='<div style="font-size:11px;color:#34d399;margin-top:6px">✓ Always pay — no conditions required</div>';
+    } else {
+      condResults.forEach(function(c){
+        var pct=Math.min(100,c.progress||0);
+        var col=c.met?'#34d399':'#f59e0b';
+        condHtml+='<div style="margin-bottom:5px">'
+          +'<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">'
+          +'<span style="color:'+col+'">'+(c.met?'\u2713 ':'\u26a0 ')+c.label+'</span>'
+          +'<span style="color:#4a6fa5">'+c.detail+'</span></div>'
+          +'<div style="background:#1e2d45;border-radius:99px;height:4px">'
+          +'<div style="background:'+col+';width:'+pct+'%;height:4px;border-radius:99px"></div></div></div>';
+      });
+    }
     // Status if already claimed
     var statusHtml='';
     if(rec){
@@ -6939,7 +7158,7 @@ async function loadMyBenefits(){
         :(!rec&&r.claim_type==='manual'?'<button class="btn sm" disabled style="flex-shrink:0;opacity:.5">Not eligible</button>':''))
       +'</div>'
       +(condHtml?'<div style="margin-top:8px;padding:8px;background:#0a0f1a;border-radius:6px">'+condHtml+'</div>':'')
-      +quotaHtml+statusHtml+ineligNote
+      +amtHtml+deductHtml+quotaHtml+statusHtml+ineligNote
       +'</div>';
   });
   html+='</div>';
