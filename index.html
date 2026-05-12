@@ -1549,8 +1549,20 @@ body{position:relative}
             </div>
           </div>
           <div class="card">
-            <div class="card-title" style="margin-bottom:8px">Attendance</div>
-            <div id="prAttDisplay" style="font-size:12px;color:#4a6fa5">Loading...</div>
+            <div class="card-title" style="margin-bottom:8px">Attendance / Work Days</div>
+            <div id="prAttDisplay" style="font-size:12px;color:#4a6fa5;margin-bottom:8px">Loading...</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <label style="font-size:11px;color:#4a6fa5">Days worked:</label>
+              <input type="number" id="prDaysWorked" min="0" step="1" placeholder="auto"
+                style="width:60px;padding:4px 6px;background:#0d1626;border:1px solid #1e2d45;border-radius:6px;color:#f0f6fc;font-size:12px"
+                oninput="calcPayroll()" title="Override auto-detected days">
+              <span style="font-size:10px;color:#2a3d55">/ </span>
+              <input type="number" id="prDaysTotal" min="1" step="1" placeholder="auto"
+                style="width:60px;padding:4px 6px;background:#0d1626;border:1px solid #1e2d45;border-radius:6px;color:#f0f6fc;font-size:12px"
+                oninput="calcPayroll()" title="Override total work days">
+              <span style="font-size:10px;color:#2a3d55">total days</span>
+              <button class="btn sm" onclick="clearPrDaysOverride()" style="font-size:10px">Auto</button>
+            </div>
           </div>
         </div>
         <!-- Allowances -->
@@ -1584,11 +1596,7 @@ body{position:relative}
           </div>
           <div id="prStatutoryBreakdown" style="font-size:11px;color:#4a6fa5"></div>
         </div>
-        <!-- Benefits this month -->
-        <div class="card" style="margin-bottom:1rem">
-          <div class="card-title" style="margin-bottom:8px">Benefits (this month)</div>
-          <div id="prBenefits" style="font-size:12px;color:#4a6fa5">Loading...</div>
-        </div>
+
         <!-- Result -->
         <div class="card" id="prResult" style="border:1px solid #1d4ed844;background:#0a0f1a">
           <div style="font-size:12px;color:#4a6fa5;margin-bottom:10px">Estimated breakdown</div>
@@ -7820,19 +7828,44 @@ async function deleteAllBenefitRecords(){
 }
 
 async function approveAllPendingBenefits(){
-  var pending=await sbGet('benefit_records','status=eq.pending&select=id');
+  // Fetch all pending records with rule info
+  var pending=await sbGet('benefit_records','status=eq.pending&select=id,rule_id,username,period_year,period_month,amount');
   if(!pending.length){toast('No pending records','success');return;}
-  if(!confirm('Approve all '+pending.length+' pending benefit records?'))return;
+  // Fetch all active rules to check conditions
+  var rules=await sbGet('benefit_rules','is_active=eq.true&select=*');
+  var ruleMap={};rules.forEach(function(r){ruleMap[r.id]=r;});
+  var toApprove=[];var skipped=[];
   var now=new Date().toISOString();
-  for(var i=0;i<pending.length;i+=50){
-    var ids=pending.slice(i,i+50).map(function(r){return r.id;});
+  for(var i=0;i<pending.length;i++){
+    var rec=pending[i];
+    var rule=ruleMap[rec.rule_id];
+    if(!rule){skipped.push(rec.id+' (rule not found)');continue;}
+    // Always-pay rules can be approved directly
+    var triggers=rule.trigger_type||'unconditional';
+    try{triggers=JSON.parse(triggers);}catch(e){triggers=[triggers];}
+    if(!Array.isArray(triggers))triggers=[triggers];
+    var isUnconditional=triggers.indexOf('unconditional')>=0;
+    if(isUnconditional){toApprove.push(rec.id);continue;}
+    // Conditions exist — check if eligible via previewBenefitPublish data
+    // For batch approve, we skip conditional records (admin should use Publish tab to approve those)
+    skipped.push(rec.username+' (conditions required — use Publish tab)');
+  }
+  if(!toApprove.length){
+    toast('No records eligible for batch approval.\n\nConditional benefits must be approved via the Publish tab after verifying attendance/performance.','error');
+    return;
+  }
+  var msg='Approve '+toApprove.length+' Always-pay records?';
+  if(skipped.length)msg+='\n\n⚠ '+skipped.length+' conditional record(s) will be SKIPPED (use Publish tab).';
+  if(!confirm(msg))return;
+  for(var i=0;i<toApprove.length;i+=50){
+    var ids=toApprove.slice(i,i+50);
     await fetch(SB_URL+'/rest/v1/benefit_records?id=in.('+ids.join(',')+')',{
       method:'PATCH',
       headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
       body:JSON.stringify({status:'approved',approved_by:currentUser.username,approved_at:now})
     });
   }
-  toast('Approved '+pending.length+' records','success');
+  toast('Approved '+toApprove.length+' records'+(skipped.length?' · '+skipped.length+' skipped (conditional)':''),'success');
   loadBenefitRecords();
 }
 
@@ -7963,11 +7996,13 @@ async function previewBenefitPublish(){
     else ineligible.push({u:u,reasons:reasons});
   }
   var newEligible=eligible.filter(function(e){return !alreadySet.has(e.u.username);});
+  var pt=rule.payout_type||'cash';
+  var payoutLabel=pt==='leave'?(rule.payout_days||1)+' day(s) leave':pt==='cash'||pt==='voucher'?'RM '+parseFloat(rule.payout_amount||0).toFixed(2):(rule.payout_description||pt);
   var totalAmt=newEligible.length*parseFloat(rule.payout_amount||0);
   var html='<div style="background:#0a1a0a;border:1px solid #34d39944;border-radius:8px;padding:10px 12px;margin-top:8px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-    +'<div><div style="font-size:13px;font-weight:600;color:#34d399">'+newEligible.length+' eligible</div>'
-    +'<div style="font-size:11px;color:#4a6fa5">Total: RM '+totalAmt.toFixed(2)+(existing.length?' · '+existing.length+' already published':'')+'</div></div>'
+    +'<div><div style="font-size:13px;font-weight:600;color:#34d399">'+newEligible.length+' eligible &amp; conditions met</div>'
+    +'<div style="font-size:11px;color:#4a6fa5">'+payoutLabel+' each'+(pt==='cash'||pt==='voucher'?' · Total: RM '+totalAmt.toFixed(2):'')+(existing.length?' · '+existing.length+' already published':'')+'</div></div>'
     +(newEligible.length?'<button class="btn success" onclick="approveAllBenefits(\''+ruleId+'\','+yr+','+mo+')">✅ Approve All ('+newEligible.length+')</button>':'')
     +'</div>';
   if(newEligible.length){
@@ -7977,11 +8012,15 @@ async function previewBenefitPublish(){
       }).join('')+'</div>';
   }
   if(ineligible.length){
-    html+='<div style="font-size:11px;color:#4a6fa5;margin-bottom:4px">'+ineligible.length+' not eligible:</div>'
-      +'<div style="display:flex;flex-direction:column;gap:3px">'
+    html+='<div style="margin-top:6px;padding:8px;background:#0a0f1a;border-radius:6px">'
+      +'<div style="font-size:11px;color:#f59e0b;font-weight:600;margin-bottom:6px">⚠ '+ineligible.length+' eligible to participate — conditions not yet met:</div>'
+      +'<div style="display:flex;flex-direction:column;gap:4px">'
       +ineligible.map(function(e){
-        return '<div style="font-size:11px;color:#6b8ab0">'+esc(e.u.display_name||e.u.username)+': '+e.reasons.join(', ')+'</div>';
-      }).join('')+'</div>';
+        return '<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #0d1626">'
+          +'<span style="color:#c9d1d9">'+esc(e.u.display_name||e.u.username)+'</span>'
+          +'<span style="color:#f59e0b;font-size:10px">'+e.reasons.join(' · ')+'</span>'
+          +'</div>';
+      }).join('')+'</div></div>';
   }
   html+='</div>';
   prev.innerHTML=html;
@@ -8809,29 +8848,7 @@ async function loadPayrollSim(){
     '<span style="color:#34d399;font-size:15px;font-weight:600">'+presentDays+'</span>'
     +'<span style="color:#4a6fa5"> / '+bizSoFar+' days so far</span>'
     +'<div style="font-size:10px;color:#2a3d55;margin-top:2px">'+remaining+' working days remaining · Total: '+totalBiz+'</div>';
-  // Fetch approved cash benefits this month
-  var bRecs=await sbGet('benefit_records',
-    'username=eq.'+encodeURIComponent(currentUser.username)
-    +'&period_year=eq.'+yr+'&period_month=eq.'+mo
-    +'&status=in.(approved,paid)&select=amount,payout_type,rule_id');
-  var bRecs2=await sbGet('benefit_records',
-    'username=eq.'+encodeURIComponent(currentUser.username)
-    +'&period_year=eq.'+yr
-    +'&status=in.(approved,paid)&select=amount,payout_type,rule_id,period_month');
-  // Only cash/voucher/points count as RM
-  var benefitAmt=0;var benefitLines=[];
-  bRecs.forEach(function(b){
-    var pt=b.payout_type||'cash';
-    if(pt==='cash'||pt==='voucher'||pt==='points'){
-      var a=parseFloat(b.amount)||0;if(a>0){benefitAmt+=a;benefitLines.push('RM '+a.toFixed(2));}
-    }
-  });
-  var bHtml=benefitLines.length
-    ?benefitLines.map(function(l){return '<div style="display:flex;justify-content:space-between"><span>Benefit</span><span style="color:#34d399">'+l+'</span></div>';}).join('')
-    +'<div style="font-size:11px;color:#2a3d55;margin-top:4px">Non-cash benefits (leave days, gifts) not included in salary calculation</div>'
-    :'<span>No approved cash benefits this month</span>';
-  document.getElementById('prBenefits').innerHTML=bHtml;
-  window._prBenefitAmt=benefitAmt;
+  window._prBenefitAmt=0;// benefits removed from simulator
   calcPayroll();
 }
 
@@ -8846,18 +8863,21 @@ function addPayrollRow(containerId){
 function calcPayroll(){
   var basic=parseFloat(document.getElementById('prBasic').value)||0;
   var att=_prAttData;
-  // Pro-rate if attendance data available
-  var proRated=att.total>0?basic*att.present/att.total:basic;
+  // Use custom override if filled, else auto from attendance
+  var overrideWorked=parseFloat(document.getElementById('prDaysWorked').value);
+  var overrideTotal=parseFloat(document.getElementById('prDaysTotal').value);
+  var daysWorked=isNaN(overrideWorked)?att.present:overrideWorked;
+  var daysTotal=isNaN(overrideTotal)?att.total:overrideTotal;
+  if(daysTotal<1)daysTotal=1;
+  var proRated=basic*daysWorked/daysTotal;
   // Allowances
   var allowTotal=0;
   document.querySelectorAll('#prAllowances .pr-amt').forEach(function(el){allowTotal+=parseFloat(el.value)||0;});
   // Deductions
   var deductTotal=0;
   document.querySelectorAll('#prDeductions .pr-amt').forEach(function(el){deductTotal+=parseFloat(el.value)||0;});
-  // Benefits
-  var benefitAmt=window._prBenefitAmt||0;
-  // Gross = pro-rated basic + allowances + benefits
-  var gross=proRated+allowTotal+benefitAmt;
+  // Gross = pro-rated basic + allowances
+  var gross=proRated+allowTotal;
   // EPF
   var epfEe=document.getElementById('prEpf').checked?Math.round(gross*0.11*100)/100:0;
   var epfEr=document.getElementById('prEpfEr').checked?Math.round(gross*0.13*100)/100:0;
@@ -8883,9 +8903,8 @@ function calcPayroll(){
       +'<span style="color:'+(color||'#c9d1d9')+'">RM '+amt.toFixed(2)+'</span></div>';
   }
   var html='';
-  html+=line('Basic salary (pro-rated '+att.present+'/'+att.total+' days)',proRated,'#c9d1d9');
-  if(allowTotal)html+=line('Allowances',allowTotal,'#60a5fa');
-  if(benefitAmt)html+=line('Benefits (cash)',benefitAmt,'#34d399');
+  html+=line('Basic salary (pro-rated '+daysWorked+'/'+daysTotal+' days)',proRated,'#c9d1d9');
+  if(allowTotal)html+=line('其他所得 (Other income)',allowTotal,'#60a5fa');
   html+=line('Gross salary',gross,'#f0f6fc');
   html+='<div style="height:4px"></div>';
   if(epfEe)html+=line('EPF (11%)',-epfEe,'#f87171');
@@ -8898,9 +8917,16 @@ function calcPayroll(){
   document.getElementById('prBreakdown').innerHTML=html;
 }
 
+function clearPrDaysOverride(){
+  document.getElementById('prDaysWorked').value='';
+  document.getElementById('prDaysTotal').value='';
+  calcPayroll();
+}
 function resetPayrollSim(){
   document.getElementById('prBasic').value='1500';
-  document.getElementById('prAllowances').innerHTML='<div class="pr-row"><input placeholder="Allowance name" class="pr-name" style="flex:1"><span style="color:#4a6fa5;margin:0 4px">RM</span><input type="number" class="pr-amt" min="0" step="1" placeholder="0" style="width:80px" oninput="calcPayroll()"><button onclick="this.parentElement.remove();calcPayroll()" style="background:none;border:none;color:#f87171;cursor:pointer;padding:0 4px">✕</button></div>';
+  document.getElementById('prDaysWorked').value='';
+  document.getElementById('prDaysTotal').value='';
+  document.getElementById('prAllowances').innerHTML='<div class="pr-row"><input placeholder="Description" class="pr-name" style="flex:1"><span style="color:#4a6fa5;margin:0 4px">RM</span><input type="number" class="pr-amt" min="0" step="1" placeholder="0" style="width:80px" oninput="calcPayroll()"><button onclick="this.parentElement.remove();calcPayroll()" style="background:none;border:none;color:#f87171;cursor:pointer;padding:0 4px">✕</button></div>';
   document.getElementById('prDeductions').innerHTML='<div class="pr-row"><input placeholder="e.g. Advance" class="pr-name" style="flex:1"><span style="color:#4a6fa5;margin:0 4px">RM</span><input type="number" class="pr-amt" min="0" step="1" placeholder="0" style="width:80px" oninput="calcPayroll()"><button onclick="this.parentElement.remove();calcPayroll()" style="background:none;border:none;color:#f87171;cursor:pointer;padding:0 4px">✕</button></div>';
   ['prEpf','prEpfEr','prSocso','prEis'].forEach(function(id){var el=document.getElementById(id);if(el)el.checked=true;});
   calcPayroll();
