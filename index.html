@@ -2254,20 +2254,22 @@ async function editAnn(id){
   var rows=await sbGet('announcements','id=eq.'+id+'&select=*');
   if(!rows.length)return;
   var a=rows[0];
+  // Reset and open modal first
+  document.getElementById('ann_edit_id').value=id;
+  document.getElementById('ann_title').value=a.title||'';
+  document.getElementById('ann_content').value=a.content||'';
+  document.getElementById('ann_pinned').value=a.is_pinned?'true':'false';
+  document.getElementById('annModalTitle').textContent='✏️ Edit Announcement';
+  document.getElementById('annSaveBtn').textContent='Save Changes';
+  openModal('annModal');
+  // Load depts/roles then set target (options must exist before setting value)
   await loadAllDepts();await loadAllRoles();
   var dg=document.getElementById('ann_dept_group');
   if(dg){dg.innerHTML='';allDepts.forEach(function(d){var o=document.createElement('option');o.value='dept:'+d.name;o.textContent='🏬 '+d.name;dg.appendChild(o);});}
   var rg=document.getElementById('ann_role_group');
   if(rg){rg.innerHTML='';allRoles.forEach(function(r){var o=document.createElement('option');o.value='role:'+r.name;o.textContent='🎭 '+r.name;rg.appendChild(o);});}
-  document.getElementById('ann_edit_id').value=id;
-  document.getElementById('ann_title').value=a.title||'';
-  document.getElementById('ann_content').value=a.content||'';
-  document.getElementById('ann_pinned').value=a.is_pinned?'true':'false';
   document.getElementById('ann_target').value=a.target_role||'all';
-  document.getElementById('annModalTitle').textContent='✏️ Edit Announcement';
-  document.getElementById('annSaveBtn').textContent='Save Changes';
   updateAnnAudiencePreview();
-  openModal('annModal');
 }
 
 async function saveAnnouncement(){
@@ -6589,6 +6591,20 @@ async function loadMyBenefits(){
   document.getElementById('benefitTabContent').innerHTML=html;
 }
 
+function describeTriggers(rule){
+  var triggers=rule.trigger_type||'unconditional';
+  try{triggers=JSON.parse(triggers);}catch(e){triggers=[triggers];}
+  if(!Array.isArray(triggers))triggers=[triggers];
+  var desc=[];
+  triggers.forEach(function(t){
+    if(t==='unconditional')desc.push('No conditions required');
+    else if(t==='full_attendance')desc.push('Full attendance required');
+    else if(t==='attendance_rate')desc.push('Attendance ≥ '+Math.round((rule.min_attendance_rate||0.9)*100)+'%');
+    else if(t==='performance')desc.push('≥ '+(rule.min_performance_tasks||1)+' task'+(rule.min_performance_tasks>1?'s':'')+' completed');
+    else if(t==='tenure')desc.push('Min '+(rule.min_tenure_months||1)+' month'+(rule.min_tenure_months>1?'s':'')+' tenure'+(rule.tenure_effective_next_month?' (next month)':''));
+  });
+  return desc.join(' + ');
+}
 async function loadClaimableBenefits(){
   var rules=await sbGet('benefit_rules','is_active=eq.true&claim_type=eq.manual&select=*');
   var now=new Date();var yr=now.getFullYear();
@@ -6603,39 +6619,45 @@ async function loadClaimableBenefits(){
   var html='<div style="display:flex;flex-direction:column;gap:8px">';
   rules.forEach(function(r){
     var alreadyClaimed=claimedByMe.has(r.id);
-    var totalClaimed=claimedCounts[r.id]||0;
-    var limit=r.claim_limit||0;
+    var totalClaimed=claimedCounts[r.id]||0;// total claimed by ALL staff
+    var limit=r.claim_limit||0;// 0 = no limit
     var isFull=limit>0&&totalClaimed>=limit;
     var eligible=!alreadyClaimed&&!isFull&&checkBenefitEligibility(r);
-    var quotaHtml='<div style="margin-top:6px">'
-      +'<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:2px">'
-      +'<span>已获得 / 奖励上限</span>'
-      +'<span style="color:'+(totalClaimed>0?'#34d399':'#4a6fa5')+'">'+totalClaimed+(limit>0?' / '+limit:' (no limit)')+'</span>'
-      +'</div>';
+    var condDesc=describeTriggers(r);
+    // Quota: shows how many people (across all staff) have claimed this benefit
+    var quotaHtml='<div style="margin-top:6px;padding:6px 8px;background:#0a0f1a;border-radius:6px">';
+    quotaHtml+='<div style="font-size:11px;font-weight:600;color:#f0f6fc;margin-bottom:4px">'
+      +'🏆 RM '+parseFloat(r.payout_amount||0).toFixed(2)+' per person &nbsp;|&nbsp; '
+      +'<span style="color:#4a6fa5;font-weight:400">'+r.period+'</span></div>';
+    quotaHtml+='<div style="font-size:11px;color:#60a5fa;margin-bottom:4px">📋 Conditions: '+esc(condDesc)+'</div>';
     if(limit>0){
       var pct=Math.min(100,Math.round(totalClaimed/limit*100));
       var remaining=Math.max(0,limit-totalClaimed);
-      quotaHtml+='<div style="background:#1e2d45;border-radius:4px;height:6px">'
-        +'<div style="background:'+(isFull?'#ef4444':'#34d399')+';width:'+pct+'%;height:6px;border-radius:4px;transition:width .3s"></div>'
+      quotaHtml+='<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:3px">'
+        +'<span>Spots taken (all staff)</span>'
+        +'<span style="color:'+(isFull?'#ef4444':'#34d399')+';font-weight:600">'+totalClaimed+' / '+limit+'</span>'
         +'</div>'
-        +(remaining>0&&!isFull?'<div style="font-size:10px;color:#34d399;margin-top:2px">'+remaining+' spot'+(remaining>1?'s':'')+' remaining</div>':'')
-        +(isFull?'<div style="font-size:10px;color:#f87171;margin-top:2px">Quota full — no more claims accepted</div>':'');
+        +'<div style="background:#1e2d45;border-radius:4px;height:5px;margin-bottom:3px">'
+        +'<div style="background:'+(isFull?'#ef4444':'#34d399')+';width:'+pct+'%;height:5px;border-radius:4px"></div>'
+        +'</div>'
+        +(remaining>0?'<div style="font-size:10px;color:#34d399">'+remaining+' spot'+(remaining>1?'s':'')+' remaining</div>':'')
+        +(isFull?'<div style="font-size:10px;color:#f87171">Quota full</div>':'');
+    } else {
+      quotaHtml+='<div style="font-size:10px;color:#4a6fa5">Unlimited spots &nbsp;·&nbsp; '+totalClaimed+' claimed so far</div>';
     }
     quotaHtml+='</div>';
     html+='<div class="card" style="padding:10px 12px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
       +'<div style="flex:1">'
       +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.name)+'</div>'
-      +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+esc(r.description||'')+'</div>'
-      +'<div style="font-size:11px;color:#4a6fa5;margin-top:4px">'
-      +'RM '+parseFloat(r.payout_amount||0).toFixed(2)
-      +' · '+r.period+'</div>'
+      +(r.description?'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+esc(r.description)+'</div>':'')
       +quotaHtml
+      +(alreadyClaimed?'<div style="font-size:11px;color:#34d399;margin-top:4px">✓ You have claimed this benefit this period</div>':'')
       +'</div>'
       +'<button class="btn sm'+(eligible?' success':'')+'" '
-      +(eligible?'onclick="claimBenefit('+r.id+')"  '  :'disabled')
-      +' style="margin-left:8px;flex-shrink:0">'
-      +(alreadyClaimed?'✓ Claimed':isFull?'Full':eligible?'Claim':'Not eligible')
+      +(eligible?'onclick="claimBenefit('+r.id+')"':'disabled')
+      +' style="flex-shrink:0">'
+      +(alreadyClaimed?'Claimed':isFull?'Full':eligible?'Claim':'Not eligible')
       +'</button>'
       +'</div></div>';
   });
@@ -7125,7 +7147,6 @@ async function openBenefitRuleModal(id){
   document.getElementById('br_period').value='monthly';
   document.getElementById('br_payout_type').value='fixed';
   document.getElementById('br_amount').value='0';
-  document.getElementById('br_pct').value='5';
   document.getElementById('br_applies_to').value='all';
   document.getElementById('br_claim_type').value='auto';
   document.getElementById('br_claim_limit').value='0';
@@ -7158,7 +7179,6 @@ async function openBenefitRuleModal(id){
       document.getElementById('br_period').value=r.period||'monthly';
       document.getElementById('br_payout_type').value=r.payout_type||'fixed';
       document.getElementById('br_amount').value=r.payout_amount||0;
-      document.getElementById('br_pct').value=r.payout_percentage||5;
       document.getElementById('br_applies_to').value=r.applies_to||'all';
       document.getElementById('br_claim_type').value=r.claim_type||'auto';
       document.getElementById('br_claim_limit').value=r.claim_limit||0;
