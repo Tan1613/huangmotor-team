@@ -2477,8 +2477,20 @@ async function openTaskDetail(id){
   if(t.status==='pending_approval'){
     statusBtns+='<div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:6px;padding:6px 10px;font-size:11px;color:#f59e0b;margin-bottom:6px">⏳ Awaiting completion approval</div>';
     if(canApproveTasks){
-      statusBtns+='<button class="btn sm success" onclick="approveTaskComplete('+id+')">✅ Approve Complete</button>'
-        +'<button class="btn sm danger" onclick="rejectTaskComplete('+id+')">↩ Reject & Return</button>';
+      if(t.task_type==='sale'){
+        // Sale tasks: must select payment type before approving
+        statusBtns+='<div style="background:#0a0f1a;border:1px solid #1e2d45;border-radius:6px;padding:8px 10px;margin-bottom:6px">'
+          +'<div style="font-size:11px;color:#f0f6fc;font-weight:600;margin-bottom:6px">💰 Payment Method</div>'
+          +'<div style="display:flex;gap:6px;margin-bottom:8px">'
+          +'<button id="pmtCash" class="btn sm" onclick="selectPaymentType(\'cash\')" style="flex:1;border:1px solid #1e2d45">💵 Cash</button>'
+          +'<button id="pmtInstall" class="btn sm" onclick="selectPaymentType(\'installment\')" style="flex:1;border:1px solid #1e2d45">📋 Installment</button>'
+          +'</div>'
+          +'<button class="btn sm success" style="width:100%" onclick="approveTaskComplete('+id+')">✅ Approve & Complete</button>'
+          +'</div>';
+      } else {
+        statusBtns+='<button class="btn sm success" onclick="approveTaskComplete('+id+')">✅ Approve Complete</button>';
+      }
+      statusBtns+='<button class="btn sm danger" onclick="rejectTaskComplete('+id+')">↩ Reject & Return</button>';
     }
   }
   // Admin: revoke completed + reassign any task
@@ -2662,20 +2674,43 @@ async function submitTaskComplete(id){
   loadDashboard();
 }
 
+var _selectedPaymentType=null;
+function selectPaymentType(type){
+  _selectedPaymentType=type;
+  var cash=document.getElementById('pmtCash');
+  var install=document.getElementById('pmtInstall');
+  if(cash&&install){
+    cash.style.background=type==='cash'?'#1d4ed8':'';
+    cash.style.color=type==='cash'?'#fff':'';
+    cash.style.borderColor=type==='cash'?'#3b82f6':'#1e2d45';
+    install.style.background=type==='installment'?'#7c3aed':'';
+    install.style.color=type==='installment'?'#fff':'';
+    install.style.borderColor=type==='installment'?'#a78bfa':'#1e2d45';
+  }
+}
+
 async function approveTaskComplete(id){
   var now=new Date().toISOString();
   var rows=await sbGet('tasks','id=eq.'+id+'&select=progress_notes,task_type');
   var t=rows.length?rows[0]:{};
+  // For sale tasks, require payment type selection
+  if(t.task_type==='sale'&&!_selectedPaymentType){
+    toast('Please select Cash or Installment first','error');return;
+  }
   var notes=(t.progress_notes)||[];
-  notes.push({by:currentUser.username,note:'✅ Completion approved by '+(currentUser.display_name||currentUser.username),ts:now});
+  var payNote=t.task_type==='sale'?' | Payment: '+(_selectedPaymentType==='cash'?'💵 Cash':'📋 Installment'):'';
+  notes.push({by:currentUser.username,note:'✅ Completion approved by '+(currentUser.display_name||currentUser.username)+payNote,ts:now});
   await sbPatch('tasks',{id:id},{status:'completed',completed_at:now,updated_at:now,progress_notes:notes});
-  // Sync linked sale record status forward when task is completed
+  // Sync linked sale record
   if(t.task_type==='sale'){
     var saleRows=await sbGet('sales_records','task_id=eq.'+id+'&select=id,status');
     if(saleRows.length&&saleRows[0].status!=='cancelled'&&saleRows[0].status!=='delivered'){
-      await sbPatch('sales_records',{id:saleRows[0].id},{status:'delivered',updated_at:now});
+      var saleUpdate={status:'delivered',updated_at:now};
+      if(_selectedPaymentType)saleUpdate.payment_type=_selectedPaymentType;
+      await sbPatch('sales_records',{id:saleRows[0].id},saleUpdate);
     }
   }
+  _selectedPaymentType=null;
   toast('Task completion approved ✓','success');
   closeModal('taskDetailModal');
   if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
@@ -3550,6 +3585,13 @@ async function loadPerformance(){
     q+='&or=(assigned_to.eq.'+encodeURIComponent(currentUser.username)+',assigned_by.eq.'+encodeURIComponent(currentUser.username)+',workers.cs.[\"'+currentUser.username+'\"])';
   }
   var tasks=await sbGet('tasks',q);
+  // For sale tasks, fetch payment_type from linked sales_records
+  var saleTaskIds=tasks.filter(function(t){return t.task_type==='sale';}).map(function(t){return t.id;});
+  var paymentByTask={};
+  if(saleTaskIds.length){
+    var saleRecs=await sbGet('sales_records','task_id=in.('+saleTaskIds.join(',')+')'+'&select=task_id,payment_type');
+    saleRecs.forEach(function(s){if(s.payment_type)paymentByTask[s.task_id]=s.payment_type;});
+  }
   // Populate user filter
   var sel=document.getElementById('perfUser');var curVal=sel.value;
   sel.innerHTML='<option value="all">All Staff</option>';
@@ -3558,30 +3600,23 @@ async function loadPerformance(){
   var total=tasks.length;
   // Count by worker: use workers array first, fall back to assigned_to
   var byUser={};
-  tasks.forEach(function(t){
-    var credited=new Set();
-    // Workers (executors) get credit
-    if(t.workers&&t.workers.length){
-      t.workers.forEach(function(u){credited.add(u);});
-    } else if(t.assigned_to){
-      credited.add(t.assigned_to);
-    }
-    // Task creator (assigned_by) also gets credit for opening the task
-    if(t.assigned_by)credited.add(t.assigned_by);
-    credited.forEach(function(u){byUser[u]=(byUser[u]||0)+1;});
-  });
-  // Filter byUser to only users current user is allowed to see
-  var visibleUsernames=new Set(visible.map(function(u){return u.username;}));
-  // Build detailed breakdown: opened (assigned_by) vs executed (workers/assigned_to)
   var byUserOpened={};var byUserDone={};
+  var byUserCash={};var byUserInstall={};
   tasks.forEach(function(t){
-    // Executed credit
     var executors=new Set();
     if(t.workers&&t.workers.length)t.workers.forEach(function(u){executors.add(u);});
     else if(t.assigned_to)executors.add(t.assigned_to);
-    executors.forEach(function(u){byUserDone[u]=(byUserDone[u]||0)+1;byUser[u]=(byUser[u]||0);});// ensure key exists
-    // Opened credit
-    if(t.assigned_by){byUserOpened[t.assigned_by]=(byUserOpened[t.assigned_by]||0)+1;byUser[t.assigned_by]=(byUser[t.assigned_by]||0);}
+    var pmt=t.task_type==='sale'?paymentByTask[t.id]:null;
+    executors.forEach(function(u){
+      byUserDone[u]=(byUserDone[u]||0)+1;
+      byUser[u]=(byUser[u]||0);
+      if(pmt==='cash')byUserCash[u]=(byUserCash[u]||0)+1;
+      if(pmt==='installment')byUserInstall[u]=(byUserInstall[u]||0)+1;
+    });
+    if(t.assigned_by){
+      byUserOpened[t.assigned_by]=(byUserOpened[t.assigned_by]||0)+1;
+      byUser[t.assigned_by]=(byUser[t.assigned_by]||0);
+    }
   });
   // filter visibility
   if(!canAll&&!canDept){
@@ -3606,8 +3641,15 @@ async function loadPerformance(){
     var pctDone=Math.round(entry.done/maxVal*100);
     var u=allUsers.find(function(x){return x.username===entry.username;})||{};
     var deptTag=u.department?'<span style="font-size:9px;color:#2a4a6a;margin-left:4px">('+esc(u.department)+')</span>':'';
+    var cash=byUserCash[entry.username]||0;
+    var install=byUserInstall[entry.username]||0;
+    var saleTag=(cash||install)
+      ?'<span style="font-size:9px;margin-left:4px">'
+        +(cash?'<span style="color:#60a5fa">💵'+cash+'</span>':'')
+        +(install?'<span style="color:#a78bfa;margin-left:2px">📋'+install+'</span>':'')
+        +'</span>':'';
     return '<div class="perf-bar-wrap">'
-      +'<div class="perf-name">'+esc(u.display_name||entry.username)+deptTag+'</div>'
+      +'<div class="perf-name">'+esc(u.display_name||entry.username)+deptTag+saleTag+'</div>'
       +'<div class="perf-bar-bg"><div class="perf-bar-fill" style="width:'+pctDone+'%;background:linear-gradient(90deg,#1d4ed8,#3b82f6)">'+entry.done+'</div></div>'
       +'<div class="perf-count">'
       +(entry.done?'<span style="color:#60a5fa">'+entry.done+'✓</span> ':'')
@@ -3616,9 +3658,11 @@ async function loadPerformance(){
       +'</div>';
   }).join('');
   document.getElementById('perfBars').innerHTML=(bars||'<div class="empty-state"><p>No data</p></div>')
-    +'<div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:#4a6fa5">'
-    +'<span><span style="color:#60a5fa">■</span> ✓ Tasks executed (worker)</span>'
-    +'<span><span style="color:#a78bfa">📋</span> Tasks opened (creator)</span>'
+    +'<div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:#4a6fa5;flex-wrap:wrap">'
+    +'<span><span style="color:#60a5fa">■</span> ✓ Tasks executed</span>'
+    +'<span><span style="color:#a78bfa">📋</span> Tasks opened</span>'
+    +'<span><span style="color:#60a5fa">💵</span> Cash sales</span>'
+    +'<span><span style="color:#a78bfa">📋</span> Installment sales</span>'
     +'</div>';
   var byType={};tasks.forEach(function(t){byType[t.task_type]=(byType[t.task_type]||0)+1;});
   var typeColors={sale:'#34d399',maintenance:'#60a5fa',aftersales:'#fbbf24',general:'#9ca3af'};
@@ -6053,7 +6097,9 @@ async function loadMySales(){
       +'<div style="font-size:12px;color:#e0e6f0">👤 '+esc(r.customer_name)+'</div>'
       +'<div style="font-size:11px;color:#6b8ab0;margin-top:2px">📞 '+phoneDisplay+'</div>'
       +'<div style="font-size:11px;color:#6b8ab0">🪪 '+icDisplay+'</div>'
-      +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+esc(r.record_no)+' · '+fmtDate(r.sale_date)+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+esc(r.record_no)+' · '+fmtDate(r.sale_date)
+    +(r.payment_type?(' · '+(r.payment_type==='cash'?'<span style="color:#60a5fa;font-weight:600">💵 Cash</span>':'<span style="color:#a78bfa;font-weight:600">📋 Installment</span>')):'')
+    +'</div>'
       +(r.task_id?'<button class="btn sm" onclick="openTaskDetail('+r.task_id+')" style="font-size:10px">View Task</button>':'')
       +participantHtml
       +'</div>'
