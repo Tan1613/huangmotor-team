@@ -585,7 +585,6 @@ body{position:relative}
           </select>
         </div>
         <div class="form-field" id="br_amount_wrap"><label>Amount (RM)</label><input type="number" id="br_amount" min="0" step="0.01" value="0" placeholder="0.00"></div>
-        <div class="form-field" id="br_pct_wrap" style="display:none"><label>Percentage (%)</label><input type="number" id="br_pct" min="0.1" max="100" step="0.1" value="5" placeholder="5"></div>
       </div>
       <!-- Applies To -->
       <div class="form-field"><label>Applies To</label>
@@ -1253,6 +1252,7 @@ body{position:relative}
         <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
           <button class="btn sm primary" id="abt-rules" onclick="switchAdminBenefitTab('rules')">Rules</button>
           <button class="btn sm" id="abt-records" onclick="switchAdminBenefitTab('records')">Records</button>
+          <button class="btn sm" id="abt-claims" onclick="switchAdminBenefitTab('claims')">🔔 Claims <span id="benefitClaimsBadge" style="display:none;background:#ef4444;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;margin-left:2px"></span></button>
           <button class="btn sm" id="abt-publish" onclick="switchAdminBenefitTab('publish')">Publish</button>
         </div>
         <div id="adminBenefitContent"></div>
@@ -4656,7 +4656,13 @@ async function refreshBadges(){
       if(mnLeave){var existing=mnLeave.querySelector('.mi-badge');if(existing)existing.remove();if(pendingLeave.length>0){var b=document.createElement('span');b.className='mi-badge';b.style.cssText='margin-left:auto;background:#ef4444;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px';b.textContent=pendingLeave.length;mnLeave.appendChild(b);}}
     }catch(e){}
   }
-  // Data View Requests pending (for sale owners)
+  // Benefits pending claims (for admin)
+  if(currentUser.role==='admin'||currentUser.can_manage_benefit){
+    try{
+      var benefitPending=await sbGet('benefit_records','claim_type=eq.manual&status=eq.pending&select=id');
+      setBadge('benefitClaimsBadge',benefitPending.length);
+    }catch(e){}
+  }
   try{
     var dvr=await sbGet('data_view_requests','owner=eq.'+encodeURIComponent(currentUser.username)+'&status=eq.pending&select=id');
     setBadge('dataReqBadge',dvr.length);
@@ -6622,7 +6628,7 @@ async function loadClaimableBenefits(){
       +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.name)+'</div>'
       +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+esc(r.description||'')+'</div>'
       +'<div style="font-size:11px;color:#4a6fa5;margin-top:4px">'
-      +(r.payout_type==='fixed'?'RM '+parseFloat(r.payout_amount||0).toFixed(2):parseFloat(r.payout_percentage||0)+'% of base')
+      +'RM '+parseFloat(r.payout_amount||0).toFixed(2)
       +' · '+r.period+'</div>'
       +quotaHtml
       +'</div>'
@@ -6638,13 +6644,18 @@ async function loadClaimableBenefits(){
 }
 
 function checkBenefitEligibility(rule){
-  // Basic eligibility — tenure check
-  if(rule.trigger_type==='tenure'&&rule.min_tenure_months){
+  var triggers=rule.trigger_type||'unconditional';
+  try{triggers=JSON.parse(triggers);}catch(e){triggers=[triggers];}
+  if(!Array.isArray(triggers))triggers=[triggers];
+  if(triggers.indexOf('unconditional')>=0)return true;
+  // Tenure check (can be done client-side)
+  if(triggers.indexOf('tenure')>=0&&rule.min_tenure_months){
     if(!currentUser.joined_date)return false;
-    var joinedMs=new Date(currentUser.joined_date).getTime();
-    var monthsServed=(Date.now()-joinedMs)/(1000*60*60*24*30.44);
-    if(monthsServed<rule.min_tenure_months)return false;
+    var months=(Date.now()-new Date(currentUser.joined_date).getTime())/(1000*60*60*24*30.44);
+    if(rule.tenure_effective_next_month)months-=1;
+    if(months<rule.min_tenure_months)return false;
   }
+  // Attendance/performance require server-side check — allow claim, server validates
   return true;
 }
 
@@ -6693,12 +6704,13 @@ async function loadBenefitHistory(){
 
 // ── Admin Benefit Management ──
 function switchAdminBenefitTab(tab){
-  ['rules','records','publish'].forEach(function(t){
+  ['rules','records','claims','publish'].forEach(function(t){
     var b=document.getElementById('abt-'+t);
     if(b)b.className='btn sm'+(t===tab?' primary':'');
   });
   if(tab==='rules')loadBenefitRules();
   else if(tab==='records')loadBenefitRecords();
+  else if(tab==='claims')loadBenefitClaims();
   else if(tab==='publish')loadBenefitPublish();
 }
 
@@ -6728,7 +6740,7 @@ async function loadBenefitRules(){
       +(r.is_active?'':'<span style="font-size:10px;color:#f87171">INACTIVE</span>')
       +'</div>'
       +'<div style="font-size:11px;color:#4a6fa5">'
-      +(r.payout_type==='fixed'?'RM '+parseFloat(r.payout_amount||0).toFixed(2):parseFloat(r.payout_percentage||0)+'% base')
+      +'RM '+parseFloat(r.payout_amount||0).toFixed(2)
       +' · '+(r.claim_type==='auto'?'Auto':'Manual')+(r.claim_limit?' (limit '+r.claim_limit+')':'')
       +' · Applies to: '+r.applies_to
       +'</div>'
@@ -6740,6 +6752,43 @@ async function loadBenefitRules(){
       +'<button class="btn sm danger" onclick="toggleBenefitRule('+r.id+','+r.is_active+')">'+( r.is_active?'Pause':'Resume')+'</button>'
       +'<button class="btn sm danger" onclick="deleteBenefitRule('+r.id+')" title="Delete rule">🗑️</button>'
       +'</div></div></div>';
+  });
+  html+='</div>';
+  document.getElementById('adminBenefitContent').innerHTML=html;
+}
+
+async function loadBenefitClaims(){
+  var records=await sbGet('benefit_records','claim_type=eq.manual&status=eq.pending&order=created_at.asc&select=*');
+  var rules=await sbGet('benefit_rules','select=id,name');
+  var ruleMap={};rules.forEach(function(r){ruleMap[r.id]=r;});
+  if(!records.length){
+    document.getElementById('adminBenefitContent').innerHTML='<div class="empty-state"><div class="icon">✅</div><p>No pending claims</p></div>';
+    return;
+  }
+  var html='<div style="font-size:12px;color:#4a6fa5;margin-bottom:8px">'+records.length+' pending claim'+(records.length>1?'s':'')+' awaiting approval</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">';
+  records.forEach(function(rec){
+    var rule=ruleMap[rec.rule_id]||{name:'Unknown Rule'};
+    var u=allUsers.find(function(x){return x.username===rec.username;})||{};
+    html+='<div class="card" style="padding:10px 12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+      +'<div style="flex:1">'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +'<div style="width:28px;height:28px;border-radius:50%;background:#1d4ed822;border:1px solid #1d4ed855;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#60a5fa;flex-shrink:0">'+(u.display_name||rec.username||'?').charAt(0).toUpperCase()+'</div>'
+      +'<div><div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(u.display_name||rec.username)+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5">'+esc(u.department||'')+'</div></div>'
+      +'</div>'
+      +'<div style="margin-top:6px;font-size:12px;color:#c9d1d9">'+esc(rule.name)+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5">'+(rec.period_year||'')+( rec.period_month?' / '+String(rec.period_month).padStart(2,'0'):'')+' · Applied '+fmtRelative(rec.claimed_at||rec.created_at)+'</div>'
+      +(rec.notes?'<div style="font-size:11px;color:#4a6fa5;margin-top:3px;font-style:italic">Note: '+esc(rec.notes)+'</div>':'')
+      +'</div>'
+      +'<div style="text-align:right;flex-shrink:0">'
+      +'<div style="font-size:14px;font-weight:700;color:#34d399;margin-bottom:6px">RM '+parseFloat(rec.amount||0).toFixed(2)+'</div>'
+      +'<div style="display:flex;gap:4px">'
+      +'<button class="btn sm success" onclick="approveBenefitRecord('+rec.id+')">✓</button>'
+      +'<button class="btn sm danger" onclick="rejectBenefitRecord('+rec.id+')">✗</button>'
+      +'</div></div>'
+      +'</div></div>';
   });
   html+='</div>';
   document.getElementById('adminBenefitContent').innerHTML=html;
@@ -6794,25 +6843,164 @@ async function toggleBenefitRule(id,isActive){
 async function loadBenefitPublish(){
   var rules=await sbGet('benefit_rules','is_active=eq.true&order=name.asc');
   var now=new Date();var yr=now.getFullYear();var mo=now.getMonth()+1;
-  var html='<div class="card" style="margin-bottom:1rem;padding:10px 12px">'
-    +'<div class="card-title">📅 Manual Publish</div>'
-    +'<div style="font-size:12px;color:#4a6fa5;margin-bottom:8px">Select a rule and period to generate benefit records for eligible staff.</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
-    +'<div class="form-field" style="margin:0"><label>Rule</label><select id="pub_rule_id" style="min-width:180px">'+rules.map(function(r){return '<option value="'+r.id+'">'+esc(r.name)+'</option>';}).join('')+'</select></div>'
-    +'<div class="form-field" style="margin:0"><label>Year</label><input type="number" id="pub_year" value="'+yr+'" style="width:80px"></div>'
-    +'<div class="form-field" style="margin:0"><label>Month</label><input type="number" id="pub_month" min="1" max="12" value="'+mo+'" style="width:60px"></div>'
-    +'<button class="btn primary" onclick="publishBenefitRule(document.getElementById(\'pub_rule_id\').value,\'manual\')">▶ Publish Now</button>'
-    +'</div></div>'
-    +'<div class="card" style="padding:10px 12px">'
+  var html='<div class="card" style="margin-bottom:1rem;padding:12px">'
+    +'<div class="card-title">📅 Publish Benefits for a Period</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">'
+    +'<div class="form-field" style="margin:0"><label>Rule</label>'
+    +'<select id="pub_rule_id" onchange="previewBenefitPublish()" style="min-width:200px">'
+    +rules.map(function(r){return '<option value="'+r.id+'">'+esc(r.name)+'</option>';}).join('')
+    +'</select></div>'
+    +'<div class="form-field" style="margin:0"><label>Year</label><input type="number" id="pub_year" value="'+yr+'" style="width:80px" onchange="previewBenefitPublish()"></div>'
+    +'<div class="form-field" style="margin:0"><label>Month</label><input type="number" id="pub_month" min="1" max="12" value="'+mo+'" style="width:60px" onchange="previewBenefitPublish()"></div>'
+    +'<button class="btn primary" onclick="previewBenefitPublish()">Preview</button>'
+    +'</div>'
+    +'<div id="publishPreview"></div>'
+    +'</div>'
+    +'<div class="card" style="padding:12px">'
     +'<div class="card-title">⏰ Auto-publish Schedule</div>'
+    +'<div style="font-size:11px;color:#4a6fa5;margin-bottom:8px">Enable auto-publish to generate records automatically at the start of each period.</div>'
     +'<div style="display:flex;flex-direction:column;gap:6px">'
-    +rules.map(function(r){return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:#0a0f1a;border-radius:6px">'
-      +'<div><div style="font-size:12px;color:#f0f6fc">'+esc(r.name)+'</div>'
-      +'<div style="font-size:10px;color:#4a6fa5">'+r.period+(r.next_publish_at?' · Next: '+fmtDate(r.next_publish_at):'')+'</div></div>'
-      +'<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#4a6fa5"><input type="checkbox" '+(r.auto_publish?'checked':'')+' onchange="toggleBenefitAutoPublish('+r.id+',this.checked)"> Auto</label>'
-      +'</div>';}).join('')
+    +rules.map(function(r){
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#0a0f1a;border-radius:6px">'
+        +'<div><div style="font-size:12px;color:#f0f6fc">'+esc(r.name)+'</div>'
+        +'<div style="font-size:10px;color:#4a6fa5">'+r.period+(r.auto_publish&&r.next_publish_at?' · Next: '+fmtDate(r.next_publish_at):'')+'</div></div>'
+        +'<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#4a6fa5;cursor:pointer">'
+        +'<input type="checkbox" '+(r.auto_publish?'checked':'')+' onchange="toggleBenefitAutoPublish('+r.id+',this.checked)"> Auto</label>'
+        +'</div>';
+    }).join('')
     +'</div></div>';
   document.getElementById('adminBenefitContent').innerHTML=html;
+  if(rules.length)previewBenefitPublish();
+}
+
+async function previewBenefitPublish(){
+  var ruleId=document.getElementById('pub_rule_id').value;
+  var yr=parseInt(document.getElementById('pub_year').value);
+  var mo=parseInt(document.getElementById('pub_month').value);
+  if(!ruleId)return;
+  var prev=document.getElementById('publishPreview');
+  prev.innerHTML='<div style="color:#4a6fa5;font-size:12px;padding:8px 0">Checking eligibility…</div>';
+  var ruleRows=await sbGet('benefit_rules','id=eq.'+ruleId+'&select=*');
+  if(!ruleRows.length){prev.innerHTML='';return;}
+  var rule=ruleRows[0];
+  // Get attendance for the period
+  var from=yr+'-'+String(mo).padStart(2,'0')+'-01';
+  var lastDay=new Date(yr,mo,0).getDate();
+  var to=yr+'-'+String(mo).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+  // Already published
+  var existing=await sbGet('benefit_records','rule_id=eq.'+ruleId+'&period_year=eq.'+yr+'&period_month=eq.'+mo+'&select=username');
+  var alreadySet=new Set(existing.map(function(r){return r.username;}));
+  // Get eligible staff
+  var staff=allUsers.filter(function(u){return u.is_active!==false&&u.role!=='partner';});
+  if(rule.applies_to==='department')staff=staff.filter(function(u){return u.department===rule.applies_to_dept;});
+  else if(rule.applies_to==='role')staff=staff.filter(function(u){return String(u.custom_role_id)===String(rule.applies_to_role_id);});
+  else if(rule.applies_to==='custom'){var cu=rule.applies_to_users||[];staff=staff.filter(function(u){return cu.indexOf(u.username)>=0;});}
+  // Tenure filter
+  if(rule.min_tenure_months){
+    staff=staff.filter(function(u){
+      if(!u.joined_date)return false;
+      var months=(new Date(from)-new Date(u.joined_date))/(1000*60*60*24*30.44);
+      if(rule.tenure_effective_next_month)months-=1;
+      return months>=rule.min_tenure_months;
+    });
+  }
+  // Parse trigger types
+  var triggers=rule.trigger_type||'unconditional';
+  try{triggers=JSON.parse(triggers);}catch(e){triggers=[triggers];}
+  if(!Array.isArray(triggers))triggers=[triggers];
+  var eligible=[],ineligible=[];
+  // Check conditions per person
+  var attAll=[];var perfAll=[];
+  var needsAtt=triggers.indexOf('attendance_rate')>=0||triggers.indexOf('full_attendance')>=0;
+  var needsPerf=triggers.indexOf('performance')>=0;
+  if(needsAtt)attAll=await sbGet('attendance','date=gte.'+from+'&date=lte.'+to+'&select=username,status,check_in,check_out,check_in_2,check_out_2');
+  if(needsPerf)perfAll=await sbGet('tasks','status=eq.completed&deleted_at=is.null&or=(completed_at.gte.'+from+'T00:00:00Z,updated_at.gte.'+from+'T00:00:00Z)&select=assigned_to,workers');
+  for(var i=0;i<staff.length;i++){
+    var u=staff[i];var reasons=[];var passed=true;
+    if(triggers.indexOf('unconditional')<0){// has real conditions
+      // Attendance rate
+      if(triggers.indexOf('attendance_rate')>=0){
+        var myAtt=attAll.filter(function(a){return a.username===u.username;});
+        var s1=myAtt.filter(function(a){return a.check_in&&a.check_out;}).length;
+        var s2=myAtt.filter(function(a){return a.check_in_2&&a.check_out_2;}).length;
+        var workDays=lastDay-[0,1,2,3,4,5,6].filter(function(d){var dt=new Date(yr,mo-1,d+1);return dt.getDay()===0;}).length;// approx
+        var rate=(s1*0.5+s2*0.5)/Math.max(1,workDays);
+        var minRate=parseFloat(rule.min_attendance_rate)||0.9;
+        if(rate<minRate){passed=false;reasons.push('Att. rate '+Math.round(rate*100)+'% < '+Math.round(minRate*100)+'%');}
+      }
+      // Full attendance
+      if(triggers.indexOf('full_attendance')>=0){
+        var myAtt2=attAll.filter(function(a){return a.username===u.username;});
+        var absents=myAtt2.filter(function(a){return a.status==='absent';}).length;
+        if(absents>0){passed=false;reasons.push(absents+' absent day'+(absents>1?'s':''));}
+      }
+      // Performance
+      if(triggers.indexOf('performance')>=0){
+        var myTasks=perfAll.filter(function(t){
+          return t.assigned_to===u.username||(t.workers||[]).indexOf(u.username)>=0;
+        }).length;
+        var minTasks=rule.min_performance_tasks||1;
+        if(myTasks<minTasks){passed=false;reasons.push('Tasks '+myTasks+' < '+minTasks);}
+      }
+    }
+    if(passed)eligible.push({u:u,reason:'Eligible'});
+    else ineligible.push({u:u,reasons:reasons});
+  }
+  var newEligible=eligible.filter(function(e){return !alreadySet.has(e.u.username);});
+  var totalAmt=newEligible.length*parseFloat(rule.payout_amount||0);
+  var html='<div style="background:#0a1a0a;border:1px solid #34d39944;border-radius:8px;padding:10px 12px;margin-top:8px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    +'<div><div style="font-size:13px;font-weight:600;color:#34d399">'+newEligible.length+' eligible</div>'
+    +'<div style="font-size:11px;color:#4a6fa5">Total: RM '+totalAmt.toFixed(2)+(existing.length?' · '+existing.length+' already published':'')+'</div></div>'
+    +(newEligible.length?'<button class="btn success" onclick="approveAllBenefits(\''+ruleId+'\','+yr+','+mo+')">✅ Approve All ('+newEligible.length+')</button>':'')
+    +'</div>';
+  if(newEligible.length){
+    html+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">'
+      +newEligible.map(function(e){
+        var u2=e.u;return '<div style="background:#0d2d0d;border:1px solid #34d39933;border-radius:4px;padding:2px 8px;font-size:11px;color:#34d399">'+esc(u2.display_name||u2.username)+'</div>';
+      }).join('')+'</div>';
+  }
+  if(ineligible.length){
+    html+='<div style="font-size:11px;color:#4a6fa5;margin-bottom:4px">'+ineligible.length+' not eligible:</div>'
+      +'<div style="display:flex;flex-direction:column;gap:3px">'
+      +ineligible.map(function(e){
+        return '<div style="font-size:11px;color:#6b8ab0">'+esc(e.u.display_name||e.u.username)+': '+e.reasons.join(', ')+'</div>';
+      }).join('')+'</div>';
+  }
+  html+='</div>';
+  prev.innerHTML=html;
+  // Store eligible list for approve all
+  window._benefitEligible=newEligible.map(function(e){return e.u.username;});
+}
+
+async function approveAllBenefits(ruleId,yr,mo){
+  var eligible=window._benefitEligible;
+  if(!eligible||!eligible.length){toast('Nothing to approve','error');return;}
+  var ruleRows=await sbGet('benefit_rules','id=eq.'+ruleId+'&select=*');
+  if(!ruleRows.length)return;
+  var rule=ruleRows[0];
+  var now=new Date().toISOString();
+  var amount=parseFloat(rule.payout_amount||0);
+  var records=eligible.map(function(username){return {
+    rule_id:parseInt(ruleId),username:username,
+    period_year:yr,period_month:mo,
+    amount:amount,payout_type:'fixed',
+    status:'approved',trigger_type:rule.trigger_type,
+    claim_type:'auto',claimed_at:now,approved_by:currentUser.username,approved_at:now
+  };});
+  var errs=0;
+  for(var i=0;i<records.length;i+=20){
+    var r=await fetch(SB_URL+'/rest/v1/benefit_records',{method:'POST',
+      headers:Object.assign({},sbH(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify(records.slice(i,i+20))
+    });
+    if(!r.ok)errs++;
+  }
+  await sbPatch('benefit_rules',{id:parseInt(ruleId)},{last_published_at:now});
+  if(errs)toast('Done with '+errs+' error(s)','error');
+  else toast('Approved for '+eligible.length+' staff ✓','success');
+  previewBenefitPublish();
+  window._benefitEligible=[];
 }
 
 async function toggleBenefitAutoPublish(id,enabled){
@@ -6895,9 +7083,7 @@ function setBrTriggers(types){
   onBrTriggerChange();
 }
 function onBrPayoutChange(){
-  var v=document.getElementById('br_payout_type').value;
-  document.getElementById('br_amount_wrap').style.display=v==='fixed'?'':'none';
-  document.getElementById('br_pct_wrap').style.display=v==='percentage'?'':'none';
+  // Fixed amount only — percentage removed
 }
 function onBrClaimChange(){
   document.getElementById('br_limit_wrap').style.display=document.getElementById('br_claim_type').value==='manual'?'':'none';
@@ -7008,9 +7194,9 @@ async function saveBenefitRule(){
     name:name,description:document.getElementById('br_desc').value.trim(),
     trigger_type:JSON.stringify(triggers),
     period:document.getElementById('br_period').value,
-    payout_type:payoutType,
-    payout_amount:payoutType==='fixed'?parseFloat(document.getElementById('br_amount').value)||0:null,
-    payout_percentage:payoutType==='percentage'?parseFloat(document.getElementById('br_pct').value)||0:null,
+    payout_type:'fixed',
+    payout_amount:parseFloat(document.getElementById('br_amount').value)||0,
+    payout_percentage:null,
     applies_to:appliesTo,
     applies_to_dept:appliesTo==='department'?document.getElementById('br_applies_dept').value:null,
     applies_to_role_id:appliesTo==='role'?parseInt(document.getElementById('br_applies_role').value)||null:null,
