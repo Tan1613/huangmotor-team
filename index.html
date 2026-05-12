@@ -1451,9 +1451,11 @@ body{position:relative}
         <div class="page-sub">Task completion and workload</div>
         <div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
           <select class="btn" id="perfPeriod" onchange="loadPerformance()">
-            <option value="7">Last 7 days</option>
-            <option value="30" selected>Last 30 days</option>
-            <option value="90">Last 90 days</option>
+            <option value="this_month" selected>This Month</option>
+            <option value="last_month">Last Month</option>
+            <option value="2_months_ago">2 Months Ago</option>
+            <option value="this_quarter">This Quarter</option>
+            <option value="custom">Custom Range</option>
           </select>
           <select class="btn" id="perfUser" onchange="loadPerformance()">
             <option value="all">All Staff</option>
@@ -3734,41 +3736,26 @@ async function loadPerformance(){
     +lgd(C.sc,'Sale · Cash')+lgd(C.si,'Sale · Install')+lgd(C.su,'Sale · Pending')
     +lgd(C.sa,'Sale Assist')+lgd(C.tb,'Task (own)')+lgd(C.tc,'Task created')+lgd(C.te,'Task exec')
     +'</div>';
-  // Tasks by Type — sale split by: creator (cash/install/pending) vs assist (executor not creator)
+  // Tasks by Type — use already-computed buckets
   var byType={};
-  var totalCash=0;var totalInstall=0;var totalSaleUnknown=0;var totalSaleAssist=0;
-  tasks.forEach(function(t){
-    if(t.task_type==='sale'){
-      var pmt=paymentByTask[t.id];
-      // Check if this user is the creator of this task
-      // If filtering by specific user, use that; otherwise count all creators
-      var isCreator=true;// default when viewing all staff (aggregate)
-      if(fUser&&fUser!=='all'){
-        isCreator=(t.assigned_by===fUser);
-        var executors=new Set();
-        if(t.workers&&t.workers.length)t.workers.forEach(function(u){executors.add(u);});
-        else if(t.assigned_to)executors.add(t.assigned_to);
-        var isExecutor=executors.has(fUser);
-        if(isExecutor&&!isCreator){totalSaleAssist++;return;}
-      }
-      if(pmt==='cash')totalCash++;
-      else if(pmt==='installment')totalInstall++;
-      else totalSaleUnknown++;
-    } else {
-      byType[t.task_type]=(byType[t.task_type]||0)+1;
+  // Sum across all visible users
+  Object.keys(byUser).forEach(function(u){
+    if(bySaleCash[u])byType['sale · Cash']=(byType['sale · Cash']||0)+(bySaleCash[u]);
+    if(bySaleInstall[u])byType['sale · Installment']=(byType['sale · Installment']||0)+(bySaleInstall[u]);
+    if(bySaleCreated[u])byType['sale · Pending']=(byType['sale · Pending']||0)+(bySaleCreated[u]);
+    if(bySaleAssist[u])byType['sale · Assist']=(byType['sale · Assist']||0)+(bySaleAssist[u]);
+    if(byTaskBoth[u]||byTaskCreated[u]||byTaskExec[u]){
+      // Non-sale tasks — count by task_type
     }
   });
-  if(totalCash)byType['sale · Cash']=totalCash;
-  if(totalInstall)byType['sale · Installment']=totalInstall;
-  if(totalSaleUnknown)byType['sale · Pending']=totalSaleUnknown;
-  if(totalSaleAssist)byType['sale · Assist']=totalSaleAssist;
+  // Also count non-sale tasks by type
+  tasks.forEach(function(t){
+    if(t.task_type!=='sale')byType[t.task_type]=(byType[t.task_type]||0)+1;
+  });
   var typeColors={
-    'sale · Cash':'#3b82f6',
-    'sale · Installment':'#8b5cf6',
-    'sale · Pending':'#10b981',
-    'sale · Assist':'#f59e0b',
-    'sale':'#10b981',
-    maintenance:'#10b981',aftersales:'#f59e0b',general:'#6b7280'
+    'sale · Cash':'#3b82f6','sale · Installment':'#8b5cf6',
+    'sale · Pending':'#f59e0b','sale · Assist':'#10b981',
+    maintenance:'#34d399',aftersales:'#fbbf24',general:'#6b7280'
   };
   var typeTotals=Object.values(byType).reduce(function(a,b){return a+b;},0)||1;
   document.getElementById('perfTypes').innerHTML=Object.entries(byType).map(function(kv){
