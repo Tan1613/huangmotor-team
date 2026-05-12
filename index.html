@@ -3704,13 +3704,20 @@ async function loadPerformance(){
   document.getElementById('perfStats').innerHTML=
     '<div class="stat-card green"><div class="label">Tasks Completed</div><div class="value">'+total+'</div></div>'
     +'<div class="stat-card blue"><div class="label">Active Staff</div><div class="value">'+Object.keys(byUser).length+'</div></div>';
-  var C={sc:'#3b82f6',si:'#8b5cf6',su:'#f59e0b',sa:'#10b981',tb:'#60a5fa',tc:'#94a3b8',te:'#34d399'};
+  var C3={both:'#3b82f6',created:'#f59e0b',exec:'#10b981'};
   var barEntries=Object.keys(byUser).map(function(username){
-    return {username:username,
+    // 3 merged groups:
+    // both     = sale cash + sale install + sale pending + task(own)  [created AND executed]
+    // created  = task created only  [created, not executed]
+    // exec     = sale assist + task exec  [executed, not created]
+    var both=(bySaleCash[username]||0)+(bySaleInstall[username]||0)+(bySaleCreated[username]||0)+(byTaskBoth[username]||0);
+    var created=(byTaskCreated[username]||0);
+    var exec=(bySaleAssist[username]||0)+(byTaskExec[username]||0);
+    return {username:username,both:both,created:created,exec:exec,
+      // keep detail for Tasks by Type
       sc:bySaleCash[username]||0,si:bySaleInstall[username]||0,su:bySaleCreated[username]||0,
       sa:bySaleAssist[username]||0,tb:byTaskBoth[username]||0,tc:byTaskCreated[username]||0,te:byTaskExec[username]||0,
-      total:(bySaleCash[username]||0)+(bySaleInstall[username]||0)+(bySaleCreated[username]||0)
-           +(bySaleAssist[username]||0)+(byTaskBoth[username]||0)+(byTaskCreated[username]||0)+(byTaskExec[username]||0)};
+      total:both+created+exec};
   }).sort(function(a,b){return b.total-a.total;});
   function dot(col,val,txt){return val?'<span style="display:flex;align-items:center;gap:2px;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;background:'+col+';display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:'+txt+';font-weight:500">'+val+'</span></span>':'';}
   function seg(col,val){var p=Math.round(val/maxVal*100);return p?'<div style="width:'+p+'%;background:'+col+';height:100%"></div>':'';}
@@ -3718,23 +3725,23 @@ async function loadPerformance(){
   var bars=barEntries.map(function(e){
     var u=allUsers.find(function(x){return x.username===e.username;})||{};
     var dept=u.department?'<span style="font-size:9px;color:#4a6fa5;margin-left:3px">'+esc(u.department)+'</span>':'';
-    var usedPct=Object.keys(C).reduce(function(s,k){return s+Math.round((e[k]||0)/maxVal*100);},0);
+    var usedPct=Math.round(e.both/maxVal*100)+Math.round(e.created/maxVal*100)+Math.round(e.exec/maxVal*100);
     var rest=Math.max(0,100-usedPct);
-    var stats='<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;flex-wrap:wrap">'
-      +dot(C.sc,e.sc,'#93c5fd')+dot(C.si,e.si,'#c4b5fd')+dot(C.su,e.su,'#fcd34d')
-      +dot(C.sa,e.sa,'#6ee7b7')+dot(C.tb,e.tb,'#bae6fd')+dot(C.tc,e.tc,'#cbd5e1')+dot(C.te,e.te,'#a7f3d0')
+    var stats='<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">'
+      +dot(C3.both,e.both,'#93c5fd')
+      +dot(C3.created,e.created,'#fcd34d')
+      +dot(C3.exec,e.exec,'#6ee7b7')
       +'</div>';
     return '<div class="perf-bar-wrap">'
       +'<div class="perf-name" title="'+esc(u.display_name||e.username)+'">'+esc(u.display_name||e.username)+dept+'</div>'
       +'<div class="perf-bar-bg" style="display:flex;overflow:hidden;border-radius:99px">'
-      +seg(C.sc,e.sc)+seg(C.si,e.si)+seg(C.su,e.su)+seg(C.sa,e.sa)+seg(C.tb,e.tb)+seg(C.tc,e.tc)+seg(C.te,e.te)
+      +seg(C3.both,e.both)+seg(C3.created,e.created)+seg(C3.exec,e.exec)
       +(rest?'<div style="flex:1;background:#1e2d45;height:100%"></div>':'')
       +'</div>'+stats+'</div>';
   }).join('');
   document.getElementById('perfBars').innerHTML=(bars||'<div class="empty-state"><p>No data</p></div>')
-    +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
-    +lgd(C.sc,'Sale · Cash')+lgd(C.si,'Sale · Install')+lgd(C.su,'Sale · Pending')
-    +lgd(C.sa,'Sale Assist')+lgd(C.tb,'Task (own)')+lgd(C.tc,'Task created')+lgd(C.te,'Task exec')
+    +'<div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">'
+    +lgd(C3.both,'Created & executed')+lgd(C3.created,'Created only')+lgd(C3.exec,'Executed only')
     +'</div>';
   // Tasks by Type — use already-computed buckets
   var byType={};
