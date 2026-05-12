@@ -563,11 +563,11 @@ body{position:relative}
       <!-- Trigger -->
       <div class="form-field"><label>Trigger Conditions <span style="font-size:10px;color:#4a6fa5">ALL selected conditions must be met</span></label>
         <div style="background:#0a0f1a;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px">
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_unconditional" onchange="onBrTriggerChange()"> Always pay (no conditions)</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_full_attendance" onchange="onBrTriggerChange()"> Full Attendance (100% in period)</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_attendance_rate" onchange="onBrTriggerChange()"> Attendance Rate ≥ threshold</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_performance" onchange="onBrTriggerChange()"> Performance Tasks ≥ threshold</label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_tenure" onchange="onBrTriggerChange()"> Minimum Tenure</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_unconditional" onchange="onBrTriggerChange('br_t_unconditional')"> Always pay (no conditions)</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_full_attendance" onchange="onBrTriggerChange('br_t_full_attendance')"> Full Attendance (100% in period)</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_attendance_rate" onchange="onBrTriggerChange('br_t_attendance_rate')"> Attendance Rate ≥ threshold</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_performance" onchange="onBrTriggerChange('br_t_performance')"> Performance Tasks ≥ threshold</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9"><input type="checkbox" id="br_t_tenure" onchange="onBrTriggerChange('br_t_tenure')"> Minimum Tenure</label>
         </div>
       </div>
       <div id="br_trigger_opts" style="display:none;background:#0a0f1a;border-radius:8px;padding:8px 10px;margin-bottom:8px">
@@ -606,6 +606,13 @@ body{position:relative}
       <div id="br_applies_custom_wrap" style="display:none" class="form-field">
         <label>Users <span style="font-size:10px;color:#4a6fa5">— check to include</span></label>
         <div id="br_custom_user_list" style="max-height:120px;overflow-y:auto;border:1px solid #1e2d45;border-radius:6px;padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:3px"></div>
+      </div>
+      <!-- Visibility -->
+      <div class="form-field"><label>Visibility <span style="font-size:10px;color:#4a6fa5">— who can see this benefit</span></label>
+        <select id="br_visibility">
+          <option value="all">All staff — everyone sees it (ineligible see condition progress)</option>
+          <option value="eligible_only">Eligible only — hidden from staff who don't qualify</option>
+        </select>
       </div>
       <!-- Claim Type -->
       <div class="form-row">
@@ -1239,7 +1246,6 @@ body{position:relative}
         </div>
         <div id="benefitTabs" style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">
           <button class="btn sm primary" id="bt-my" onclick="switchBenefitTab('my')">My Benefits</button>
-          <button class="btn sm" id="bt-claim" onclick="switchBenefitTab('claim')">Claim</button>
           <button class="btn sm" id="bt-history" onclick="switchBenefitTab('history')">History</button>
         </div>
         <div id="benefitTabContent"></div>
@@ -6684,75 +6690,128 @@ async function loadBenefitPage(){
 }
 
 function switchBenefitTab(tab){
-  ['my','claim','history'].forEach(function(t){
+  ['my','history'].forEach(function(t){
     var b=document.getElementById('bt-'+t);
     if(b)b.className='btn sm'+(t===tab?' primary':'');
   });
   if(tab==='my')loadMyBenefits();
-  else if(tab==='claim')loadClaimableBenefits();
   else if(tab==='history')loadBenefitHistory();
 }
 
 async function loadMyBenefits(){
-  var now=new Date();var yr=now.getFullYear();
-  var records=await sbGet('benefit_records','username=eq.'+encodeURIComponent(currentUser.username)+'&period_year=eq.'+yr+'&order=created_at.desc&select=*');
-  var rules=await sbGet('benefit_rules','select=id,name,period,trigger_type,payout_type,payout_amount,claim_type,claim_limit,min_attendance_rate,min_performance_tasks,min_tenure_months,tenure_effective_next_month');
-  var ruleMap={};rules.forEach(function(r){ruleMap[r.id]=r;});
-  var allClaimed=await sbGet('benefit_records','period_year=eq.'+yr+'&status=neq.rejected&select=rule_id');
+  var now=new Date();var yr=now.getFullYear();var mo=now.getMonth()+1;
+  var isAdmin=currentUser.role==='admin';
+  var rules=await sbGet('benefit_rules','is_active=eq.true&order=name.asc&select=*');
+  var myRecords=await sbGet('benefit_records','username=eq.'+encodeURIComponent(currentUser.username)+'&period_year=eq.'+yr+'&select=*');
+  var myRecMap={};myRecords.forEach(function(r){myRecMap[r.rule_id]=r;});
+  var allClaimed=await sbGet('benefit_records','period_year=eq.'+yr+'&period_month=eq.'+mo+'&status=neq.rejected&select=rule_id');
   var claimedCounts={};allClaimed.forEach(function(r){claimedCounts[r.rule_id]=(claimedCounts[r.rule_id]||0)+1;});
-  if(!records.length){
-    document.getElementById('benefitTabContent').innerHTML='<div class="empty-state"><div class="icon">🎁</div><p>No benefits for '+yr+' yet</p></div>';
-    return;
-  }
-  var html='<div style="display:flex;flex-direction:column;gap:8px">';
-  records.forEach(function(rec){
-    var rule=ruleMap[rec.rule_id]||{};
-    var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171',cancelled:'#6b8ab0'}[rec.status]||'#4a6fa5';
-    var stLabel={
-      pending:rec.claim_type==='auto'?'⏳ Pending review':'⏳ Awaiting approval',
-      approved:'✅ Approved — pending payout',
-      paid:'💜 Paid',
-      rejected:'❌ Rejected',
-      cancelled:'🚫 Cancelled'
-    }[rec.status]||rec.status;
-    var totalClaimed=claimedCounts[rec.rule_id]||0;
-    var limit=rule.claim_limit||0;
-    var condDesc=rule.name?describeTriggers(rule):'';
-    // Quota bar
-    var quotaHtml='<div style="margin-top:6px;padding:6px 8px;background:#0a0f1a;border-radius:6px">';
-    quotaHtml+='<div style="font-size:11px;font-weight:600;color:#f0f6fc;margin-bottom:4px">🏆 RM '+parseFloat(rule.payout_amount||rec.amount||0).toFixed(2)+' per person &nbsp;|&nbsp; <span style="color:#4a6fa5;font-weight:400">'+(rule.period||rec.claim_type||'')+'</span></div>';
-    if(condDesc)quotaHtml+='<div style="font-size:11px;color:#60a5fa;margin-bottom:4px">📋 Conditions: '+esc(condDesc)+'</div>';
-    if(limit>0){
-      var pct=Math.min(100,Math.round(totalClaimed/limit*100));
-      var remaining=Math.max(0,limit-totalClaimed);
-      quotaHtml+='<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:3px"><span>Spots taken (all staff)</span><span style="color:'+(totalClaimed>=limit?'#ef4444':'#34d399')+';font-weight:600">'+totalClaimed+' / '+limit+'</span></div>'
-        +'<div style="background:#1e2d45;border-radius:4px;height:5px"><div style="background:'+(totalClaimed>=limit?'#ef4444':'#34d399')+';width:'+pct+'%;height:5px;border-radius:4px"></div></div>'
-        +(remaining>0?'<div style="font-size:10px;color:#4a6fa5;margin-top:2px">'+remaining+' spot'+(remaining>1?'s':'')+' remaining</div>':'');
-    } else {
-      quotaHtml+='<div style="font-size:10px;color:#4a6fa5">Unlimited · '+totalClaimed+' claimed so far (all staff)</div>';
+  var from=yr+'-'+String(mo).padStart(2,'0')+'-01';
+  var lastDay=new Date(yr,mo,0).getDate();
+  var to=yr+'-'+String(mo).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+  var myAtt=await sbGet('attendance','username=eq.'+encodeURIComponent(currentUser.username)+'&date=gte.'+from+'&date=lte.'+to+'&select=date,status,check_in,check_out,check_in_2,check_out_2');
+  var s1Days=myAtt.filter(function(a){return a.check_in&&a.check_out;}).length;
+  var absentDays=myAtt.filter(function(a){return a.status==='absent';}).length;
+  var workDays=Math.max(s1Days+absentDays,lastDay-Math.ceil(lastDay/7)*2,1);
+  var attRate=s1Days/workDays;
+  var myTasks=await sbGet('tasks','status=eq.completed&deleted_at=is.null&or=(workers.cs.["'+currentUser.username+'"],assigned_to.eq.'+encodeURIComponent(currentUser.username)+')&completed_at=gte.'+from+'T00:00:00Z&select=id');
+  var taskCount=myTasks.length;
+  var tenureMonths=currentUser.joined_date?(Date.now()-new Date(currentUser.joined_date).getTime())/(1000*60*60*24*30.44):0;
+  if(!rules.length){document.getElementById('benefitTabContent').innerHTML='<div class="empty-state"><div class="icon">🎁</div><p>No benefits available</p></div>';return;}
+  var html='<div style="display:flex;flex-direction:column;gap:10px">';
+  rules.forEach(function(r){
+    var vis=r.visibility||'all';
+    var triggers=r.trigger_type||'unconditional';
+    try{triggers=JSON.parse(triggers);}catch(e){triggers=[triggers];}
+    if(!Array.isArray(triggers))triggers=[triggers];
+    var isUnconditional=triggers.indexOf('unconditional')>=0;
+    var condResults=[];var allMet=true;
+    if(!isUnconditional){
+      if(triggers.indexOf('full_attendance')>=0){
+        var fa=absentDays===0;if(!fa)allMet=false;
+        condResults.push({label:'Full Attendance',met:fa,progress:Math.round((1-absentDays/Math.max(1,workDays))*100),detail:(fa?'No absences':'Absent '+absentDays+' day'+(absentDays>1?'s':'')+' this month')});
+      }
+      if(triggers.indexOf('attendance_rate')>=0){
+        var minRate=parseFloat(r.min_attendance_rate)||0.9;
+        var ar=attRate>=minRate;if(!ar)allMet=false;
+        condResults.push({label:'Attendance Rate',met:ar,progress:Math.round(attRate/minRate*100),detail:Math.round(attRate*100)+'% / '+Math.round(minRate*100)+'% required'});
+      }
+      if(triggers.indexOf('performance')>=0){
+        var minT=r.min_performance_tasks||1;
+        var pt=taskCount>=minT;if(!pt)allMet=false;
+        condResults.push({label:'Tasks Completed',met:pt,progress:Math.round(taskCount/minT*100),detail:taskCount+' / '+minT+' tasks this month'});
+      }
+      if(triggers.indexOf('tenure')>=0){
+        var minM=r.min_tenure_months||1;
+        var te=tenureMonths>=minM;if(!te)allMet=false;
+        condResults.push({label:'Tenure',met:te,progress:Math.round(tenureMonths/minM*100),detail:Math.floor(tenureMonths)+' / '+minM+' months'+(r.tenure_effective_next_month?' (effective next month)':'')});
+      }
     }
-    quotaHtml+='</div>';
-    // Can cancel if manual + pending
-    var canCancel=rec.claim_type==='manual'&&rec.status==='pending';
+    if(vis==='eligible_only'&&!allMet&&!isAdmin)return;
+    var rec=myRecMap[r.id];
+    var totalClaimed=claimedCounts[r.id]||0;
+    var limit=r.claim_limit||0;
+    var isFull=limit>0&&totalClaimed>=limit;
+    var canClaim=!isAdmin&&allMet&&!rec&&!isFull&&r.claim_type==='manual';
+    // Condition progress
+    var condHtml='';
+    condResults.forEach(function(c){
+      var pct=Math.min(100,c.progress||0);
+      var col=c.met?'#34d399':'#f59e0b';
+      condHtml+='<div style="margin-bottom:5px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">'
+        +'<span style="color:'+col+'">'+(c.met?'\u2713 ':'\u26a0 ')+c.label+'</span>'
+        +'<span style="color:#4a6fa5">'+c.detail+'</span></div>'
+        +'<div style="background:#1e2d45;border-radius:99px;height:4px">'
+        +'<div style="background:'+col+';width:'+pct+'%;height:4px;border-radius:99px"></div></div></div>';
+    });
+    // Status if already claimed
+    var statusHtml='';
+    if(rec){
+      var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171',cancelled:'#6b8ab0'}[rec.status]||'#4a6fa5';
+      var stLabel={pending:'\u23f3 Pending',approved:'\u2705 Approved',paid:'\ud83d\udc9c Paid',rejected:'\u274c Rejected',cancelled:'\ud83d\udeab Cancelled'}[rec.status]||rec.status;
+      statusHtml='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding:5px 8px;background:#0a0f1a;border-radius:6px">'
+        +'<span style="font-size:11px;color:'+stColor+'">'+stLabel+'</span>'
+        +'<span style="font-size:13px;font-weight:700;color:#34d399">RM '+parseFloat(rec.amount||0).toFixed(2)+'</span></div>';
+      if(rec.status==='pending'&&r.claim_type==='manual'){
+        statusHtml+='<button class="btn sm danger" style="width:100%;margin-top:4px;font-size:11px" onclick="cancelBenefitClaim('+rec.id+')">Withdraw</button>';
+      }
+    }
+    // Quota
+    var quotaHtml='';
+    if(limit>0){
+      var qpct=Math.min(100,Math.round(totalClaimed/limit*100));
+      var rem=limit-totalClaimed;
+      quotaHtml='<div style="margin-top:6px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:2px">'
+        +'<span>Spots claimed (all staff)</span>'
+        +'<span style="color:'+(isFull?'#ef4444':'#34d399')+'">'+totalClaimed+' / '+limit+'</span></div>'
+        +'<div style="background:#1e2d45;border-radius:99px;height:4px">'
+        +'<div style="background:'+(isFull?'#ef4444':'#34d399')+';width:'+qpct+'%;height:4px;border-radius:99px"></div></div>'
+        +(isFull?'<div style="font-size:10px;color:#ef4444;margin-top:2px">Quota full</div>'
+          :(rem<=3?'<div style="font-size:10px;color:#f59e0b;margin-top:2px">Only '+rem+' spot'+(rem>1?'s':'')+' left</div>':''))
+        +'</div>';
+    }
+    var ineligNote=vis==='all'&&!allMet&&!isAdmin&&!isUnconditional
+      ?'<div style="font-size:10px;color:#f59e0b;margin-top:5px;padding:4px 8px;background:#1a1200;border-radius:4px">\u26a0 Conditions not met \u2014 eligible staff only</div>':'';
     html+='<div class="card" style="padding:10px 12px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
       +'<div style="flex:1">'
-      +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(rule.name||'Benefit')+'</div>'
-      +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+(rec.period_year||'')+( rec.period_month?' / '+String(rec.period_month).padStart(2,'0'):'')+'</div>'
-      +quotaHtml
-      +(rec.notes?'<div style="font-size:11px;color:#4a6fa5;margin-top:4px;font-style:italic">'+esc(rec.notes)+'</div>':'')
+      +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.name)+'</div>'
+      +(r.description?'<div style="font-size:11px;color:#4a6fa5;margin-top:1px">'+esc(r.description)+'</div>':'')
+      +'<div style="font-size:11px;color:#4a6fa5;margin-top:3px">RM '+parseFloat(r.payout_amount||0).toFixed(2)+' \u00b7 '+r.period+'</div>'
       +'</div>'
-      +'<div style="text-align:right;flex-shrink:0">'
-      +'<div style="font-size:16px;font-weight:700;color:#34d399">RM '+parseFloat(rec.amount||0).toFixed(2)+'</div>'
-      +'<div style="font-size:11px;color:'+stColor+';font-weight:600;margin-top:2px">'+stLabel+'</div>'
-      +(canCancel?'<button class="btn sm danger" style="margin-top:6px;font-size:10px" onclick="cancelBenefitClaim('+rec.id+')">Withdraw</button>':'')
-      +((rec.status==='cancelled'||rec.status==='rejected')?'<button class="btn sm danger" style="margin-top:6px;font-size:10px" onclick="deleteMyBenefitRecord('+rec.id+')">🗑️ Remove</button>':'')
-      +'</div></div></div>';
+      +(isAdmin?'<span style="font-size:10px;color:#4a6fa5;padding:2px 6px;background:#0a0f1a;border-radius:4px;flex-shrink:0">View only</span>'
+        :canClaim?'<button class="btn sm success" onclick="claimBenefit('+r.id+')" style="flex-shrink:0">Claim</button>'
+        :(!rec&&r.claim_type==='manual'?'<button class="btn sm" disabled style="flex-shrink:0;opacity:.5">Not eligible</button>':''))
+      +'</div>'
+      +(condHtml?'<div style="margin-top:8px;padding:8px;background:#0a0f1a;border-radius:6px">'+condHtml+'</div>':'')
+      +quotaHtml+statusHtml+ineligNote
+      +'</div>';
   });
   html+='</div>';
   document.getElementById('benefitTabContent').innerHTML=html;
 }
-
 async function deleteMyBenefitRecord(id){
   if(!confirm('Remove this record from your list?'))return;
   await fetch(SB_URL+'/rest/v1/benefit_records?id=eq.'+id,{method:'DELETE',headers:sbH()});
@@ -7320,7 +7379,22 @@ async function publishBenefitRule(ruleId,mode){
 }
 
 // ── Benefit Rule Modal ──
-function onBrTriggerChange(){
+function onBrTriggerChange(changedId){
+  var uncond=document.getElementById('br_t_unconditional');
+  var others=['br_t_full_attendance','br_t_attendance_rate','br_t_performance','br_t_tenure'];
+  // Mutual exclusion
+  if(changedId==='br_t_unconditional'&&uncond.checked){
+    others.forEach(function(id){var el=document.getElementById(id);if(el){el.checked=false;el.disabled=true;}});
+  } else if(changedId&&changedId!=='br_t_unconditional'){
+    var anyOther=others.some(function(id){var el=document.getElementById(id);return el&&el.checked;});
+    if(anyOther){uncond.checked=false;uncond.disabled=false;}
+    others.forEach(function(id){var el=document.getElementById(id);if(el)el.disabled=false;});
+  } else {
+    // Reset disabled state if nothing checked
+    var anyOther2=others.some(function(id){var el=document.getElementById(id);return el&&el.checked;});
+    if(!anyOther2&&!uncond.checked){others.forEach(function(id){var el=document.getElementById(id);if(el)el.disabled=false;});}
+    if(!anyOther2){uncond.disabled=false;}
+  }
   var hasRate=document.getElementById('br_t_attendance_rate').checked;
   var hasPerf=document.getElementById('br_t_performance').checked;
   var hasTenure=document.getElementById('br_t_tenure').checked;
@@ -7329,7 +7403,6 @@ function onBrTriggerChange(){
   document.getElementById('br_att_rate_wrap').style.display=hasRate?'':'none';
   document.getElementById('br_perf_wrap').style.display=hasPerf?'':'none';
   document.getElementById('br_tenure_wrap').style.display=hasTenure?'':'none';
-  // No mutual exclusivity — all conditions can be combined freely
 }
 function getBrTriggers(){
   var types=[];
@@ -7396,6 +7469,7 @@ async function openBenefitRuleModal(id){
   document.getElementById('br_perf_tasks').value='5';
   document.getElementById('br_tenure_months').value='3';
   document.getElementById('br_auto_publish').checked=false;
+  var brVis=document.getElementById('br_visibility');if(brVis)brVis.value='all';
   document.getElementById('brModalTitle').textContent='🎁 New Benefit Rule';
   onBrTriggerChange();onBrPayoutChange();onBrClaimChange();
   document.getElementById('br_applies_dept_wrap').style.display='none';
@@ -7425,6 +7499,7 @@ async function openBenefitRuleModal(id){
       document.getElementById('br_claim_type').value=r.claim_type||'auto';
       document.getElementById('br_claim_limit').value=r.claim_limit||0;
       document.getElementById('br_auto_publish').checked=!!r.auto_publish;
+      if(brVis)brVis.value=r.visibility||'all';
       if(r.min_attendance_rate)document.getElementById('br_att_rate').value=Math.round(r.min_attendance_rate*100);
       if(r.min_performance_tasks)document.getElementById('br_perf_tasks').value=r.min_performance_tasks;
       if(r.min_tenure_months)document.getElementById('br_tenure_months').value=r.min_tenure_months;
@@ -7465,6 +7540,7 @@ async function saveBenefitRule(){
     applies_to_users:appliesTo==='custom'?customUsers:[],
     claim_type:document.getElementById('br_claim_type').value,
     claim_limit:parseInt(document.getElementById('br_claim_limit').value)||0,
+    visibility:document.getElementById('br_visibility').value||'all',
     auto_publish:document.getElementById('br_auto_publish').checked,
     min_attendance_rate:hasRate?parseFloat(document.getElementById('br_att_rate').value)/100:null,
     min_performance_tasks:hasPerf?parseInt(document.getElementById('br_perf_tasks').value)||null:null,
