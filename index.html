@@ -551,7 +551,7 @@ body{position:relative}
       <div class="form-row">
         <div class="form-field"><label>Name</label><input type="text" id="br_name" placeholder="e.g. Full Attendance Bonus"></div>
         <div class="form-field"><label>Period</label>
-          <select id="br_period">
+          <select id="br_period" onchange="onBrPeriodChange()">
             <option value="monthly">Monthly</option>
             <option value="quarterly">Quarterly</option>
             <option value="yearly">Yearly</option>
@@ -579,14 +579,28 @@ body{position:relative}
         </div>
       </div>
       <!-- Payout -->
-      <div class="form-row">
-        <div class="form-field"><label>Payout Type</label>
-          <select id="br_payout_type" onchange="onBrPayoutChange()">
-            <option value="fixed">Fixed Amount (RM)</option>
-            <option value="percentage">% of Base Salary</option>
-          </select>
-        </div>
-        <div class="form-field" id="br_amount_wrap"><label>Amount (RM)</label><input type="number" id="br_amount" min="0" step="0.01" value="0" placeholder="0.00"></div>
+      <div class="form-field"><label>Benefit Type</label>
+        <select id="br_payout_type" onchange="onBrPayoutChange()">
+          <option value="cash">💵 Cash (RM)</option>
+          <option value="voucher">🎫 Voucher (RM value)</option>
+          <option value="leave">🌴 Extra Leave (days)</option>
+          <option value="item">🎁 Item / Gift (description)</option>
+          <option value="points">⭐ Points</option>
+          <option value="custom">📝 Custom (description)</option>
+        </select>
+      </div>
+      <div id="br_amount_wrap" class="form-field"><label id="br_amount_label">Amount (RM)</label>
+        <input type="number" id="br_amount" min="0" step="0.01" value="0" placeholder="0.00">
+      </div>
+      <div id="br_days_wrap" class="form-field" style="display:none"><label>Days</label>
+        <input type="number" id="br_days" min="1" step="1" value="1" placeholder="1">
+      </div>
+      <div id="br_desc_custom_wrap" class="form-field" style="display:none"><label>Description / Item Name</label>
+        <input type="text" id="br_payout_desc" placeholder="e.g. Company T-Shirt, RM 50 Grab voucher">
+      </div>
+      <!-- Due date for one-time benefits -->
+      <div id="br_due_date_wrap" class="form-field" style="display:none"><label>Due Date <span style="font-size:10px;color:#4a6fa5">— last day to claim (one-time only)</span></label>
+        <input type="date" id="br_due_date">
       </div>
       <!-- Applies To -->
       <div class="form-field"><label>Applies To</label>
@@ -7084,16 +7098,29 @@ async function loadMyBenefits(){
       }
     }
     if(vis==='eligible_only'&&!allMet&&!isAdmin)return;
+    // Due date check for one-time benefits
+    var todayStrB=now.toISOString().slice(0,10);
+    var isExpired=r.period==='once'&&r.due_date&&r.due_date<todayStrB;
+    if(isExpired&&!isAdmin)return;// hide expired one-time benefits from staff
     var rec=myRecMap[r.id];
     var totalClaimed=claimedCounts[r.id]||0;
     var limit=r.claim_limit||0;
     var isFull=limit>0&&totalClaimed>=limit;
-    var canClaim=!isAdmin&&allMet&&!rec&&!isFull&&r.claim_type==='manual';
-    // Deduction calculation
-    var baseAmt=parseFloat(r.payout_amount||0);
-    var deductLate=calcDeduction(baseAmt,'late',lateTimes);
-    var deductEarly=calcDeduction(baseAmt,'early_leave',earlyTimes);
-    var deductAbsent=calcDeduction(baseAmt,'absent',absentDays);
+    var canClaim=!isAdmin&&allMet&&!rec&&!isFull&&r.claim_type==='manual'&&!isExpired;
+    // Payout display
+    var pt=r.payout_type||'cash';
+    var payoutLabel='';
+    if(pt==='cash')payoutLabel='💵 RM '+parseFloat(r.payout_amount||0).toFixed(2);
+    else if(pt==='voucher')payoutLabel='🎫 RM '+parseFloat(r.payout_amount||0).toFixed(2)+' voucher';
+    else if(pt==='leave')payoutLabel='🌴 '+(r.payout_days||1)+' extra day'+(r.payout_days>1?'s':'')+' leave';
+    else if(pt==='points')payoutLabel='⭐ '+(r.payout_amount||0)+' points';
+    else payoutLabel='🎁 '+(r.payout_description||'See admin for details');
+    var isMonetary=(pt==='cash'||pt==='voucher'||pt==='points');
+    // Deduction calculation (only for monetary types)
+    var baseAmt=isMonetary?parseFloat(r.payout_amount||0):0;
+    var deductLate=isMonetary?calcDeduction(baseAmt,'late',lateTimes):0;
+    var deductEarly=isMonetary?calcDeduction(baseAmt,'early_leave',earlyTimes):0;
+    var deductAbsent=isMonetary?calcDeduction(baseAmt,'absent',absentDays):0;
     var totalDeduct=Math.min(baseAmt,deductLate+deductEarly+deductAbsent);
     var netAmt=Math.max(0,baseAmt-totalDeduct);
     // Deduction breakdown HTML
@@ -7108,7 +7135,7 @@ async function loadMyBenefits(){
     }
     // Summary amount bar
     var amtHtml='';
-    if(allMet&&baseAmt>0){
+    if(allMet&&isMonetary&&baseAmt>0){
       var netPct=Math.round(netAmt/baseAmt*100);
       amtHtml='<div style="margin-top:8px;padding:8px;background:#0a0f1a;border-radius:6px">'
         +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px">'
@@ -7170,7 +7197,10 @@ async function loadMyBenefits(){
       +'<div style="flex:1">'
       +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(r.name)+'</div>'
       +(r.description?'<div style="font-size:11px;color:#4a6fa5;margin-top:1px">'+esc(r.description)+'</div>':'')
-      +'<div style="font-size:11px;color:#4a6fa5;margin-top:3px">RM '+parseFloat(r.payout_amount||0).toFixed(2)+' \u00b7 '+r.period+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5;margin-top:3px">'+esc(payoutLabel)+' · '+r.period
+        +(r.due_date?' · <span style="color:#f59e0b">Due '+fmtDate(r.due_date)+'</span>':'')
+        +(isExpired?' · <span style="color:#f87171">Expired</span>':'')
+      +'</div>'
       +'</div>'
       +(isAdmin?'<span style="font-size:10px;color:#4a6fa5;padding:2px 6px;background:#0a0f1a;border-radius:4px;flex-shrink:0">View only</span>'
         :canClaim?'<button class="btn sm success" onclick="claimBenefit('+r.id+')" style="flex-shrink:0">Claim</button>'
@@ -7231,7 +7261,13 @@ async function loadClaimableBenefits(){
     // Quota: shows how many people (across all staff) have claimed this benefit
     var quotaHtml='<div style="margin-top:6px;padding:6px 8px;background:#0a0f1a;border-radius:6px">';
     quotaHtml+='<div style="font-size:11px;font-weight:600;color:#f0f6fc;margin-bottom:4px">'
-      +'🏆 RM '+parseFloat(r.payout_amount||0).toFixed(2)+' per person &nbsp;|&nbsp; '
+      +'🏆 '+(function(){var pt=r.payout_type||'cash';
+        if(pt==='cash')return 'RM '+parseFloat(r.payout_amount||0).toFixed(2);
+        if(pt==='voucher')return 'RM '+parseFloat(r.payout_amount||0).toFixed(2)+' voucher';
+        if(pt==='leave')return (r.payout_days||1)+' day(s) leave';
+        if(pt==='points')return (r.payout_amount||0)+' pts';
+        return r.payout_description||'Custom';
+      })()+' per person &nbsp;|&nbsp; '
       +'<span style="color:#4a6fa5;font-weight:400">'+r.period+'</span></div>';
     quotaHtml+='<div style="font-size:11px;color:#60a5fa;margin-bottom:4px">📋 Conditions: '+esc(condDesc)+'</div>';
     if(limit>0){
@@ -7830,7 +7866,31 @@ function setBrTriggers(types){
   onBrTriggerChange();
 }
 function onBrPayoutChange(){
-  // Fixed amount only — percentage removed
+  var t=document.getElementById('br_payout_type').value;
+  var amtWrap=document.getElementById('br_amount_wrap');
+  var daysWrap=document.getElementById('br_days_wrap');
+  var descWrap=document.getElementById('br_desc_custom_wrap');
+  var lbl=document.getElementById('br_amount_label');
+  // cash/voucher/points → show amount
+  // leave → show days
+  // item/custom → show description
+  if(t==='cash'||t==='voucher'){
+    amtWrap.style.display='';daysWrap.style.display='none';descWrap.style.display='none';
+    if(lbl)lbl.textContent=t==='cash'?'Amount (RM)':'Voucher Value (RM)';
+  } else if(t==='points'){
+    amtWrap.style.display='';daysWrap.style.display='none';descWrap.style.display='none';
+    if(lbl)lbl.textContent='Points';
+  } else if(t==='leave'){
+    amtWrap.style.display='none';daysWrap.style.display='';descWrap.style.display='none';
+  } else {
+    // item / custom
+    amtWrap.style.display='none';daysWrap.style.display='none';descWrap.style.display='';
+  }
+}
+function onBrPeriodChange(){
+  var period=document.getElementById('br_period').value;
+  var dueWrap=document.getElementById('br_due_date_wrap');
+  if(dueWrap)dueWrap.style.display=period==='once'?'':'none';
 }
 function onBrClaimChange(){
   document.getElementById('br_limit_wrap').style.display=document.getElementById('br_claim_type').value==='manual'?'':'none';
@@ -7870,8 +7930,11 @@ async function openBenefitRuleModal(id){
   });
   document.getElementById('br_t_unconditional').checked=true;// default
   document.getElementById('br_period').value='monthly';
-  document.getElementById('br_payout_type').value='fixed';
+  document.getElementById('br_payout_type').value='cash';
   document.getElementById('br_amount').value='0';
+  if(document.getElementById('br_days'))document.getElementById('br_days').value='1';
+  if(document.getElementById('br_payout_desc'))document.getElementById('br_payout_desc').value='';
+  if(document.getElementById('br_due_date'))document.getElementById('br_due_date').value='';
   document.getElementById('br_applies_to').value='all';
   document.getElementById('br_claim_type').value='auto';
   document.getElementById('br_claim_limit').value='0';
@@ -7881,7 +7944,7 @@ async function openBenefitRuleModal(id){
   document.getElementById('br_auto_publish').checked=false;
   var brVis=document.getElementById('br_visibility');if(brVis)brVis.value='all';
   document.getElementById('brModalTitle').textContent='🎁 New Benefit Rule';
-  onBrTriggerChange();onBrPayoutChange();onBrClaimChange();
+  onBrTriggerChange();onBrPayoutChange();onBrPeriodChange();onBrClaimChange();
   document.getElementById('br_applies_dept_wrap').style.display='none';
   document.getElementById('br_applies_role_wrap').style.display='none';
   document.getElementById('br_applies_custom_wrap').style.display='none';
@@ -7913,12 +7976,16 @@ async function openBenefitRuleModal(id){
       if(r.min_attendance_rate)document.getElementById('br_att_rate').value=Math.round(r.min_attendance_rate*100);
       if(r.min_performance_tasks)document.getElementById('br_perf_tasks').value=r.min_performance_tasks;
       if(r.min_tenure_months)document.getElementById('br_tenure_months').value=r.min_tenure_months;
+      // New payout fields
+      document.getElementById('br_payout_type').value=r.payout_type||'cash';
+      if(document.getElementById('br_days'))document.getElementById('br_days').value=r.payout_days||1;
+      if(document.getElementById('br_payout_desc'))document.getElementById('br_payout_desc').value=r.payout_description||'';
+      if(document.getElementById('br_due_date'))document.getElementById('br_due_date').value=r.due_date||'';
       document.getElementById('brModalTitle').textContent='✏️ Edit Benefit Rule';
-      // Parse trigger_type (may be JSON array string or plain string)
       var savedTriggers=r.trigger_type||'unconditional';
       try{savedTriggers=JSON.parse(savedTriggers);}catch(e){savedTriggers=[savedTriggers];}
       setBrTriggers(Array.isArray(savedTriggers)?savedTriggers:[savedTriggers]);
-      onBrTriggerChange();onBrPayoutChange();onBrClaimChange();
+      onBrTriggerChange();onBrPayoutChange();onBrPeriodChange();onBrClaimChange();
       await onBrAppliesToChange();
     }
   }
@@ -7930,20 +7997,33 @@ async function saveBenefitRule(){
   var name=document.getElementById('br_name').value.trim();
   if(!name){toast('Name required','error');return;}
   var triggers=getBrTriggers();
-  var trigger=triggers[0];// primary trigger for backward compat
   var hasRate=triggers.indexOf('attendance_rate')>=0;
   var hasPerf=triggers.indexOf('performance')>=0;
   var hasTenure=triggers.indexOf('tenure')>=0;
   var payoutType=document.getElementById('br_payout_type').value;
+  var period=document.getElementById('br_period').value;
   var appliesTo=document.getElementById('br_applies_to').value;
   var customUsers=Array.from(document.querySelectorAll('.br_custom_ck:checked')).map(function(el){return el.value;});
+  // Payout value depends on type
+  var payoutAmount=0,payoutDays=null,payoutDesc=null;
+  if(['cash','voucher','points'].indexOf(payoutType)>=0){
+    payoutAmount=parseFloat(document.getElementById('br_amount').value)||0;
+  } else if(payoutType==='leave'){
+    payoutDays=parseInt(document.getElementById('br_days').value)||1;
+  } else {
+    payoutDesc=document.getElementById('br_payout_desc').value.trim();
+  }
+  var dueDate=period==='once'?(document.getElementById('br_due_date').value||null):null;
   var data={
     name:name,description:document.getElementById('br_desc').value.trim(),
     trigger_type:JSON.stringify(triggers),
-    period:document.getElementById('br_period').value,
-    payout_type:'fixed',
-    payout_amount:parseFloat(document.getElementById('br_amount').value)||0,
+    period:period,
+    payout_type:payoutType,
+    payout_amount:payoutAmount,
+    payout_days:payoutDays,
+    payout_description:payoutDesc,
     payout_percentage:null,
+    due_date:dueDate,
     applies_to:appliesTo,
     applies_to_dept:appliesTo==='department'?document.getElementById('br_applies_dept').value:null,
     applies_to_role_id:appliesTo==='role'?parseInt(document.getElementById('br_applies_role').value)||null:null,
