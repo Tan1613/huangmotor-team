@@ -1297,6 +1297,7 @@ body{position:relative}
           <button class="btn sm" id="abt-records" onclick="switchAdminBenefitTab('records')">Records</button>
           <button class="btn sm" id="abt-claims" onclick="switchAdminBenefitTab('claims')">🔔 Claims <span id="benefitClaimsBadge" style="display:none;background:#ef4444;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;margin-left:2px"></span></button>
           <button class="btn sm" id="abt-publish" onclick="switchAdminBenefitTab('publish')">Publish</button>
+          <button class="btn sm" id="abt-deductions" onclick="switchAdminBenefitTab('deductions')">Deductions</button>
         </div>
         <div id="adminBenefitContent"></div>
       </div>
@@ -1500,17 +1501,6 @@ body{position:relative}
           <button class="btn primary" onclick="openNewRuleModal()">+ Add Rule</button>
         </div>
         <div id="attRulesContent"></div>
-        <!-- Benefit Deduction Rules -->
-        <div class="card" style="margin-top:1.2rem">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-            <div>
-              <div style="font-size:13px;font-weight:600;color:#f0f6fc">Benefit Deduction Rules</div>
-              <div style="font-size:11px;color:#4a6fa5">Late / early leave / absent deductions from benefit payout</div>
-            </div>
-            <button class="btn sm primary" onclick="openDeductRuleModal()">+ Add</button>
-          </div>
-          <div id="deductRulesContent"><div style="font-size:11px;color:#4a6fa5">Loading...</div></div>
-        </div>
       </div>
 
       <!-- PERFORMANCE -->
@@ -3585,11 +3575,15 @@ async function loadMyAttendance(){
   var attMap={};atts.forEach(function(a){attMap[a.date]=a;});
   var yearLeaves=await sbGet('leave_requests','username=eq.'+encodeURIComponent(currentUser.username)+'&status=eq.approved&start_date=gte.'+year+'-01-01&select=leave_type,start_date,end_date');
   var usedAL=0,usedMC=0,usedUnpaid=0;
+  // Build leaveSet for this month
+  var leaveSet=new Set();
   yearLeaves.forEach(function(l){
     var days=Math.round((new Date(l.end_date)-new Date(l.start_date))/86400000)+1;
     if(l.leave_type==='annual')usedAL+=days;
     else if(l.leave_type==='medical')usedMC+=days;
     else if(l.leave_type==='unpaid')usedUnpaid+=days;
+    var d2=new Date(l.start_date);var end2=new Date(l.end_date);
+    while(d2<=end2){leaveSet.add(d2.toISOString().slice(0,10));d2.setDate(d2.getDate()+1);}
   });
   var hols=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date,is_paid');
   var holMap={};hols.forEach(function(h){holMap[h.date]=h.is_paid!==false;});// true=paid, false=unpaid
@@ -3598,29 +3592,36 @@ async function loadMyAttendance(){
   var isMuslimMale=currentUser.gender==='male'&&currentUser.ethnicity==='malay';
   // present counted as fractions: S1 complete=0.5, S2 complete=+0.5, S3 complete=+0.5 extra
   // workingDays: paid hol = 1, unpaid hol = excluded from denominator
+  var today=new Date();today.setHours(0,0,0,0);
+  var todayKey=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var presentScore=0,absent=0,onLeave=0,lateCount=0,earlyOutCount=0,workingDays=0;
   var rows=[];
   for(var d=1;d<=lastDay;d++){
     var key=year+'-'+month.toString().padStart(2,'0')+'-'+d.toString().padStart(2,'0');
     var dt=new Date(year,month-1,d);var dow=dt.getDay();
-    if(dow===0)continue;// Sunday always excluded
+    if(dow===0)continue;// skip Sunday only — Saturday is a work day
     var isHol=key in holMap;
     var isPaidHol=isHol&&holMap[key];
     var isUnpaidHol=isHol&&!holMap[key];
+    var isFuture=key>todayKey;
     var rec=attMap[key]||{};
-    var st=isHol?'holiday':(rec.status||'absent');
     if(isUnpaidHol){
-      // Unpaid holiday: excluded from workingDays entirely
       rows.push({key:key,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],st:'holiday',rec:rec,late:false,earlyOut:false,score:null,unpaidHol:true});
+      continue;
+    }
+    // Future days: show as remaining, don't count in stats
+    if(isFuture&&!isHol){
+      rows.push({key:key,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],st:'future',rec:{},late:false,earlyOut:false,score:null,isFuture:true});
       continue;
     }
     workingDays++;
     if(isPaidHol){
-      // Paid holiday: counts as full day present automatically
       presentScore+=1;
       rows.push({key:key,dow:['_','Mon','Tue','Wed','Thu','Fri','Sat'][dow],st:'holiday',rec:{},late:false,earlyOut:false,score:1,paidHol:true});
       continue;
     }
+    var isLeave=leaveSet.has(key);
+    var st=isLeave?'leave':(rec.status||(rec.check_in?'present':'absent'));
     var late=false,earlyOut=false;
     // S1 complete = both check_in AND check_out recorded
     var s1ok=!!(rec.check_in&&rec.check_out);
@@ -3663,6 +3664,14 @@ async function loadMyAttendance(){
     +'<thead><tr style="color:#4a6fa5;font-size:10px"><th style="text-align:left;padding:5px 3px;border-bottom:1px solid #1e2d45;white-space:nowrap">Date</th>'
     +'<th>Status</th><th>S1 In</th><th>S1 Out</th><th>S2 In</th><th>S2 Out</th><th>Flags</th></tr></thead><tbody>';
   rows.forEach(function(r){
+    if(r.isFuture){
+      logHtml+='<tr style="border-bottom:1px solid #0d1626;opacity:.35">'
+        +'<td style="padding:5px 3px;color:#4a6fa5;white-space:nowrap">'+r.key.slice(5)+' <span style="color:#2a3d55">'+r.dow+'</span></td>'
+        +'<td style="text-align:center;color:#2a3d55;font-size:10px">—</td>'
+        +'<td colspan="5" style="text-align:center;color:#2a3d55;font-size:10px">upcoming</td>'
+        +'</tr>';
+      return;
+    }
     var stC={present:'#34d399',absent:'#f87171',leave:'#fbbf24',holiday:'#a78bfa'}[r.st]||'#6b8ab0';
     var stLabel=r.paidHol?'holiday 💚':r.unpaidHol?'holiday 🔴':r.st;
     var scoreStr='';
@@ -5077,17 +5086,18 @@ async function loadPersonAttendance(){
     +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">S3 Out</th>'
     +'<th style="padding:6px 4px;border-bottom:1px solid #1e2d45">Flags</th>'
     +'</tr></thead><tbody>';
+  var todayKeyP=new Date().toISOString().slice(0,10);
   for(var d=1;d<=lastDay;d++){
     var key=month+'-'+String(d).padStart(2,'0');
     var dt=new Date(parseInt(month.split('-')[0]),parseInt(month.split('-')[1])-1,d);
     var dow=dt.getDay();
-    var isWeekend=dow===0;
+    var isWeekend=(dow===0);// Sunday only — Saturday is a work day
+    var isFutureDay=key>todayKeyP;
     var rec=attMap[key]||{};
     var isLeave=leaveSet.has(key);
     var isHol=!!holMap[key];
     var isHolPaid=isHol&&holMap[key].is_paid;
-    var st=isHol?'holiday':isLeave?'leave':(rec.status||'absent');
-    if(isWeekend&&!isHol)st='rest';
+    var st=isHol?'holiday':isLeave?'leave':(isWeekend?'rest':(isFutureDay&&!rec.check_in?'future':(rec.status||(rec.check_in?'present':'absent'))));
     // Half-day logic: if only S1 recorded and S2 missing → 0.5 day
     var hasS1=!!(rec.check_in||rec.check_out);
     var hasS2=!!(rec.check_in_2||rec.check_out_2);
@@ -5487,24 +5497,8 @@ async function loadAttRules(){
       +'</div>';
   }).join('');
   }// end else
-  loadDeductRules();
 }
 
-async function loadDeductRules(){
-  var el=document.getElementById('deductRulesContent');if(!el)return;
-  var rules=await sbGet('benefit_deduction_rules','order=type.asc,occurrence.asc').catch(function(){return[];});
-  if(!rules.length){el.innerHTML='<div style="font-size:11px;color:#4a6fa5">No deduction rules set. Staff get full benefit amount regardless of late/absent.</div>';return;}
-  var typeLabel={late:'Late',early_leave:'Early leave',absent:'Absent'};
-  el.innerHTML=rules.map(function(r){
-    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #0d1626">'
-      +'<span style="font-size:11px;color:#f0f6fc;min-width:80px">'+esc(typeLabel[r.type]||r.type)+'</span>'
-      +'<span style="font-size:11px;color:#4a6fa5">From '+r.occurrence+'× onwards</span>'
-      +'<span style="font-size:11px;color:#f87171;font-weight:600;margin-left:auto">-'+(r.deduct_value)+(r.deduct_type==='percentage'?'%':' RM')+'</span>'
-      +'<button class="btn sm" onclick="openDeductRuleModal('+r.id+')">Edit</button>'
-      +'<button class="btn sm danger" onclick="deleteDeductRule('+r.id+')">Del</button>'
-      +'</div>';
-  }).join('');
-}
 async function openDeductRuleModal(id){
   document.getElementById('dr_id').value=id||'';
   document.getElementById('deductRuleTitle').textContent=id?'✏️ Edit Deduction Rule':'➕ Deduction Rule';
@@ -5540,13 +5534,13 @@ async function saveDeductRule(){
   else{await sbPost('benefit_deduction_rules',data);}
   toast('Saved ✓','success');
   closeModal('deductRuleModal');
-  loadDeductRules();
+  loadDeductRulesAdmin();
 }
 async function deleteDeductRule(id){
   if(!confirm('Delete this deduction rule?'))return;
   await fetch(SB_URL+'/rest/v1/benefit_deduction_rules?id=eq.'+id,{method:'DELETE',headers:sbH()});
   toast('Deleted','success');
-  loadDeductRules();
+  loadDeductRulesAdmin();
 }
 async function openNewRuleModal(){
   await loadAllDepts();await loadAllUsersCache();
@@ -6989,7 +6983,7 @@ async function loadMyBenefits(){
   for(var d=1;d<=lastDay;d++){
     var dateStr=yr+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     var dow=new Date(yr,mo-1,d).getDay();
-    if(dow!==0&&dow!==6&&!holidaySet.has(dateStr))totalBizDays++;
+    if(dow!==0&&!holidaySet.has(dateStr))totalBizDays++;// Saturday counts as work day
   }
   // Business days so far up to today
   var todayDay=(now.getFullYear()===yr&&now.getMonth()+1===mo)?now.getDate():lastDay;
@@ -6997,32 +6991,37 @@ async function loadMyBenefits(){
   for(var d=1;d<=todayDay;d++){
     var dateStr=yr+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     var dow=new Date(yr,mo-1,d).getDay();
-    if(dow!==0&&dow!==6&&!holidaySet.has(dateStr))bizDaysSoFar++;
+    if(dow!==0&&!holidaySet.has(dateStr))bizDaysSoFar++;
   }
   var remainingBizDays=totalBizDays-bizDaysSoFar;
   // Classify attendance records (past days only, excl weekends + holidays)
   var presentDays=0,absentDays=0,leaveDays=0,lateTimes=0,earlyTimes=0;
-  myAtt.forEach(function(a){
-    if(a.date>todayStr)return;
-    var dow=new Date(a.date+'T12:00:00').getDay();
-    if(dow===0||dow===6)return;
-    if(holidaySet.has(a.date.slice(0,10)))return;
-    var s=a.status||'';
-    if(['annual','medical','emergency','unpaid'].indexOf(s)>=0){
-      leaveDays++;// leave = present in absence sense but NOT full attendance
-      return;
-    }
-    if(s==='absent'||(!a.check_in&&!a.check_out)){
-      absentDays++;return;
-    }
-    if(a.check_in&&a.check_out){
+  // Build a set of dates that have attendance records
+  var attDateSet=new Set(myAtt.map(function(a){return a.date.slice(0,10);}));
+  // Also fetch approved leaves this month for leave detection
+  var myLeaves=await sbGet('leave_requests','username=eq.'+encodeURIComponent(currentUser.username)+'&status=eq.approved&start_date=lte.'+to+'&end_date=gte.'+from+'&select=start_date,end_date');
+  var leaveSetB=new Set();
+  myLeaves.forEach(function(l){var d=new Date(l.start_date),e=new Date(l.end_date);while(d<=e){leaveSetB.add(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}});
+  // Go through each biz day up to today
+  for(var d=1;d<=todayDay;d++){
+    var dStr=yr+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var dow2=new Date(yr,mo-1,d).getDay();
+    if(dow2===0||holidaySet.has(dStr))continue;// skip Sunday + holidays only
+    if(dStr>todayStr)continue;// skip future
+    if(leaveSetB.has(dStr)){leaveDays++;continue;}
+    var a=myAtt.find(function(x){return x.date.slice(0,10)===dStr;});
+    if(!a||(!a.check_in&&!a.check_out)){
+      absentDays++;
+    } else if(a.check_in&&a.check_out){
       presentDays++;
       var ciMin=new Date(a.check_in).getHours()*60+new Date(a.check_in).getMinutes();
       var coMin=new Date(a.check_out).getHours()*60+new Date(a.check_out).getMinutes();
       if(ciMin>lateAfterMin)lateTimes++;
       if(coMin<earlyBeforeMin)earlyTimes++;
+    } else {
+      absentDays++;// has record but no check_in or check_out
     }
-  });
+  }
   // Full attendance = zero leave days AND zero absent days AND every biz day so far has a record
   var fullAtt=(leaveDays===0&&absentDays===0&&presentDays>=bizDaysSoFar);
   // Attendance rate = present days / total biz days (leave days count as 0, not excluded)
@@ -7334,7 +7333,7 @@ async function loadBenefitHistory(){
 
 // ── Admin Benefit Management ──
 function switchAdminBenefitTab(tab){
-  ['rules','records','claims','publish'].forEach(function(t){
+  ['rules','records','claims','publish','deductions'].forEach(function(t){
     var b=document.getElementById('abt-'+t);
     if(b)b.className='btn sm'+(t===tab?' primary':'');
   });
@@ -7342,8 +7341,47 @@ function switchAdminBenefitTab(tab){
   else if(tab==='records')loadBenefitRecords();
   else if(tab==='claims')loadBenefitClaims();
   else if(tab==='publish')loadBenefitPublish();
+  else if(tab==='deductions')loadDeductRulesAdmin();
 }
 
+async function loadDeductRulesAdmin(){
+  var el=document.getElementById('adminBenefitContent');
+  var rules=await sbGet('benefit_deduction_rules','order=type.asc,occurrence.asc').catch(function(){return[];});
+  var typeLabel={late:'Late arrival',early_leave:'Early leave',absent:'Absent'};
+  var typeColor={late:'#f59e0b',early_leave:'#f87171',absent:'#ef4444'};
+  var html='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div><div style="font-size:13px;font-weight:600;color:#f0f6fc">Benefit Deduction Rules</div>'
+    +'<div style="font-size:11px;color:#4a6fa5">Deductions applied to benefit payout when staff arrive late, leave early, or are absent</div></div>'
+    +'<button class="btn sm primary" onclick="openDeductRuleModal()">+ Add Rule</button></div>';
+  if(!rules.length){
+    html+='<div class="empty-state"><p>No deduction rules set — staff receive full benefit amount regardless of attendance behaviour.</p></div>';
+  } else {
+    html+='<div class="card" style="padding:0">';
+    var grouped={late:[],early_leave:[],absent:[]};
+    rules.forEach(function(r){if(grouped[r.type])grouped[r.type].push(r);});
+    Object.entries(grouped).forEach(function(kv){
+      var type=kv[0];var rlist=kv[1];
+      if(!rlist.length)return;
+      html+='<div style="padding:10px 12px;border-bottom:1px solid #0d1626">';
+      html+='<div style="font-size:11px;font-weight:600;color:'+(typeColor[type]||'#f0f6fc')+';margin-bottom:6px">'+esc(typeLabel[type]||type)+'</div>';
+      rlist.forEach(function(r){
+        html+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0">'
+          +'<span style="font-size:11px;color:#4a6fa5;min-width:140px">From '+r.occurrence+'× onwards:</span>'
+          +'<span style="font-size:12px;font-weight:600;color:#f87171">-'+(r.deduct_value)+(r.deduct_type==='percentage'?'% of benefit':'RM fixed')+'</span>'
+          +'<div style="margin-left:auto;display:flex;gap:4px">'
+          +'<button class="btn sm" onclick="openDeductRuleModal('+r.id+')">Edit</button>'
+          +'<button class="btn sm danger" onclick="deleteDeductRule('+r.id+')">Del</button>'
+          +'</div></div>';
+      });
+      html+='</div>';
+    });
+    html+='</div>';
+    html+='<div style="margin-top:10px;padding:8px 10px;background:#0a0f1a;border-radius:6px;font-size:11px;color:#4a6fa5">'
+      +'ℹ️ Deductions are cumulative and capped at the full benefit amount (net minimum RM 0). '
+      +'Example: benefit RM 200, late 2× at 10% = -RM 20, net RM 180.</div>';
+  }
+  el.innerHTML=html;
+}
 async function loadBenefitRules(){
   var rules=await sbGet('benefit_rules','order=created_at.desc');
   if(rules===null||rules.error){
