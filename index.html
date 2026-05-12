@@ -199,9 +199,9 @@ body{position:relative}
 .dept-badge{font-size:10px;padding:2px 7px;border-radius:4px;background:#1e2d45;color:#6b8ab0}
 
 /* ── PERFORMANCE ── */
-.perf-bar-wrap{display:grid;grid-template-columns:130px 1fr 48px;align-items:center;gap:10px;margin-bottom:6px}
+.perf-bar-wrap{display:grid;grid-template-columns:130px 1fr auto;align-items:center;gap:10px;margin-bottom:6px}
 .perf-name{font-size:12px;color:#c9d1d9;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.perf-bar-bg{height:8px;background:#1e2d45;border-radius:99px;overflow:hidden}
+.perf-bar-bg{height:8px;border-radius:99px;overflow:hidden}
 .perf-bar-fill{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
 .perf-count{font-size:11px;color:#4a6fa5;text-align:right;flex-shrink:0;line-height:1.3}
 
@@ -3629,64 +3629,92 @@ async function loadPerformance(){
   var visible=canAll?allUsers:(canDept?allUsers.filter(function(u){return u.department===currentUser.department;}):allUsers.filter(function(u){return u.username===currentUser.username;}));
   visible.forEach(function(u){var o=document.createElement('option');o.value=u.username;o.textContent=u.display_name||u.username;if(u.username===curVal)o.selected=true;sel.appendChild(o);});
   var total=tasks.length;
-  // Count by worker: use workers array first, fall back to assigned_to
+  // 3 roles per user per task:
+  // both     = created AND started work (full participant)
+  // created  = created but did NOT start work (someone else executed)
+  // executed = started work but did NOT create (pure executor)
   var byUser={};
-  var byUserOpened={};var byUserDone={};
+  var byBoth={};var byCreated={};var byExecuted={};
   var byUserCash={};var byUserInstall={};
   tasks.forEach(function(t){
     var executors=new Set();
     if(t.workers&&t.workers.length)t.workers.forEach(function(u){executors.add(u);});
     else if(t.assigned_to)executors.add(t.assigned_to);
+    var creator=t.assigned_by||null;
     var pmt=t.task_type==='sale'?paymentByTask[t.id]:null;
+    // Credit each executor
     executors.forEach(function(u){
-      byUserDone[u]=(byUserDone[u]||0)+1;
       byUser[u]=(byUser[u]||0);
+      if(u===creator){
+        // created AND executed = both
+        byBoth[u]=(byBoth[u]||0)+1;
+      } else {
+        // executed only
+        byExecuted[u]=(byExecuted[u]||0)+1;
+      }
       if(pmt==='cash')byUserCash[u]=(byUserCash[u]||0)+1;
       if(pmt==='installment')byUserInstall[u]=(byUserInstall[u]||0)+1;
     });
-    if(t.assigned_by){
-      byUserOpened[t.assigned_by]=(byUserOpened[t.assigned_by]||0)+1;
-      byUser[t.assigned_by]=(byUser[t.assigned_by]||0);
+    // Credit creator if they did NOT execute
+    if(creator&&!executors.has(creator)){
+      byUser[creator]=(byUser[creator]||0);
+      byCreated[creator]=(byCreated[creator]||0)+1;
     }
+  });
+  // Ensure all users appear in byUser
+  [byBoth,byCreated,byExecuted].forEach(function(obj){
+    Object.keys(obj).forEach(function(u){byUser[u]=(byUser[u]||0);});
   });
   // filter visibility
   if(!canAll&&!canDept){
-    [byUser,byUserOpened,byUserDone].forEach(function(obj){Object.keys(obj).forEach(function(u){if(u!==currentUser.username)delete obj[u];});});
+    [byUser,byBoth,byCreated,byExecuted,byUserCash,byUserInstall].forEach(function(obj){Object.keys(obj).forEach(function(u){if(u!==currentUser.username)delete obj[u];});});
   } else if(!canAll&&canDept){
-    [byUser,byUserOpened,byUserDone].forEach(function(obj){Object.keys(obj).forEach(function(u){if(!visibleUsernames.has(u))delete obj[u];});});
+    [byUser,byBoth,byCreated,byExecuted,byUserCash,byUserInstall].forEach(function(obj){Object.keys(obj).forEach(function(u){if(!visibleUsernames.has(u))delete obj[u];});});
   }
-  // Also hide "All Staff" dropdown option for own-only users
   var allOpt=sel.querySelector('option[value="all"]');
   if(allOpt&&!canAll&&!canDept)allOpt.remove();
-  var allTotals=Object.keys(byUser).map(function(u){return (byUserOpened[u]||0)+(byUserDone[u]||0);});
+  // maxVal = max total tasks per person
+  var allTotals=Object.keys(byUser).map(function(u){return (byBoth[u]||0)+(byCreated[u]||0)+(byExecuted[u]||0);});
   var maxVal=Math.max(1,...allTotals);
   document.getElementById('perfStats').innerHTML=
     '<div class="stat-card green"><div class="label">Tasks Completed</div><div class="value">'+total+'</div></div>'
     +'<div class="stat-card blue"><div class="label">Active Staff</div><div class="value">'+Object.keys(byUser).length+'</div></div>';
   var barEntries=Object.keys(byUser).map(function(username){
-    var opened=byUserOpened[username]||0;
-    var done=byUserDone[username]||0;
-    return {username:username,opened:opened,done:done,total:opened+done};
+    var both=byBoth[username]||0;
+    var created=byCreated[username]||0;
+    var executed=byExecuted[username]||0;
+    return {username:username,both:both,created:created,executed:executed,total:both+created+executed};
   }).sort(function(a,b){return b.total-a.total;});
   var bars=barEntries.map(function(entry){
-    var pctDone=Math.round(entry.done/maxVal*100);
     var u=allUsers.find(function(x){return x.username===entry.username;})||{};
-    var deptTag=u.department?'<span style="font-size:9px;color:#4a6fa5;margin-left:4px">'+esc(u.department)+'</span>':'';
+    var deptTag=u.department?'<span style="font-size:9px;color:#4a6fa5;margin-left:3px">'+esc(u.department)+'</span>':'';
+    // 3 segments stacked in proportion to maxVal
+    var pBoth=Math.round(entry.both/maxVal*100);
+    var pCreated=Math.round(entry.created/maxVal*100);
+    var pExec=Math.round(entry.executed/maxVal*100);
+    var pRest=Math.max(0,100-pBoth-pCreated-pExec);
+    // Right side: show each non-zero count with colour dot + number
+    var statsHtml='<div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;flex-wrap:nowrap">';
+    if(entry.both)statsHtml+='<span style="display:flex;align-items:center;gap:2px"><span style="width:6px;height:6px;border-radius:50%;background:#3b82f6;display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:#93c5fd;font-weight:500">'+entry.both+'</span></span>';
+    if(entry.created)statsHtml+='<span style="display:flex;align-items:center;gap:2px"><span style="width:6px;height:6px;border-radius:50%;background:#f59e0b;display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:#fcd34d;font-weight:500">'+entry.created+'</span></span>';
+    if(entry.executed)statsHtml+='<span style="display:flex;align-items:center;gap:2px"><span style="width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:#6ee7b7;font-weight:500">'+entry.executed+'</span></span>';
+    statsHtml+='</div>';
     return '<div class="perf-bar-wrap">'
-      +'<div class="perf-name" title="'+esc(u.display_name||entry.username)+(u.department?' ('+esc(u.department)+')':'')+'">'+esc(u.display_name||entry.username)+deptTag+'</div>'
-      +'<div class="perf-bar-bg">'
-      +'<div class="perf-bar-fill" style="width:'+pctDone+'%;background:#3b82f6"></div>'
+      +'<div class="perf-name" title="'+esc(u.display_name||entry.username)+'">'+esc(u.display_name||entry.username)+deptTag+'</div>'
+      +'<div class="perf-bar-bg" style="display:flex;overflow:hidden;border-radius:99px">'
+      +(pBoth?'<div style="width:'+pBoth+'%;background:#3b82f6;height:100%"></div>':'')
+      +(pCreated?'<div style="width:'+pCreated+'%;background:#f59e0b;height:100%"></div>':'')
+      +(pExec?'<div style="width:'+pExec+'%;background:#10b981;height:100%"></div>':'')
+      +(pRest?'<div style="flex:1;background:#1e2d45;height:100%"></div>':'')
       +'</div>'
-      +'<div class="perf-count">'
-      +(entry.done?'<span style="color:#93c5fd">'+entry.done+'</span>':'')
-      +(entry.opened?'<span style="display:block;color:#7c3aed;font-size:9px">+'+entry.opened+'</span>':'')
-      +'</div>'
+      +statsHtml
       +'</div>';
   }).join('');
   document.getElementById('perfBars').innerHTML=(bars||'<div class="empty-state"><p>No data</p></div>')
-    +'<div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">'
-    +'<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#4a6fa5"><span style="width:8px;height:8px;border-radius:99px;background:#3b82f6;display:inline-block"></span>Executed</span>'
-    +'<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#4a6fa5"><span style="width:8px;height:8px;border-radius:99px;background:#7c3aed;display:inline-block"></span>Opened</span>'
+    +'<div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#4a6fa5"><span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block"></span>Created &amp; executed</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#4a6fa5"><span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block"></span>Created only</span>'
+    +'<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#4a6fa5"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>Executed only</span>'
     +'</div>';
   // Tasks by Type — split sale into cash/installment
   var byType={};
