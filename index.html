@@ -3734,12 +3734,23 @@ async function loadPerformance(){
     +lgd(C.sc,'Sale · Cash')+lgd(C.si,'Sale · Install')+lgd(C.su,'Sale · Pending')
     +lgd(C.sa,'Sale Assist')+lgd(C.tb,'Task (own)')+lgd(C.tc,'Task created')+lgd(C.te,'Task exec')
     +'</div>';
-  // Tasks by Type — split sale into cash/installment
+  // Tasks by Type — sale split by: creator (cash/install/pending) vs assist (executor not creator)
   var byType={};
-  var totalCash=0;var totalInstall=0;var totalSaleUnknown=0;
+  var totalCash=0;var totalInstall=0;var totalSaleUnknown=0;var totalSaleAssist=0;
   tasks.forEach(function(t){
     if(t.task_type==='sale'){
       var pmt=paymentByTask[t.id];
+      // Check if this user is the creator of this task
+      // If filtering by specific user, use that; otherwise count all creators
+      var isCreator=true;// default when viewing all staff (aggregate)
+      if(fUser&&fUser!=='all'){
+        isCreator=(t.assigned_by===fUser);
+        var executors=new Set();
+        if(t.workers&&t.workers.length)t.workers.forEach(function(u){executors.add(u);});
+        else if(t.assigned_to)executors.add(t.assigned_to);
+        var isExecutor=executors.has(fUser);
+        if(isExecutor&&!isCreator){totalSaleAssist++;return;}
+      }
       if(pmt==='cash')totalCash++;
       else if(pmt==='installment')totalInstall++;
       else totalSaleUnknown++;
@@ -3749,8 +3760,16 @@ async function loadPerformance(){
   });
   if(totalCash)byType['sale · Cash']=totalCash;
   if(totalInstall)byType['sale · Installment']=totalInstall;
-  if(totalSaleUnknown)byType['sale']=totalSaleUnknown;
-  var typeColors={'sale · Cash':'#3b82f6','sale · Installment':'#8b5cf6','sale':'#10b981',maintenance:'#10b981',aftersales:'#f59e0b',general:'#6b7280'};
+  if(totalSaleUnknown)byType['sale · Pending']=totalSaleUnknown;
+  if(totalSaleAssist)byType['sale · Assist']=totalSaleAssist;
+  var typeColors={
+    'sale · Cash':'#3b82f6',
+    'sale · Installment':'#8b5cf6',
+    'sale · Pending':'#10b981',
+    'sale · Assist':'#f59e0b',
+    'sale':'#10b981',
+    maintenance:'#10b981',aftersales:'#f59e0b',general:'#6b7280'
+  };
   var typeTotals=Object.values(byType).reduce(function(a,b){return a+b;},0)||1;
   document.getElementById('perfTypes').innerHTML=Object.entries(byType).map(function(kv){
     var pct=Math.round(kv[1]/typeTotals*100);
