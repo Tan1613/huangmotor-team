@@ -6981,29 +6981,40 @@ async function loadMyBenefits(){
   var earlyBeforeMin=timeStrToMin((globalRule.check_out_1_early_before)||'18:00');
   // Deduction rules
   var deductRules=await sbGet('benefit_deduction_rules','order=type.asc,occurrence.asc').catch(function(){return[];});
-  // Count business days in full month
+  // Fetch public holidays this month
+  var holidays=await sbGet('holidays','date=gte.'+from+'&date=lte.'+to+'&select=date');
+  var holidaySet=new Set(holidays.map(function(h){return h.date.slice(0,10);}));
+  // Count business days in full month (excl weekends + public holidays)
   var totalBizDays=0;
   for(var d=1;d<=lastDay;d++){
+    var dateStr=yr+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     var dow=new Date(yr,mo-1,d).getDay();
-    if(dow!==0&&dow!==6)totalBizDays++;
+    if(dow!==0&&dow!==6&&!holidaySet.has(dateStr))totalBizDays++;
   }
-  // Count business days so far (up to today)
-  var todayDate=new Date(todayStr);
+  // Business days so far up to today
+  var todayDay=(now.getFullYear()===yr&&now.getMonth()+1===mo)?now.getDate():lastDay;
   var bizDaysSoFar=0;
-  for(var d=1;d<=Math.min(lastDay,now.getDate()+(now.getMonth()+1===mo&&now.getFullYear()===yr?0:lastDay));d++){
+  for(var d=1;d<=todayDay;d++){
+    var dateStr=yr+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     var dow=new Date(yr,mo-1,d).getDay();
-    if(dow!==0&&dow!==6)bizDaysSoFar++;
+    if(dow!==0&&dow!==6&&!holidaySet.has(dateStr))bizDaysSoFar++;
   }
   var remainingBizDays=totalBizDays-bizDaysSoFar;
-  // Classify past attendance days
-  var presentDays=0,absentDays=0,lateTimes=0,earlyTimes=0,leaveDays=0;
+  // Classify attendance records (past days only, excl weekends + holidays)
+  var presentDays=0,absentDays=0,leaveDays=0,lateTimes=0,earlyTimes=0;
   myAtt.forEach(function(a){
-    if(a.date>todayStr)return;// skip future
-    var dow=new Date(a.date).getDay();
-    if(dow===0||dow===6)return;// skip weekends
+    if(a.date>todayStr)return;
+    var dow=new Date(a.date+'T12:00:00').getDay();
+    if(dow===0||dow===6)return;
+    if(holidaySet.has(a.date.slice(0,10)))return;
     var s=a.status||'';
-    if(['annual','medical','emergency','unpaid'].indexOf(s)>=0){leaveDays++;return;}
-    if(s==='absent'){absentDays++;return;}
+    if(['annual','medical','emergency','unpaid'].indexOf(s)>=0){
+      leaveDays++;// leave = present in absence sense but NOT full attendance
+      return;
+    }
+    if(s==='absent'||(!a.check_in&&!a.check_out)){
+      absentDays++;return;
+    }
     if(a.check_in&&a.check_out){
       presentDays++;
       var ciMin=new Date(a.check_in).getHours()*60+new Date(a.check_in).getMinutes();
@@ -7012,7 +7023,11 @@ async function loadMyBenefits(){
       if(coMin<earlyBeforeMin)earlyTimes++;
     }
   });
+  // Full attendance = zero leave days AND zero absent days AND every biz day so far has a record
+  var fullAtt=(leaveDays===0&&absentDays===0&&presentDays>=bizDaysSoFar);
+  // Attendance rate = present days / total biz days (leave days count as 0, not excluded)
   var attRate=bizDaysSoFar>0?presentDays/bizDaysSoFar:1;
+  var requiredDays=bizDaysSoFar;// for display
   // Deduction calculator
   function calcDeduction(baseAmt,type,count){
     var rules=deductRules.filter(function(r){return r.type===type;}).sort(function(a,b){return b.occurrence-a.occurrence;});
@@ -7036,18 +7051,23 @@ async function loadMyBenefits(){
     var condResults=[];var allMet=true;
     if(!isUnconditional){
       if(triggers.indexOf('full_attendance')>=0){
-        var fa=absentDays===0;if(!fa)allMet=false;
+        var fa=fullAtt;if(!fa)allMet=false;
+        var faDetail=fa?'Full attendance — no leave or absences':
+          (leaveDays>0?'Leave taken: '+leaveDays+' day'+(leaveDays>1?'s':'')+' (leave = not full attendance)':
+          absentDays>0?'Absent: '+absentDays+' day'+(absentDays>1?'s':''):
+          'Incomplete records: '+presentDays+'/'+bizDaysSoFar+' days');
         condResults.push({label:'Full Attendance',met:fa,
-          progress:Math.round((1-absentDays/Math.max(1,bizDaysSoFar))*100),
-          detail:(fa?'No absences this month':'Absent '+absentDays+' day'+(absentDays>1?'s':'')+' · '+remainingBizDays+' working days left')});
+          progress:fa?100:Math.round(presentDays/Math.max(1,bizDaysSoFar)*100),
+          detail:faDetail+(remainingBizDays>0?' · '+remainingBizDays+' days left':'')});
       }
       if(triggers.indexOf('attendance_rate')>=0){
         var minRate=parseFloat(r.min_attendance_rate)||0.9;
         var ar=attRate>=minRate;if(!ar)allMet=false;
         condResults.push({label:'Attendance Rate',met:ar,
           progress:Math.min(100,Math.round(attRate/minRate*100)),
-          detail:Math.round(attRate*100)+'% / '+Math.round(minRate*100)+'% required'
-            +(remainingBizDays>0?' · '+remainingBizDays+' days remaining':'')});
+          detail:presentDays+' / '+bizDaysSoFar+' days = '+Math.round(attRate*100)+'% (need '+Math.round(minRate*100)+'%)'
+            +(leaveDays?' · '+leaveDays+' leave day'+(leaveDays>1?'s':'')+' counted as 0':'')
+            +(remainingBizDays>0?' · '+remainingBizDays+' days left':'')});
       }
       if(triggers.indexOf('performance')>=0){
         var minT=r.min_performance_tasks||1;
