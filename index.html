@@ -6558,45 +6558,61 @@ function switchBenefitTab(tab){
 async function loadMyBenefits(){
   var now=new Date();var yr=now.getFullYear();
   var records=await sbGet('benefit_records','username=eq.'+encodeURIComponent(currentUser.username)+'&period_year=eq.'+yr+'&order=created_at.desc&select=*');
-  var rules=await sbGet('benefit_rules','is_active=eq.true&select=id,name,period,trigger_type,payout_type,payout_amount,payout_percentage,claim_type,claim_limit');
+  var rules=await sbGet('benefit_rules','select=id,name,period,trigger_type,payout_type,payout_amount,claim_type,claim_limit,min_attendance_rate,min_performance_tasks,min_tenure_months,tenure_effective_next_month');
   var ruleMap={};rules.forEach(function(r){ruleMap[r.id]=r;});
-  // Get total claimed per rule this year (all staff, for quota display)
   var allClaimed=await sbGet('benefit_records','period_year=eq.'+yr+'&status=neq.rejected&select=rule_id');
   var claimedCounts={};allClaimed.forEach(function(r){claimedCounts[r.rule_id]=(claimedCounts[r.rule_id]||0)+1;});
-  var html='';
   if(!records.length){
-    html='<div class="empty-state"><div class="icon">🎁</div><p>No benefits for '+yr+' yet</p></div>';
-  } else {
-    html='<div style="display:flex;flex-direction:column;gap:8px">';
-    records.forEach(function(rec){
-      var rule=ruleMap[rec.rule_id]||{name:'Unknown Rule'};
-      var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171'}[rec.status]||'#4a6fa5';
-      var totalClaimed=claimedCounts[rec.rule_id]||0;
-      var limit=rule.claim_limit||0;
-      var pct2=limit>0?Math.min(100,Math.round(totalClaimed/limit*100)):0;
-      var quotaBlock='<div style="margin-top:6px">'
-        +'<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:3px">'
-        +'<span>已获得 / 奖励上限</span>'
-        +'<span style="color:'+(totalClaimed>0?'#34d399':'#4a6fa5')+';font-weight:600">'+totalClaimed+(limit>0?' / '+limit:' 人（不限量）')+'</span>'
-        +'</div>'
-        +(limit>0?'<div style="background:#1e2d45;border-radius:4px;height:5px"><div style="background:'+(totalClaimed>=limit?'#ef4444':'#34d399')+';width:'+pct2+'%;height:5px;border-radius:4px"></div></div>':'')
-        +'</div>';
-      html+='<div class="card" style="padding:10px 12px">'
-        +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
-        +'<div style="flex:1"><div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(rule.name)+'</div>'
-        +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+(rec.period_year||'')+( rec.period_month?' / '+String(rec.period_month).padStart(2,'0'):'')+'</div>'
-        +quotaBlock
-        +'</div>'
-        +'<div style="text-align:right;flex-shrink:0;margin-left:8px">'
-        +'<div style="font-size:14px;font-weight:700;color:#34d399">RM '+parseFloat(rec.amount||0).toFixed(2)+'</div>'
-        +'<span style="font-size:10px;color:'+stColor+';font-weight:600">'+rec.status.toUpperCase()+'</span>'
-        +'</div></div>'
-        +(rec.notes?'<div style="font-size:11px;color:#4a6fa5;margin-top:4px">'+esc(rec.notes)+'</div>':'')
-        +'</div>';
-    });
-    html+='</div>';
+    document.getElementById('benefitTabContent').innerHTML='<div class="empty-state"><div class="icon">🎁</div><p>No benefits for '+yr+' yet</p></div>';
+    return;
   }
+  var html='<div style="display:flex;flex-direction:column;gap:8px">';
+  records.forEach(function(rec){
+    var rule=ruleMap[rec.rule_id]||{};
+    var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171',cancelled:'#6b8ab0'}[rec.status]||'#4a6fa5';
+    var stLabel={pending:'⏳ Pending approval',approved:'✅ Approved',paid:'💜 Paid',rejected:'❌ Rejected',cancelled:'🚫 Cancelled'}[rec.status]||rec.status;
+    var totalClaimed=claimedCounts[rec.rule_id]||0;
+    var limit=rule.claim_limit||0;
+    var condDesc=rule.name?describeTriggers(rule):'';
+    // Quota bar
+    var quotaHtml='<div style="margin-top:6px;padding:6px 8px;background:#0a0f1a;border-radius:6px">';
+    quotaHtml+='<div style="font-size:11px;font-weight:600;color:#f0f6fc;margin-bottom:4px">🏆 RM '+parseFloat(rule.payout_amount||rec.amount||0).toFixed(2)+' per person &nbsp;|&nbsp; <span style="color:#4a6fa5;font-weight:400">'+(rule.period||rec.claim_type||'')+'</span></div>';
+    if(condDesc)quotaHtml+='<div style="font-size:11px;color:#60a5fa;margin-bottom:4px">📋 Conditions: '+esc(condDesc)+'</div>';
+    if(limit>0){
+      var pct=Math.min(100,Math.round(totalClaimed/limit*100));
+      var remaining=Math.max(0,limit-totalClaimed);
+      quotaHtml+='<div style="display:flex;justify-content:space-between;font-size:10px;color:#4a6fa5;margin-bottom:3px"><span>Spots taken (all staff)</span><span style="color:'+(totalClaimed>=limit?'#ef4444':'#34d399')+';font-weight:600">'+totalClaimed+' / '+limit+'</span></div>'
+        +'<div style="background:#1e2d45;border-radius:4px;height:5px"><div style="background:'+(totalClaimed>=limit?'#ef4444':'#34d399')+';width:'+pct+'%;height:5px;border-radius:4px"></div></div>'
+        +(remaining>0?'<div style="font-size:10px;color:#4a6fa5;margin-top:2px">'+remaining+' spot'+(remaining>1?'s':'')+' remaining</div>':'');
+    } else {
+      quotaHtml+='<div style="font-size:10px;color:#4a6fa5">Unlimited · '+totalClaimed+' claimed so far (all staff)</div>';
+    }
+    quotaHtml+='</div>';
+    // Can cancel if manual + pending
+    var canCancel=rec.claim_type==='manual'&&rec.status==='pending';
+    html+='<div class="card" style="padding:10px 12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+      +'<div style="flex:1">'
+      +'<div style="font-size:13px;font-weight:600;color:#f0f6fc">'+esc(rule.name||'Benefit')+'</div>'
+      +'<div style="font-size:11px;color:#4a6fa5;margin-top:2px">'+(rec.period_year||'')+( rec.period_month?' / '+String(rec.period_month).padStart(2,'0'):'')+'</div>'
+      +quotaHtml
+      +(rec.notes?'<div style="font-size:11px;color:#4a6fa5;margin-top:4px;font-style:italic">'+esc(rec.notes)+'</div>':'')
+      +'</div>'
+      +'<div style="text-align:right;flex-shrink:0">'
+      +'<div style="font-size:16px;font-weight:700;color:#34d399">RM '+parseFloat(rec.amount||0).toFixed(2)+'</div>'
+      +'<div style="font-size:11px;color:'+stColor+';font-weight:600;margin-top:2px">'+stLabel+'</div>'
+      +(canCancel?'<button class="btn sm danger" style="margin-top:6px;font-size:10px" onclick="cancelBenefitClaim('+rec.id+')">Withdraw</button>':'')
+      +'</div></div></div>';
+  });
+  html+='</div>';
   document.getElementById('benefitTabContent').innerHTML=html;
+}
+
+async function cancelBenefitClaim(id){
+  if(!confirm('Withdraw this benefit claim?\nYour spot will be returned.'))return;
+  await sbPatch('benefit_records',{id:id},{status:'cancelled',notes:'Withdrawn by staff on '+new Date().toLocaleDateString()});
+  toast('Claim withdrawn','success');
+  loadMyBenefits();
 }
 
 function describeTriggers(rule){
@@ -6837,7 +6853,8 @@ async function loadBenefitRecords(){
     var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171'}[rec.status]||'#4a6fa5';
     var actions='';
     if(rec.status==='pending')actions='<button class="btn sm success" style="padding:1px 7px;font-size:10px" onclick="approveBenefitRecord('+rec.id+')">✓</button> <button class="btn sm danger" style="padding:1px 7px;font-size:10px" onclick="rejectBenefitRecord('+rec.id+')">✗</button>';
-    if(rec.status==='approved')actions='<button class="btn sm" style="padding:1px 7px;font-size:10px;color:#a78bfa" onclick="markBenefitPaid('+rec.id+')">Mark Paid</button>';
+    if(rec.status==='approved')actions='<button class="btn sm" style="padding:1px 7px;font-size:10px;color:#a78bfa" onclick="markBenefitPaid('+rec.id+')">Mark Paid</button> <button class="btn sm danger" style="padding:1px 7px;font-size:10px" onclick="revokeBenefitRecord('+rec.id+')">Revoke</button>';
+    if(rec.status==='paid')actions='<button class="btn sm danger" style="padding:1px 7px;font-size:10px" onclick="revokeBenefitRecord('+rec.id+')">Revoke</button>';
     html+='<tr style="border-bottom:1px solid #0d1626">'
       +'<td style="padding:5px 6px;color:#e0e6f0">'+esc(u.display_name||rec.username)+'</td>'
       +'<td style="color:#4a6fa5">'+esc(rule.name)+'</td>'
@@ -6860,6 +6877,12 @@ async function rejectBenefitRecord(id){
   var reason=prompt('Reason for rejection:');if(reason===null)return;
   await sbPatch('benefit_records',{id:id},{status:'rejected',notes:reason,approved_by:currentUser.username,approved_at:new Date().toISOString()});
   toast('Rejected','success');loadBenefitRecords();
+}
+async function revokeBenefitRecord(id){
+  var reason=prompt('Reason for revoking this benefit record:');
+  if(reason===null)return;
+  await sbPatch('benefit_records',{id:id},{status:'cancelled',notes:'Revoked by '+(currentUser.display_name||currentUser.username)+': '+(reason.trim()||'No reason'),approved_by:currentUser.username});
+  toast('Record revoked','success');loadBenefitRecords();
 }
 async function markBenefitPaid(id){
   await sbPatch('benefit_records',{id:id},{status:'paid',paid_at:new Date().toISOString()});
