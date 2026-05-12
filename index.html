@@ -1865,6 +1865,8 @@ body{position:relative}
   <div class="more-item" onclick="openPage('mysales');closeMobileMore()"><span class="mi-icon">🏍️</span>My Sales</div>
   <div class="more-item" onclick="openPage('calendar');closeMobileMore()"><span class="mi-icon">📅</span>Calendar</div>
   <div class="more-item" onclick="openPage('leave');closeMobileMore()"><span class="mi-icon">🌴</span>Leave</div>
+  <div class="more-item" onclick="openPage('my-attendance');closeMobileMore()"><span class="mi-icon">🕐</span>My Attendance</div>
+  <div class="more-item" onclick="openPage('benefit');closeMobileMore()"><span class="mi-icon">🎁</span>Benefits</div>
   <div class="more-item" onclick="openPage('profile');closeMobileMore()"><span class="mi-icon">👤</span>My Profile</div>
   <div class="more-section" id="mnAdminSection" style="display:none">Admin</div>
   <div class="more-item" id="mn-admin-tasks" onclick="openPage('admin-tasks');closeMobileMore()" style="display:none"><span class="mi-icon">📊</span>All Tasks</div>
@@ -1873,6 +1875,11 @@ body{position:relative}
   <div class="more-item" id="mn-performance" onclick="openPage('performance');closeMobileMore()" style="display:none"><span class="mi-icon">📈</span>Performance</div>
   <div class="more-item" id="mn-admin-dept" onclick="openPage('admin-dept');closeMobileMore()" style="display:none"><span class="mi-icon">🏬</span>Departments</div>
   <div class="more-item" id="mn-admin-users" onclick="openPage('admin-users');closeMobileMore()" style="display:none"><span class="mi-icon">👥</span>Users</div>
+  <div class="more-item" id="mn-admin-roles" onclick="openPage('admin-roles');closeMobileMore()" style="display:none"><span class="mi-icon">🎭</span>Roles</div>
+  <div class="more-item" id="mn-admin-media" onclick="openPage('admin-media');closeMobileMore()" style="display:none"><span class="mi-icon">💾</span>Media</div>
+  <div class="more-item" id="mn-admin-benefits" onclick="openPage('admin-benefits');closeMobileMore()" style="display:none"><span class="mi-icon">🎁</span>Benefits Mgmt</div>
+  <div class="more-item" id="mn-admin-recurring" onclick="openPage('admin-recurring');closeMobileMore()" style="display:none"><span class="mi-icon">🔁</span>Recurring Tasks</div>
+  <div class="more-item" id="mn-admin-att-rules" onclick="openPage('admin-att-rules');closeMobileMore()" style="display:none"><span class="mi-icon">⚙</span>Att. Rules</div>
   <div class="more-item" id="mn-admin-media" onclick="openPage('admin-media');closeMobileMore()" style="display:none"><span class="mi-icon">💾</span>Media</div>
 </div>
 
@@ -1969,6 +1976,7 @@ async function afterLogin(){
   // Admin nav
   if(currentUser.role==='admin'){
     ['nav-admin-section','nav-admin-tasks','nav-admin-dept','nav-admin-leave','nav-admin-attendance','nav-performance','nav-admin-users','nav-admin-media','nav-admin-roles','nav-admin-recurring','nav-admin-benefits'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
+    ['mn-admin-tasks','mn-admin-attendance','mn-admin-leave','mn-admin-dept','mn-admin-users','mn-admin-roles','mn-admin-media','mn-admin-benefits','mn-admin-recurring','mn-admin-att-rules','mn-performance'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='';});
     document.getElementById('newAnnBtn').style.display='';
     showAdminMobileNav();
   } else {
