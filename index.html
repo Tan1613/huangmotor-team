@@ -6570,7 +6570,13 @@ async function loadMyBenefits(){
   records.forEach(function(rec){
     var rule=ruleMap[rec.rule_id]||{};
     var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171',cancelled:'#6b8ab0'}[rec.status]||'#4a6fa5';
-    var stLabel={pending:'⏳ Pending approval',approved:'✅ Approved',paid:'💜 Paid',rejected:'❌ Rejected',cancelled:'🚫 Cancelled'}[rec.status]||rec.status;
+    var stLabel={
+      pending:rec.claim_type==='auto'?'⏳ Pending review':'⏳ Awaiting approval',
+      approved:'✅ Approved — pending payout',
+      paid:'💜 Paid',
+      rejected:'❌ Rejected',
+      cancelled:'🚫 Cancelled'
+    }[rec.status]||rec.status;
     var totalClaimed=claimedCounts[rec.rule_id]||0;
     var limit=rule.claim_limit||0;
     var condDesc=rule.name?describeTriggers(rule):'';
@@ -6851,10 +6857,10 @@ async function loadBenefitRecords(){
     var rule=ruleMap[rec.rule_id]||{name:'—'};
     var u=allUsers.find(function(x){return x.username===rec.username;})||{};
     var stColor={pending:'#fbbf24',approved:'#34d399',paid:'#a78bfa',rejected:'#f87171'}[rec.status]||'#4a6fa5';
-    var actions='';
     if(rec.status==='pending')actions='<button class="btn sm success" style="padding:1px 7px;font-size:10px" onclick="approveBenefitRecord('+rec.id+')">✓</button> <button class="btn sm danger" style="padding:1px 7px;font-size:10px" onclick="rejectBenefitRecord('+rec.id+')">✗</button>';
-    if(rec.status==='approved')actions='<button class="btn sm" style="padding:1px 7px;font-size:10px;color:#a78bfa" onclick="markBenefitPaid('+rec.id+')">Mark Paid</button> <button class="btn sm danger" style="padding:1px 7px;font-size:10px" onclick="revokeBenefitRecord('+rec.id+')">Revoke</button>';
+    if(rec.status==='approved')actions='<button class="btn sm" style="padding:1px 7px;font-size:10px;color:#a78bfa" onclick="markBenefitPaid('+rec.id+')">Paid</button> <button class="btn sm danger" style="padding:1px 7px;font-size:10px" onclick="revokeBenefitRecord('+rec.id+')">Revoke</button>';
     if(rec.status==='paid')actions='<button class="btn sm danger" style="padding:1px 7px;font-size:10px" onclick="revokeBenefitRecord('+rec.id+')">Revoke</button>';
+    if(rec.status==='cancelled'||rec.status==='rejected')actions='<button class="btn sm danger" style="padding:1px 7px;font-size:10px" onclick="deleteBenefitRecord('+rec.id+')">🗑️</button>';
     html+='<tr style="border-bottom:1px solid #0d1626">'
       +'<td style="padding:5px 6px;color:#e0e6f0">'+esc(u.display_name||rec.username)+'</td>'
       +'<td style="color:#4a6fa5">'+esc(rule.name)+'</td>'
@@ -6877,6 +6883,11 @@ async function rejectBenefitRecord(id){
   var reason=prompt('Reason for rejection:');if(reason===null)return;
   await sbPatch('benefit_records',{id:id},{status:'rejected',notes:reason,approved_by:currentUser.username,approved_at:new Date().toISOString()});
   toast('Rejected','success');loadBenefitRecords();
+}
+async function deleteBenefitRecord(id){
+  if(!confirm('Permanently delete this record?\nThis cannot be undone.'))return;
+  await fetch(SB_URL+'/rest/v1/benefit_records?id=eq.'+id,{method:'DELETE',headers:sbH()});
+  toast('Record deleted','success');loadBenefitRecords();
 }
 async function revokeBenefitRecord(id){
   var reason=prompt('Reason for revoking this benefit record:');
@@ -7089,12 +7100,12 @@ async function publishBenefitRule(ruleId,mode){
   var alreadyPublished=new Set(existing.map(function(r){return r.username;}));
   staff=staff.filter(function(u){return !alreadyPublished.has(u.username);});
   if(!staff.length){toast('All eligible staff already have records for this period','success');return;}
-  var amount=rule.payout_type==='fixed'?parseFloat(rule.payout_amount||0):0;
+  var amount=parseFloat(rule.payout_amount||0);
   var records=staff.map(function(u){return {
     rule_id:parseInt(ruleId),username:u.username,
     period_year:yr,period_month:mo,
-    amount:amount,payout_type:rule.payout_type,
-    status:rule.claim_type==='auto'?'approved':'pending',
+    amount:amount,payout_type:'fixed',
+    status:'pending',// always pending — admin approves via Records tab
     trigger_type:rule.trigger_type,
     claim_type:rule.claim_type,
     claimed_at:rule.claim_type==='auto'?now:null
