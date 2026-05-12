@@ -199,7 +199,7 @@ body{position:relative}
 .dept-badge{font-size:10px;padding:2px 7px;border-radius:4px;background:#1e2d45;color:#6b8ab0}
 
 /* ── PERFORMANCE ── */
-.perf-bar-wrap{display:grid;grid-template-columns:120px 1fr 64px;align-items:center;gap:8px;margin-bottom:10px}
+.perf-bar-wrap{display:grid;grid-template-columns:120px 1fr 72px;align-items:center;gap:8px;margin-bottom:8px}
 .perf-name{font-size:12px;color:#e0e6f0;min-width:0;word-break:break-word}
 .perf-bar-bg{height:14px;background:#1e2d45;border-radius:8px;overflow:hidden;max-width:480px}
 .perf-bar-fill{height:100%;border-radius:8px;transition:width .5s;display:flex;align-items:center;padding-left:6px;font-size:10px;color:#fff;font-weight:600}
@@ -2721,16 +2721,17 @@ async function approveTaskComplete(id){
 }
 
 async function rejectTaskComplete(id){
-  var statusRows=await sbGet('tasks','id=eq.'+id+'&select=status');
-  var curStatus=statusRows.length?statusRows[0].status:'';
+  var statusRows=await sbGet('tasks','id=eq.'+id+'&select=status,task_type,progress_notes');
+  if(!statusRows.length)return;
+  var t=statusRows[0];
+  var curStatus=t.status;
   var isRevoke=curStatus==='completed';
   var reason=prompt(isRevoke
     ?'Reason for revoking completion (task returns to in-progress):'
     :'Reason for rejection (note added, task returns to in-progress):');
   if(reason===null)return;
   var now=new Date().toISOString();
-  var rows=await sbGet('tasks','id=eq.'+id+'&select=progress_notes');
-  var notes=(rows.length&&rows[0].progress_notes)||[];
+  var notes=(t.progress_notes)||[];
   var actor=currentUser.display_name||currentUser.username;
   var msg=reason.trim()||'No reason given';
   var noteText=isRevoke
@@ -2738,9 +2739,18 @@ async function rejectTaskComplete(id){
     :'[Rejected] by '+actor+': '+msg+'. Please revise and resubmit.';
   notes.push({by:currentUser.username,note:noteText,ts:now,type:'rejection'});
   await sbPatch('tasks',{id:id},{status:'in_progress',completed_at:null,updated_at:now,progress_notes:notes});
-  toast(isRevoke?'Completion revoked':'Task returned to in-progress','success');
+  // Revert linked sale record back to pending
+  if(t.task_type==='sale'){
+    var saleRows=await sbGet('sales_records','task_id=eq.'+id+'&select=id,status');
+    if(saleRows.length&&saleRows[0].status!=='cancelled'){
+      await sbPatch('sales_records',{id:saleRows[0].id},{status:'pending',updated_at:now});
+    }
+  }
+  toast(isRevoke?'Completion revoked — sale returned to pending':'Task returned to in-progress','success');
   closeModal('taskDetailModal');
-  if(currentPage==='tasks')loadMyTasks();else if(currentPage==='admin-tasks')loadAllTasks();
+  if(currentPage==='tasks')loadMyTasks();
+  else if(currentPage==='admin-tasks')loadAllTasks();
+  else if(currentPage==='mysales')loadMySales();
   loadDashboard();
 }
 
@@ -3652,19 +3662,19 @@ async function loadPerformance(){
     var deptTag=u.department?'<span style="font-size:9px;color:#4a6fa5;margin-left:4px">('+esc(u.department)+')</span>':'';
     var cash=byUserCash[entry.username]||0;
     var install=byUserInstall[entry.username]||0;
-    var saleTagsHtml=(cash||install)
-      ?'<div style="display:flex;gap:6px;margin-top:3px">'
-        +(cash?'<span style="font-size:10px;background:#1d4ed822;border:1px solid #3b82f644;border-radius:4px;padding:1px 6px;color:#60a5fa">💵 Cash ×'+cash+'</span>':'')
-        +(install?'<span style="font-size:10px;background:#7c3aed22;border:1px solid #a78bfa44;border-radius:4px;padding:1px 6px;color:#a78bfa">📋 Install ×'+install+'</span>':'')
+    var pmtTag=(cash||install)
+      ?'<div style="display:flex;gap:3px;justify-content:flex-end;flex-wrap:wrap;margin-top:2px">'
+        +(cash?'<span style="font-size:9px;background:#1d4ed833;border:1px solid #3b82f655;border-radius:3px;padding:0 4px;color:#60a5fa;white-space:nowrap">💵'+cash+'</span>':'')
+        +(install?'<span style="font-size:9px;background:#7c3aed33;border:1px solid #a78bfa55;border-radius:3px;padding:0 4px;color:#a78bfa;white-space:nowrap">📋'+install+'</span>':'')
         +'</div>':'';
     return '<div class="perf-bar-wrap">'
       +'<div class="perf-name">'+esc(u.display_name||entry.username)+deptTag+'</div>'
-      +'<div class="perf-bar-bg"><div class="perf-bar-fill" style="width:'+pctDone+'%;background:linear-gradient(90deg,#1d4ed8,#3b82f6);min-width:'+( entry.done?'20px':'0')+'">'+(entry.done||'')+'</div></div>'
-      +'<div class="perf-count" style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">'
+      +'<div class="perf-bar-bg"><div class="perf-bar-fill" style="width:'+pctDone+'%;background:linear-gradient(90deg,#1d4ed8,#3b82f6);min-width:'+( entry.done?'18px':'0')+'">'+(entry.done||'')+'</div></div>'
+      +'<div class="perf-count">'
       +(entry.done?'<span style="color:#60a5fa;font-size:11px">'+entry.done+'✓</span>':'')
-      +(entry.opened?'<span style="color:#a78bfa;font-size:10px">+'+entry.opened+' opened</span>':'')
+      +(entry.opened?'<div style="color:#a78bfa;font-size:9px">+'+entry.opened+'</div>':'')
+      +pmtTag
       +'</div>'
-      +(saleTagsHtml?'<div style="grid-column:1/-1;padding-left:118px">'+saleTagsHtml+'</div>':'')
       +'</div>';
   }).join('');
   document.getElementById('perfBars').innerHTML=(bars||'<div class="empty-state"><p>No data</p></div>')
