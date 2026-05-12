@@ -984,7 +984,7 @@ body{position:relative}
 
 <!-- Task Detail / Progress -->
 <!-- Deduction Rule Modal -->
-<div class="modal-overlay" id="deductRuleModal" style="display:none">
+<div class="modal-overlay" id="deductRuleModal">
   <div class="modal" style="max-width:360px">
     <div class="modal-hdr"><h3 id="deductRuleTitle">➕ Deduction Rule</h3><button class="btn sm" onclick="closeModal('deductRuleModal')">✕</button></div>
     <input type="hidden" id="dr_id" value="">
@@ -1998,7 +1998,7 @@ async function doLogin(){
   document.getElementById('loginErr').textContent='';
   try{
     var hash=await sha256(pass);
-    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity');
+    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity,joined_date');
     if(!rows||!rows.length||rows[0].password_hash!==hash){
       document.getElementById('loginErr').textContent='Invalid username or password.';
       btn.disabled=false;btn.textContent='Sign In';return;
@@ -5248,7 +5248,7 @@ async function approveCheckinItem(id){
   var rows=await sbGet('checkin_approvals','id=eq.'+id+'&select=*');
   if(!rows.length)return;
   var r=rows[0];
-  await sbPatch('checkin_approvals',{id:id},{status:'approved',reviewed_by:currentUser.username,reviewed_at:new Date().toISOString()});
+  await sbPatch('checkin_approvals',{id:id},{status:'approved',reviewed_by:currentUser.username,reviewed_at:new Date().toISOString(),photo:null});
   // Update attendance record
   var data={self_checkin:true,status:'present'};
   data[r.session_field]=r.recorded_at;
@@ -6554,8 +6554,8 @@ async function loadMediaManager(){
   attBytes=Math.round(attBytes*0.75);
   breakdown.push({label:'Check-in Photos',bytes:attBytes,count:attRows.length,icon:'📷'});
   totalBytes+=attBytes;
-  // Checkin approvals photos
-  var apprRows=await sbGet('checkin_approvals','photo.not.is.null&select=id,photo,username,date');
+  // Checkin approvals photos — only pending (approved ones move to attendance, rejected should be cleared)
+  var apprRows=await sbGet('checkin_approvals','photo=not.is.null&status=eq.pending&select=id,photo,username,date');
   var apprBytes=apprRows.reduce(function(s,r){return s+(r.photo?r.photo.length:0);},0);
   apprBytes=Math.round(apprBytes*0.75);
   breakdown.push({label:'Pending Approval Photos',bytes:apprBytes,count:apprRows.length,icon:'⏳'});
@@ -8346,7 +8346,7 @@ async function resolvePermissions(user){
   if(!sess){showTeamLoginPrompt();return;}
   try{
     var s=JSON.parse(sess);
-    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity',{headers:sbH()});
+    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_edit_pricelist,can_edit_generator,can_edit_mf,is_viewer_mode,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity,joined_date',{headers:sbH()});
     var rows=await r.json();
     if(!rows.length||rows[0].is_active===false){
       sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;
