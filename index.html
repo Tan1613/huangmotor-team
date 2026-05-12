@@ -2438,8 +2438,9 @@ async function openTaskDetail(id){
   var isCreator=t.assigned_by===currentUser.username;
   var isAdmin=currentUser.role==='admin';
   var iAmWorker=workers.indexOf(currentUser.username)>=0;
-  // Determine effective limit from task's max_workers field
-  var effectiveLimit=t.max_workers!=null?parseInt(t.max_workers):(isSaleTask?2:1);
+  // Effective limit: sale tasks minimum 2, respect stored value
+  var storedLimitD=t.max_workers!=null?parseInt(t.max_workers):null;
+  var effectiveLimit=storedLimitD!==null?storedLimitD:(isSaleTask?2:1);
   var nonAdminWorkers=workers.filter(function(u){
     var usr=allUsers.find(function(x){return x.username===u;})||{};
     return usr.role!=='admin';
@@ -2614,22 +2615,29 @@ async function startWork(taskId){
   var workers=t.workers||[];
   if(workers.indexOf(currentUser.username)>=0){toast('You are already working on this','success');return;}
   // Determine effective worker limit
-  // max_workers=0 means unlimited; null/undefined = default (1 for normal, 2 for sale)
-  var limit=t.max_workers!=null?parseInt(t.max_workers):(t.task_type==='sale'?2:1);
+  // Sale tasks: minimum 2 (one per dept), unless admin explicitly set lower
+  var storedLimit=t.max_workers!=null?parseInt(t.max_workers):null;
+  var limit;
+  if(storedLimit!==null){
+    // Admin override: respect stored value, but sale tasks can't go below 2 unless admin set 1 explicitly
+    limit=storedLimit;
+  } else {
+    limit=t.task_type==='sale'?2:1;
+  }
   // Count only non-admin workers against the limit
   var nonAdminWorkers=workers.filter(function(u){
     var usr=allUsers.find(function(x){return x.username===u;})||{};
     return usr.role!=='admin';
   });
   if(currentUser.role!=='admin'&&limit>0&&nonAdminWorkers.length>=limit){
-    toast('This task is limited to '+limit+' worker'+(limit>1?'s':''),'error');
+    toast('This task is full — max '+limit+' worker'+(limit>1?'s':''),'error');
     return;
   }
-  // Sale tasks with 2-worker limit: enforce different departments
-  if(t.task_type==='sale'&&limit===2&&nonAdminWorkers.length===1&&currentUser.role!=='admin'){
+  // Sale tasks: enforce different departments when limit >= 2
+  if(t.task_type==='sale'&&limit>=2&&nonAdminWorkers.length>=1&&currentUser.role!=='admin'){
     var w1=allUsers.find(function(u){return u.username===nonAdminWorkers[0];})||{};
     if(w1.department&&currentUser.department&&w1.department===currentUser.department){
-      toast('Second worker must be from a different department ('+esc(w1.department)+' already has a worker)','error');
+      toast('Sale task: second worker must be from a different department ('+esc(w1.department)+' already assigned)','error');
       return;
     }
   }
@@ -2866,14 +2874,16 @@ async function openTaskModal(){
   document.getElementById('task_plate').value='';document.getElementById('task_vehicle_model').value='';
   document.getElementById('task_due').value='';document.getElementById('task_type').value='general';
   document.getElementById('task_priority').value='normal';document.getElementById('task_assign_type').value='person';
-  // max_workers — admin only
+  // max_workers — admin can override; sale tasks default to 2 for everyone
   var mwWrap=document.getElementById('task_max_workers_wrap');
   if(mwWrap)mwWrap.style.display=currentUser.role==='admin'?'':'none';
   var mwSel=document.getElementById('task_max_workers');
   if(mwSel)mwSel.value='1';
-  // Auto-set max_workers when task type changes
+  // Auto-set max_workers based on task type
   var ttSel=document.getElementById('task_type');
-  if(ttSel){ttSel.onchange=function(){if(mwSel&&currentUser.role==='admin')mwSel.value=this.value==='sale'?'2':'1';};}
+  if(ttSel){ttSel.onchange=function(){
+    if(mwSel)mwSel.value=this.value==='sale'?'2':'1';
+  };}
   // Show bulk assignment options for cross-dept users
   var allStaffOpt=document.querySelector('#task_assign_type option[value="all_staff"]');
   var allDeptOpt=document.querySelector('#task_assign_type option[value="all_dept"]');
@@ -2902,7 +2912,9 @@ async function saveTask(){
   var plate=document.getElementById('task_plate').value.trim();
   var vModel=document.getElementById('task_vehicle_model').value.trim();
   var mwEl=document.getElementById('task_max_workers');
-  var maxWorkers=mwEl?parseInt(mwEl.value)||1:1;
+  var taskType=document.getElementById('task_type').value;
+  // Sale tasks default to 2 (cross-dept); admin can override via selector
+  var maxWorkers=currentUser.role==='admin'&&mwEl?parseInt(mwEl.value)||1:(taskType==='sale'?2:1);
   var base={
     title:title,description:document.getElementById('task_desc').value.trim(),
     task_type:document.getElementById('task_type').value,
@@ -3603,10 +3615,10 @@ async function loadPerformance(){
     if(t.task_type!=='sale')return;
     var notes=t.progress_notes||[];
     for(var i=0;i<notes.length;i++){
-      var n=notes[i].note||'';
-      if(n.indexOf('Payment:')>=0){
-        if(n.indexOf('Cash')>=0)paymentByTask[t.id]='cash';
-        else if(n.indexOf('Installment')>=0)paymentByTask[t.id]='installment';
+      var n=(notes[i].note||'').toLowerCase();
+      if(n.indexOf('payment:')>=0){
+        if(n.indexOf('cash')>=0)paymentByTask[t.id]='cash';
+        else if(n.indexOf('install')>=0)paymentByTask[t.id]='installment';
         break;
       }
     }
