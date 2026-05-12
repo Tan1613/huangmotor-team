@@ -2438,9 +2438,9 @@ async function openTaskDetail(id){
   var isCreator=t.assigned_by===currentUser.username;
   var isAdmin=currentUser.role==='admin';
   var iAmWorker=workers.indexOf(currentUser.username)>=0;
-  // Effective limit: sale tasks minimum 2, respect stored value
+  // Effective limit: sale tasks always minimum 2, override legacy max_workers=1
   var storedLimitD=t.max_workers!=null?parseInt(t.max_workers):null;
-  var effectiveLimit=storedLimitD!==null?storedLimitD:(isSaleTask?2:1);
+  var effectiveLimit=isSaleTask?Math.max(2,storedLimitD||2):(storedLimitD!==null?storedLimitD:1);
   var nonAdminWorkers=workers.filter(function(u){
     var usr=allUsers.find(function(x){return x.username===u;})||{};
     return usr.role!=='admin';
@@ -2614,15 +2614,14 @@ async function startWork(taskId){
   var t=tasks[0];
   var workers=t.workers||[];
   if(workers.indexOf(currentUser.username)>=0){toast('You are already working on this','success');return;}
-  // Determine effective worker limit
-  // Sale tasks: minimum 2 (one per dept), unless admin explicitly set lower
+  // Effective limit: sale tasks always minimum 2 (cross-dept rule)
+  // Override stored max_workers=1 for sale tasks (legacy tasks created before this fix)
   var storedLimit=t.max_workers!=null?parseInt(t.max_workers):null;
   var limit;
-  if(storedLimit!==null){
-    // Admin override: respect stored value, but sale tasks can't go below 2 unless admin set 1 explicitly
-    limit=storedLimit;
+  if(t.task_type==='sale'){
+    limit=Math.max(2, storedLimit||2);// sale never below 2
   } else {
-    limit=t.task_type==='sale'?2:1;
+    limit=storedLimit!==null?storedLimit:1;
   }
   // Count only non-admin workers against the limit
   var nonAdminWorkers=workers.filter(function(u){
@@ -2874,12 +2873,12 @@ async function openTaskModal(){
   document.getElementById('task_plate').value='';document.getElementById('task_vehicle_model').value='';
   document.getElementById('task_due').value='';document.getElementById('task_type').value='general';
   document.getElementById('task_priority').value='normal';document.getElementById('task_assign_type').value='person';
-  // max_workers — admin can override; sale tasks default to 2 for everyone
+  // max_workers — admin can override; sale always min 2
   var mwWrap=document.getElementById('task_max_workers_wrap');
   if(mwWrap)mwWrap.style.display=currentUser.role==='admin'?'':'none';
   var mwSel=document.getElementById('task_max_workers');
   if(mwSel)mwSel.value='1';
-  // Auto-set max_workers based on task type
+  // Always update max_workers when task type changes (for all roles)
   var ttSel=document.getElementById('task_type');
   if(ttSel){ttSel.onchange=function(){
     if(mwSel)mwSel.value=this.value==='sale'?'2':'1';
@@ -2913,8 +2912,15 @@ async function saveTask(){
   var vModel=document.getElementById('task_vehicle_model').value.trim();
   var mwEl=document.getElementById('task_max_workers');
   var taskType=document.getElementById('task_type').value;
-  // Sale tasks default to 2 (cross-dept); admin can override via selector
-  var maxWorkers=currentUser.role==='admin'&&mwEl?parseInt(mwEl.value)||1:(taskType==='sale'?2:1);
+  // Sale tasks: always 2 minimum (cross-dept rule)
+  // Admin selector can override UPWARD (3, unlimited) but not below 2 for sale
+  var maxWorkers;
+  if(taskType==='sale'){
+    var adminOverride=mwEl?parseInt(mwEl.value)||2:2;
+    maxWorkers=Math.max(2,adminOverride);// sale minimum 2
+  } else {
+    maxWorkers=currentUser.role==='admin'&&mwEl?parseInt(mwEl.value)||1:1;
+  }
   var base={
     title:title,description:document.getElementById('task_desc').value.trim(),
     task_type:document.getElementById('task_type').value,
