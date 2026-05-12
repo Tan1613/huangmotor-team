@@ -4115,7 +4115,7 @@ async function loadAdminUsers(){
       +(u.username!==currentUser.username&&!isAdm?'<button class="btn sm" onclick="renameUsername(\''+esc(u.username)+'\')" title="Change username">@</button>':'')
       +(u.username!==currentUser.username?'<button class="btn sm" onclick="toggleActive(\''+esc(u.username)+'\','+(u.is_active!==false?'false':'true')+')">'+(u.is_active!==false?'Disable':'Enable')+'</button>':'')
       +(u.username!==currentUser.username?'<button class="btn sm" onclick="resetPw(\''+esc(u.username)+'\')">Reset PW</button>':'')
-      +(u.username!==currentUser.username&&!isAdm?'<div style="position:relative;display:inline-block">'
+      +(u.username!==currentUser.username&&!isAdm&&!u.username.startsWith('deleted_')?'<div style="position:relative;display:inline-block">'
         +'<button class="btn sm danger" onclick="toggleDeleteMenu(\'dm_'+esc(u.username)+'\')">Delete ▾</button>'
         +'<div id="dm_'+esc(u.username)+'" style="display:none;position:absolute;right:0;top:100%;margin-top:2px;background:#1e2d45;border:1px solid #2a3d55;border-radius:8px;z-index:50;min-width:180px;overflow:hidden">'
         +'<div onclick="removeUser(\''+esc(u.username)+'\');toggleDeleteMenu(\'dm_'+esc(u.username)+'\')" style="padding:8px 12px;cursor:pointer;font-size:12px;color:#fbbf24;border-bottom:1px solid #1a2a3a">🔒 Anonymize (keep data)</div>'
@@ -4285,21 +4285,26 @@ async function hardDeleteUser(username){
   var u=rows[0];
   var now=new Date().toISOString();
   toast('Deleting all data for '+username+'...','success');
-  // Delete all related data
-  var deletes=[
-    'tasks?assigned_to=eq.'+encodeURIComponent(username),
-    'tasks?assigned_by=eq.'+encodeURIComponent(username),
-    'attendance?username=eq.'+encodeURIComponent(username),
-    'leave_requests?username=eq.'+encodeURIComponent(username),
-    'benefit_records?username=eq.'+encodeURIComponent(username),
-    'chat_messages?username=eq.'+encodeURIComponent(username),
-    'checkin_approvals?username=eq.'+encodeURIComponent(username),
-    'announcement_reads?username=eq.'+encodeURIComponent(username),
-    'sales_records?salesperson=eq.'+encodeURIComponent(username),
-  ];
-  for(var i=0;i<deletes.length;i++){
-    await fetch(SB_URL+'/rest/v1/'+deletes[i],{method:'DELETE',headers:sbH()});
+  // Helper for safe delete
+  async function safeDelete(path){
+    try{
+      var res=await fetch(SB_URL+'/rest/v1/'+path,{
+        method:'DELETE',
+        headers:Object.assign({},sbH(),{'Prefer':'return=minimal'})
+      });
+      if(!res.ok){var t=await res.text();console.warn('Delete failed:',path,t);}
+    }catch(e){console.warn('Delete error:',path,e);}
   }
+  // Delete all related data
+  await safeDelete('tasks?assigned_to=eq.'+encodeURIComponent(username));
+  await safeDelete('tasks?assigned_by=eq.'+encodeURIComponent(username));
+  await safeDelete('attendance?username=eq.'+encodeURIComponent(username));
+  await safeDelete('leave_requests?username=eq.'+encodeURIComponent(username));
+  await safeDelete('benefit_records?username=eq.'+encodeURIComponent(username));
+  await safeDelete('chat_messages?username=eq.'+encodeURIComponent(username));
+  await safeDelete('checkin_approvals?username=eq.'+encodeURIComponent(username));
+  await safeDelete('announcement_reads?username=eq.'+encodeURIComponent(username));
+  await safeDelete('sales_records?salesperson=eq.'+encodeURIComponent(username));
   // Remove from workers arrays
   var workerTasks=await sbGet('tasks','workers=cs.["'+username+'"]&select=id,workers');
   for(var i=0;i<workerTasks.length;i++){
@@ -4315,8 +4320,8 @@ async function hardDeleteUser(username){
       await sbPatch('chat_rooms',{id:cr.id},{members:(cr.members||[]).filter(function(m){return m!==username;})});
     }
   }
-  // Delete the user record
-  await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(username),{method:'DELETE',headers:sbH()});
+  // Delete the user record last
+  await safeDelete('users?username=eq.'+encodeURIComponent(username));
   // Log to deleted_users
   await sbPost('deleted_users',{
     original_username:username,anonymized_username:'[hard-deleted]',
