@@ -2040,7 +2040,7 @@ async function doLogin(){
   document.getElementById('loginErr').textContent='';
   try{
     var hash=await sha256(pass);
-    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity,joined_date,can_edit_new_pricelist,can_view_new_pricelist,can_edit_used_pricelist,can_view_used_pricelist,can_edit_stock_kit,can_view_stock_kit,can_manage_service,can_view_service,can_view_price_compare,can_edit_price_compare');
+    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity,joined_date,can_view_pricelist,can_edit_pricelist,can_view_calculator,can_edit_calculator,can_use_generator,can_edit_stock_kit,can_view_stock_kit,can_manage_service,can_view_service');
     if(!rows||!rows.length||rows[0].password_hash!==hash){
       document.getElementById('loginErr').textContent='Invalid username or password.';
       btn.disabled=false;btn.textContent='Sign In';return;
@@ -3973,9 +3973,9 @@ function onNuCustomRoleChange(){
   // Build read-only preview grouped by category
   var groups={
     'Tools':['can_access_tools'],
-    'Tools — New Pricelist':['can_view_new_pricelist','can_edit_new_pricelist'],
-    'Tools — Used Pricelist':['can_view_used_pricelist','can_edit_used_pricelist'],
-    'Tools — Price Compare':['can_view_price_compare','can_edit_price_compare'],
+    'Pricelist':['can_view_pricelist','can_edit_pricelist'],
+    'Calculator':['can_view_calculator','can_edit_calculator'],
+    'Generator':['can_use_generator'],
     'Tools — Stock Kit':['can_view_stock_kit','can_edit_stock_kit'],
     'Tools — Service':['can_view_service','can_manage_service'],
     'Team — Core':['can_access_team','can_assign_task_dept','can_assign_task_cross','can_approve_tasks','can_view_attendance','can_approve_leave'],
@@ -3997,9 +3997,9 @@ function onNuCustomRoleChange(){
     can_manage_departments:'Manage Depts',can_export_attendance:'Export Attendance',
     can_access_benefit:'Access Benefits',can_manage_benefit:'Manage Benefits',
     can_access_payroll:'Access Payroll',
-    can_edit_new_pricelist:'Edit',can_view_new_pricelist:'View',
-    can_edit_used_pricelist:'Edit',can_view_used_pricelist:'View',
-    can_view_price_compare:'View',can_edit_price_compare:'Edit Settings',
+    can_view_pricelist:'View',can_edit_pricelist:'Edit',
+    can_view_calculator:'View',can_edit_calculator:'Edit Settings',
+    can_use_generator:'Use Generator',
     can_edit_stock_kit:'Edit (w/ cost)',can_view_stock_kit:'View',
     can_manage_service:'Manage Orders',can_view_service:'View Records',
   };
@@ -4469,9 +4469,9 @@ async function editUser(username){
     body+='<div style="font-size:10px;color:#4a6fa5;padding:4px 0 2px">⚙ Pricelist / Generator / Max Finance / Viewer Mode permissions are managed in Tools admin panel.</div>';
 
     body+=mkSec('Team Access','#34d399',[['can_access_team','Access Team'],['can_assign_task_dept','Assign Tasks (Dept)'],['can_assign_task_cross','Assign Tasks (Cross)'],['can_approve_tasks','Approve Tasks'],['can_view_attendance','View Attendance'],['can_approve_leave','Approve Leave'],['can_view_perf_own','View Own Perf'],['can_view_perf_dept','View Dept Perf'],['can_view_perf_all','View All Perf']]);
-    body+=mkSec('Price Compare','#f59e0b',[['can_view_price_compare','View'],['can_edit_price_compare','Edit Settings']]);
-    body+=mkSec('New Pricelist','#60a5fa',[['can_edit_new_pricelist','Edit'],['can_view_new_pricelist','View']]);
-    body+=mkSec('Used Pricelist','#a78bfa',[['can_edit_used_pricelist','Edit'],['can_view_used_pricelist','View']]);
+    body+=mkSec('Pricelist','#60a5fa',[['can_view_pricelist','View'],['can_edit_pricelist','Edit']]);
+    body+=mkSec('Calculator','#f59e0b',[['can_view_calculator','View'],['can_edit_calculator','Edit Settings']]);
+    body+=mkSec('Generator','#a78bfa',[['can_use_generator','Use']]);
     body+=mkSec('Stock Kit','#fbbf24',[['can_edit_stock_kit','Edit (with cost)'],['can_view_stock_kit','View (no cost)']]);
     body+=mkSec('Service','#f472b6',[['can_manage_service','Manage Orders'],['can_view_service','View Records']]);
   }
@@ -4501,9 +4501,8 @@ async function saveEditUser(username,isAdm){
      'can_create_chat_room','can_manage_users','can_manage_roles','can_manage_departments',
      'can_export_attendance','can_view_change_log','can_access_benefit','can_manage_benefit',
      'can_access_payroll',
-     'can_view_price_compare','can_edit_price_compare',
-     'can_edit_new_pricelist','can_view_new_pricelist',
-     'can_edit_used_pricelist','can_view_used_pricelist',
+     'can_view_pricelist','can_edit_pricelist',
+     'can_view_calculator','can_edit_calculator','can_use_generator',
      'can_edit_stock_kit','can_view_stock_kit',
      'can_manage_service','can_view_service'].forEach(function(f){
       var el=document.getElementById('eu_'+f);if(el)data[f]=el.checked;
@@ -4806,14 +4805,14 @@ async function loadRolesPage(){
     {label:'Tools',color:'#185fa5',bg:'#0d1e35',fields:[
       {f:'can_access_tools',l:'Access'},
     ]},
-    {label:'New PL',color:'#2563eb',bg:'#0d1830',fields:[
-      {f:'can_view_new_pricelist',l:'View'},{f:'can_edit_new_pricelist',l:'Edit'},
+    {label:'Pricelist',color:'#2563eb',bg:'#0d1830',fields:[
+      {f:'can_view_pricelist',l:'View'},{f:'can_edit_pricelist',l:'Edit'},
     ]},
-    {label:'Used PL',color:'#7c3aed',bg:'#130d25',fields:[
-      {f:'can_view_used_pricelist',l:'View'},{f:'can_edit_used_pricelist',l:'Edit'},
+    {label:'Calculator',color:'#b45309',bg:'#1a1000',fields:[
+      {f:'can_view_calculator',l:'View'},{f:'can_edit_calculator',l:'Edit'},
     ]},
-    {label:'Price Compare',color:'#b45309',bg:'#1a1000',fields:[
-      {f:'can_view_price_compare',l:'View'},{f:'can_edit_price_compare',l:'Edit'},
+    {label:'Generator',color:'#7c3aed',bg:'#130d25',fields:[
+      {f:'can_use_generator',l:'Use'},
     ]},
     {label:'Stock Kit',color:'#0891b2',bg:'#0d1e24',fields:[
       {f:'can_view_stock_kit',l:'View'},{f:'can_edit_stock_kit',l:'Edit'},
@@ -4914,21 +4913,21 @@ var PERM_DEFS=[
   {id:'rm_manage_benefit',field:'can_manage_benefit',label:'Manage Benefits',short:'管理福利 / 审批申请',mod:'team',status:'future',desc:'Approve benefit claims and configure entitlement rules. HR manager level.'},
   {id:'rm_access_payroll',field:'can_access_payroll',label:'Access Payroll',short:'访问薪资模拟器',mod:'team',status:'future',desc:'Access Salary Simulator — gross to nett with EPF, SOCSO, EIS, PCB. Read-only simulation.'},
   {id:'rm_approve_tasks',field:'can_approve_tasks',label:'Approve Task Completion',short:'审批任务完成',mod:'team',status:'live',desc:'Review staff "Mark Complete" submissions. Approve to finalise, or reject with a note to return the task to in-progress.'},
-  // Tools — New Pricelist
-  {id:'rm_edit_new_pl',field:'can_edit_new_pricelist',label:'Edit New Pricelist',short:'编辑新车价格表',mod:'tools',status:'live',desc:'Add, edit, delete entries in the New Vehicle Pricelist.'},
-  {id:'rm_view_new_pl',field:'can_view_new_pricelist',label:'View New Pricelist',short:'查看新车价格表',mod:'tools',status:'live',desc:'View the New Vehicle Pricelist (read-only). Required to access Price Compare for new vehicles.'},
-  // Tools — Used Pricelist
-  {id:'rm_edit_used_pl',field:'can_edit_used_pricelist',label:'Edit Used Pricelist',short:'编辑二手车价格表',mod:'tools',status:'live',desc:'Add, edit, delete entries in the Used Vehicle Pricelist.'},
-  {id:'rm_view_used_pl',field:'can_view_used_pricelist',label:'View Used Pricelist',short:'查看二手车价格表',mod:'tools',status:'live',desc:'View the Used Vehicle Pricelist (read-only). Required to access Price Compare for used vehicles.'},
-  // Tools — Stock Kit
+  // Tools — Pricelist
+  {id:'rm_view_pl',field:'can_view_pricelist',label:'View Pricelist',short:'查看价格表',mod:'tools',status:'live',desc:'View new and used vehicle pricelist in read-only mode.'},
+  {id:'rm_edit_pl',field:'can_edit_pricelist',label:'Edit Pricelist',short:'编辑价格表',mod:'tools',status:'live',desc:'Add, edit, delete new and used vehicle entries. Unlocks Edit Mode toggle.'},
+  // Tools — Calculator
+  {id:'rm_view_calc',field:'can_view_calculator',label:'View Calculator',short:'使用计算器',mod:'tools',status:'live',desc:'Use Auto Calculator to show customers cost comparison (Cash/Loan/EPP).'},
+  {id:'rm_edit_calc',field:'can_edit_calculator',label:'Edit Calculator Settings',short:'编辑计算参数',mod:'tools',status:'live',desc:'Adjust interest rates, EPP divisor, tenure. Unlocks Edit Mode toggle.'},
+  // Tools — Generator
+  {id:'rm_use_gen',field:'can_use_generator',label:'Use Generator',short:'报价单生成器',mod:'tools',status:'live',desc:'Generate HTML/PDF quotations. Typically admin only.'},
+    // Tools — Stock Kit
   {id:'rm_edit_stock',field:'can_edit_stock_kit',label:'Edit Stock Kit',short:'编辑零件库存（含成本）',mod:'tools',status:'live',desc:'Add, edit, delete stock items. Can view cost code (encoded cost price). Can adjust stock quantity.'},
   {id:'rm_view_stock',field:'can_view_stock_kit',label:'View Stock Kit',short:'查看零件库存（售价）',mod:'tools',status:'live',desc:'View stock items — sell price and install price only. Cost code is hidden. Required for Vehicle Parts Check.'},
   // Tools — Service
   {id:'rm_manage_svc',field:'can_manage_service',label:'Manage Service Orders',short:'创建/编辑维修单',mod:'tools',status:'live',desc:'Create new Service Orders, fill in vehicle and customer details, add parts, update status.'},
   {id:'rm_view_svc',field:'can_view_service',label:'View Service Records',short:'查看维修记录',mod:'tools',status:'live',desc:'View Service Records and history — read-only. Cannot create or edit orders.'},
   // Tools — Price Compare
-  {id:'rm_view_pc',field:'can_view_price_compare',label:'View Price Compare',short:'查看价格比较',mod:'tools',status:'live',desc:'Access the Price Compare tool — view Cash OTR, Kedai Loan, Bank/AEON and EPP calculations.'},
-  {id:'rm_edit_pc',field:'can_edit_price_compare',label:'Edit Price Compare Settings',short:'编辑比较参数',mod:'tools',status:'live',desc:'Adjust Price Compare parameters: Kedai rate, bank rate, EPP divisor, tenure. Changes visible to all.'},
 ];
 
 var rmPermState={};
@@ -4973,9 +4972,9 @@ function renderRmPerms(){
     {key:'tools-access',mod:'tools',label:'🔧 Tools',color:'#3b82f6',
       gate:'can_access_tools',gateId:'rm_tools',
       rows:[
-        {label:'New Pricelist',view:{id:'rm_view_new_pl',field:'can_view_new_pricelist'},edit:{id:'rm_edit_new_pl',field:'can_edit_new_pricelist'}},
-        {label:'Used Pricelist',view:{id:'rm_view_used_pl',field:'can_view_used_pricelist'},edit:{id:'rm_edit_used_pl',field:'can_edit_used_pricelist'}},
-        {label:'Price Compare',view:{id:'rm_view_pc',field:'can_view_price_compare'},edit:{id:'rm_edit_pc',field:'can_edit_price_compare'}},
+        {label:'Pricelist',view:{id:'rm_view_pl',field:'can_view_pricelist'},edit:{id:'rm_edit_pl',field:'can_edit_pricelist'}},
+        {label:'Calculator',view:{id:'rm_view_calc',field:'can_view_calculator'},edit:{id:'rm_edit_calc',field:'can_edit_calculator'}},
+        {label:'Generator',  singles:[{id:'rm_use_gen',label:'Use'}]},
         {label:'Stock Kit',view:{id:'rm_view_stock',field:'can_view_stock_kit'},edit:{id:'rm_edit_stock',field:'can_edit_stock_kit'}},
         {label:'Service',view:{id:'rm_view_svc',field:'can_view_service'},edit:{id:'rm_manage_svc',field:'can_manage_service'}},
       ]
@@ -8720,11 +8719,11 @@ var PERM_FIELDS=['can_access_tools','can_access_team','can_assign_task_dept','ca
   'can_export_attendance','can_export_sales','can_view_change_log',
   'can_access_benefit','can_manage_benefit','can_access_payroll',
   'can_approve_tasks',
-  'can_edit_new_pricelist','can_view_new_pricelist',
-  'can_edit_used_pricelist','can_view_used_pricelist',
+  'can_view_pricelist','can_edit_pricelist',
+  'can_view_calculator','can_edit_calculator',
+  'can_use_generator',
   'can_edit_stock_kit','can_view_stock_kit',
-  'can_manage_service','can_view_service',
-  'can_view_price_compare','can_edit_price_compare'];
+  'can_manage_service','can_view_service'];
 
 async function resolvePermissions(user){
   if(user.role==='admin'){
@@ -8777,7 +8776,7 @@ async function resolvePermissions(user){
   if(!sess){showTeamLoginPrompt();return;}
   try{
     var s=JSON.parse(sess);
-    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity,joined_date,can_edit_new_pricelist,can_view_new_pricelist,can_edit_used_pricelist,can_view_used_pricelist,can_edit_stock_kit,can_view_stock_kit,can_manage_service,can_view_service,can_view_price_compare,can_edit_price_compare',{headers:sbH()});
+    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity,joined_date,can_edit_stock_kit,can_view_stock_kit,can_manage_service,can_view_service,can_view_pricelist,can_edit_pricelist,can_view_calculator,can_edit_calculator,can_use_generator',{headers:sbH()});
     var rows=await r.json();
     if(!rows.length||rows[0].is_active===false){
       sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;
