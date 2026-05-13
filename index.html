@@ -2042,7 +2042,7 @@ async function doLogin(){
   document.getElementById('loginErr').textContent='';
   try{
     var hash=await sha256(pass);
-    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity,joined_date,can_edit_new_pricelist,can_view_new_pricelist,can_edit_used_pricelist,can_view_used_pricelist,can_edit_stock_kit,can_view_stock_kit,can_manage_service,can_view_service');
+    var rows=await sbGet('users','username=eq.'+encodeURIComponent(user)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,department,display_name,position,phone,email,password_hash,is_active,must_change_password,gender,ethnicity,joined_date,can_edit_new_pricelist,can_view_new_pricelist,can_edit_used_pricelist,can_view_used_pricelist,can_edit_stock_kit,can_view_stock_kit,can_manage_service,can_view_service,can_view_price_compare,can_edit_price_compare');
     if(!rows||!rows.length||rows[0].password_hash!==hash){
       document.getElementById('loginErr').textContent='Invalid username or password.';
       btn.disabled=false;btn.textContent='Sign In';return;
@@ -4946,7 +4946,6 @@ function rmSyncFromDom(){
 
 function renderRmPerms(){
   // DO NOT sync from DOM here — that would overwrite freshly loaded state
-  // rmSyncFromDom is only called before save
   var filtered=PERM_DEFS.filter(function(p){
     if(rmCurrentFilter==='tools')return p.mod==='tools';
     if(rmCurrentFilter==='team')return p.mod==='team';
@@ -4954,41 +4953,152 @@ function renderRmPerms(){
     if(rmCurrentFilter==='future')return p.status==='future';
     return true;
   });
-  var groups={};var groupOrder=[];
-  filtered.forEach(function(p){
-    var g=p.mod==='tools'?
-      (['can_edit_new_pricelist','can_view_new_pricelist'].indexOf(p.field)>=0?'Tools — New Pricelist':
-       ['can_edit_used_pricelist','can_view_used_pricelist'].indexOf(p.field)>=0?'Tools — Used Pricelist':
-       ['can_edit_stock_kit','can_view_stock_kit'].indexOf(p.field)>=0?'Tools — Stock Kit':
-       ['can_manage_service','can_view_service'].indexOf(p.field)>=0?'Tools — Service':'Tools'):
-      ['can_access_team','can_assign_task_dept','can_assign_task_cross','can_approve_tasks','can_view_attendance','can_approve_leave','can_view_perf_own','can_view_perf_dept','can_view_perf_all'].indexOf(p.field)>=0?'Team — Core':
-      ['can_view_all_sales','can_export_sales','can_create_announcement','can_pin_announcement','can_create_chat_room','can_view_change_log'].indexOf(p.field)>=0?'Team — Sales & Content':
-      ['can_manage_users','can_manage_roles','can_manage_departments','can_export_attendance','can_access_benefit','can_manage_benefit','can_access_payroll'].indexOf(p.field)>=0?'Team — Administration':'Team — Other';
-    if(!groups[g]){groups[g]=[];groupOrder.push(g);}
-    groups[g].push(p);
-  });
+
+  // Define sections with parent gates and paired fields
+  var sections=[
+    {key:'tools-access',mod:'tools',label:'🔧 Tools',color:'#3b82f6',
+      gate:'can_access_tools',gateId:'rm_tools',
+      rows:[
+        {label:'New Pricelist',view:{id:'rm_view_new_pl',field:'can_view_new_pricelist'},edit:{id:'rm_edit_new_pl',field:'can_edit_new_pricelist'}},
+        {label:'Used Pricelist',view:{id:'rm_view_used_pl',field:'can_view_used_pricelist'},edit:{id:'rm_edit_used_pl',field:'can_edit_used_pricelist'}},
+        {label:'Price Compare',view:{id:'rm_view_pc',field:'can_view_price_compare'},edit:{id:'rm_edit_pc',field:'can_edit_price_compare'}},
+        {label:'Stock Kit',view:{id:'rm_view_stock',field:'can_view_stock_kit'},edit:{id:'rm_edit_stock',field:'can_edit_stock_kit'}},
+        {label:'Service',view:{id:'rm_view_svc',field:'can_view_service'},edit:{id:'rm_manage_svc',field:'can_manage_service'}},
+      ]
+    },
+    {key:'team-access',mod:'team',label:'👥 Team',color:'#10b981',
+      gate:'can_access_team',gateId:'rm_team',
+      rows:[
+        {label:'Assign Tasks',single:[{id:'rm_task_dept',label:'Dept'},{id:'rm_task_cross',label:'Cross-dept'}]},
+        {label:'Approve Tasks',single:[{id:'rm_approve_tasks',label:'Approve completion'}]},
+        {label:'Attendance',single:[{id:'rm_attendance',label:'View & approve check-in'}]},
+        {label:'Leave',single:[{id:'rm_leave_approve',label:'Approve leave'}]},
+        {label:'Performance',single:[{id:'rm_perf_own',label:'Own'},{id:'rm_perf_dept',label:'Dept'},{id:'rm_perf_all',label:'All'}]},
+        {label:'Sales',single:[{id:'rm_view_all_sales',label:'View all'},{id:'rm_export_sales',label:'Export'}]},
+        {label:'Announcements',single:[{id:'rm_create_ann',label:'Create'},{id:'rm_pin_ann',label:'Pin'}]},
+        {label:'Chat',single:[{id:'rm_create_chat',label:'Create rooms'}]},
+        {label:'Change Log',single:[{id:'rm_view_log',label:'View log'}]},
+      ]
+    },
+    {key:'team-admin',mod:'team',label:'⚙ Administration',color:'#a78bfa',
+      gate:null,
+      rows:[
+        {label:'Users',single:[{id:'rm_manage_users',label:'Manage users'}]},
+        {label:'Roles',single:[{id:'rm_manage_roles',label:'Manage roles'}]},
+        {label:'Departments',single:[{id:'rm_manage_depts',label:'Manage depts'}]},
+        {label:'Attendance Export',single:[{id:'rm_export_att',label:'Export attendance'}]},
+        {label:'Benefits',single:[{id:'rm_access_benefit',label:'Access'},{id:'rm_manage_benefit',label:'Manage'}]},
+        {label:'Payroll',single:[{id:'rm_access_payroll',label:'Simulator'}]},
+      ]
+    },
+  ];
+
+  function mkCk(id,label){
+    var st=rmGetState(id);
+    var p=PERM_DEFS.find(function(x){return x.id===id;});
+    if(!p)return '';
+    // Filter
+    var inFiltered=filtered.some(function(x){return x.id===id;});
+    if(!inFiltered)return '';
+    return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:'+(st.disabled?'#2a4a6a':'#c9d1d9')+';cursor:'+(st.disabled?'not-allowed':'pointer')+';white-space:nowrap" title="'+(p.desc||'')+'">'
+      +'<input type="checkbox" id="'+id+'" '+(st.checked?'checked ':' ')+(st.disabled?'disabled ':' ')
+      +'style="width:13px;height:13px;cursor:pointer;accent-color:#3b82f6;flex-shrink:0">'
+      +(label||p.label)+'</label>';
+  }
+
   var html='';
-  groupOrder.forEach(function(g,gi){
-    html+='<div style="padding:5px 10px;background:#0a0f1a;font-size:10px;font-weight:600;color:#2a4a6a;text-transform:uppercase;letter-spacing:.06em'+(gi>0?';border-top:1px solid #0d1626':'')+'">'+g+'</div>';
-    groups[g].forEach(function(p){
-      var st=rmGetState(p.id);
-      html+='<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid #0d1626;cursor:pointer;position:relative" '
-        +'onmouseenter="showRmTip(this,\''+p.id+'\')" onmouseleave="hideRmTip()">'
-        +'<input type="checkbox" id="'+p.id+'" '+(st.checked?'checked ':' ')+(st.disabled?'disabled ':' ')
-        +(p.special==='viewer'?'onchange="onRmViewerChange(this.checked)" ':'')
-        +'style="width:14px;height:14px;flex-shrink:0;cursor:pointer;accent-color:#3b82f6">'
-        +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:12px;font-weight:500;color:'+(st.disabled?'#2a4a6a':'#e0e6f0')+'">'+p.label
-        +(p.status==='future'?'<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1e1a2e;color:#7c3aed;margin-left:5px;vertical-align:middle">Future</span>':'')
-        +'</div>'
-        +'<div style="font-size:10px;color:#4a6fa5">'+p.short+'</div>'
-        +'</div>'
-        +'</label>';
+  sections.forEach(function(sec){
+    // Check if any perm in this section is in filtered set
+    var secPerms=[];
+    sec.rows.forEach(function(r){
+      if(r.view)secPerms.push(r.view.id,r.edit.id);
+      if(r.single)r.single.forEach(function(s){secPerms.push(s.id);});
     });
+    if(sec.gateId)secPerms.push(sec.gateId);
+    var anyVisible=secPerms.some(function(id){return filtered.some(function(p){return p.id===id;});});
+    if(!anyVisible)return;
+
+    var gateSt=sec.gateId?rmGetState(sec.gateId):{checked:true,disabled:false};
+    var gateChecked=!sec.gateId||gateSt.checked;
+
+    html+='<div style="border:1px solid #1e2d45;border-radius:10px;overflow:hidden;margin-bottom:10px">';
+    // Section header with gate checkbox
+    html+='<div style="background:#0d1626;padding:8px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #1e2d45">';
+    if(sec.gateId){
+      var gst=rmGetState(sec.gateId);
+      html+='<input type="checkbox" id="'+sec.gateId+'" '+(gst.checked?'checked ':' ')+(gst.disabled?'disabled ':' ')
+        +'onchange="onRmGateChange(\''+sec.key+'\')" style="width:15px;height:15px;cursor:pointer;accent-color:'+sec.color+';flex-shrink:0">';
+    }
+    html+='<span style="font-size:12px;font-weight:700;color:'+sec.color+'">'+sec.label+'</span>';
+    if(sec.gateId){
+      html+='<span style="font-size:10px;color:#2a4a6a;margin-left:auto">'+
+        (gateChecked?'Enabled — expand below':'Disabled — no access')+'</span>';
+    }
+    html+='</div>';
+
+    // Rows
+    html+='<div style="padding:8px 12px;display:grid;grid-template-columns:100px 1fr 1fr;gap:0" id="rmSec_'+sec.key+'"'
+      +(sec.gateId&&!gateChecked?' style="display:none!important"':'')+' >';
+    // Column headers if any row has view/edit
+    var hasViewEdit=sec.rows.some(function(r){return r.view;});
+    if(hasViewEdit){
+      html+='<div style="font-size:9px;color:#2a4a6a;padding:3px 0;font-weight:600;text-transform:uppercase"></div>';
+      html+='<div style="font-size:9px;color:#2a4a6a;padding:3px 0;font-weight:600;text-transform:uppercase">View</div>';
+      html+='<div style="font-size:9px;color:#2a4a6a;padding:3px 0;font-weight:600;text-transform:uppercase">Edit / Manage</div>';
+    }
+    sec.rows.forEach(function(r){
+      if(r.view){
+        // View + Edit pair on same row
+        var viewIn=filtered.some(function(p){return p.id===r.view.id;});
+        var editIn=filtered.some(function(p){return p.id===r.edit.id;});
+        if(!viewIn&&!editIn)return;
+        html+='<div style="font-size:11px;color:#8b949e;padding:6px 0;border-top:1px solid #0a0f1a;display:flex;align-items:center">'+r.label+'</div>';
+        html+='<div style="padding:6px 4px;border-top:1px solid #0a0f1a;display:flex;align-items:center">'+(viewIn?mkCk(r.view.id,'View'):'')+'</div>';
+        html+='<div style="padding:6px 4px;border-top:1px solid #0a0f1a;display:flex;align-items:center">'+(editIn?mkCk(r.edit.id,'Edit'):'')+'</div>';
+      } else if(r.single){
+        var anyIn=r.single.some(function(s){return filtered.some(function(p){return p.id===s.id;});});
+        if(!anyIn)return;
+        html+='<div style="font-size:11px;color:#8b949e;padding:6px 0;border-top:1px solid #0a0f1a;display:flex;align-items:center">'+r.label+'</div>';
+        html+='<div style="padding:6px 4px;border-top:1px solid #0a0f1a;display:flex;align-items:center;gap:10px;flex-wrap:wrap;grid-column:2/-1">'
+          +r.single.map(function(s){
+            var inF=filtered.some(function(p){return p.id===s.id;});
+            return inF?mkCk(s.id,s.label):'';
+          }).join('')+'</div>';
+      }
+    });
+    html+='</div></div>';
   });
+
   if(!html)html='<div style="padding:1rem;font-size:12px;color:#4a6fa5;text-align:center">No permissions in this filter</div>';
   var wrap=document.getElementById('rm_perm_rows');
   if(wrap)wrap.innerHTML=html;
+  // Apply visibility based on gate state
+  sections.forEach(function(sec){
+    if(sec.gateId)applyRmGateVisibility(sec.key,rmGetState(sec.gateId).checked);
+  });
+}
+
+function onRmGateChange(secKey){
+  var sections={
+    'tools-access':'rm_tools',
+    'team-access':'rm_team'
+  };
+  var gateId=sections[secKey];
+  if(!gateId)return;
+  var el=document.getElementById(gateId);
+  if(el)rmPermState[gateId]={checked:el.checked,disabled:el.disabled};
+  applyRmGateVisibility(secKey,el?el.checked:true);
+}
+
+function applyRmGateVisibility(secKey,gateChecked){
+  var secDiv=document.getElementById('rmSec_'+secKey);
+  if(secDiv)secDiv.style.display=gateChecked?'':'none';
+  // Update label
+  var hdr=secDiv?secDiv.previousElementSibling:null;
+  if(hdr){
+    var span=hdr.querySelector('span[style*="margin-left:auto"]');
+    if(span)span.textContent=gateChecked?'Enabled — expand below':'Disabled — no access';
+  }
 }
 
 var rmTipTimeout=null;
@@ -8653,7 +8763,7 @@ async function resolvePermissions(user){
   if(!sess){showTeamLoginPrompt();return;}
   try{
     var s=JSON.parse(sess);
-    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity,joined_date,can_edit_new_pricelist,can_view_new_pricelist,can_edit_used_pricelist,can_view_used_pricelist,can_edit_stock_kit,can_view_stock_kit,can_manage_service,can_view_service',{headers:sbH()});
+    var r=await fetch(SB_URL+'/rest/v1/users?username=eq.'+encodeURIComponent(s.username)+'&select=username,role,custom_role_id,permission_overrides,can_access_tools,can_access_team,can_assign_task_dept,can_assign_task_cross,can_view_attendance,can_approve_leave,can_view_perf_own,can_view_perf_dept,can_view_perf_all,can_view_all_sales,can_create_announcement,can_pin_announcement,can_create_chat_room,can_manage_users,can_manage_roles,can_manage_departments,can_export_attendance,can_export_sales,can_view_change_log,can_access_benefit,can_manage_benefit,can_access_payroll,can_approve_tasks,is_active,display_name,position,phone,email,department,must_change_password,gender,ethnicity,joined_date,can_edit_new_pricelist,can_view_new_pricelist,can_edit_used_pricelist,can_view_used_pricelist,can_edit_stock_kit,can_view_stock_kit,can_manage_service,can_view_service,can_view_price_compare,can_edit_price_compare',{headers:sbH()});
     var rows=await r.json();
     if(!rows.length||rows[0].is_active===false){
       sessionStorage.removeItem('hm_session');showTeamLoginPrompt();return;
