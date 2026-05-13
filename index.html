@@ -508,7 +508,7 @@ body{position:relative}
         <span style="margin-left:auto;font-size:10px;color:#2a4a6a;padding-top:3px">Hover row for description</span>
       </div>
       <!-- Permission rows -->
-      <div id="rm_perm_rows" style="border:1px solid #1e2d45;border-radius:8px;overflow:hidden;overflow-x:hidden;max-height:340px;overflow-y:auto;max-width:100%"></div>
+      <div id="rm_perm_rows" style="border:1px solid #1e2d45;border-radius:8px;overflow:hidden;max-height:340px;overflow-y:auto"></div>
       <div class="form-actions" style="margin-top:12px">
         <button class="btn" onclick="closeModal('roleModal')">Cancel</button>
         <button class="btn primary" onclick="saveRole()">Save Role</button>
@@ -4962,56 +4962,69 @@ function rmSyncFromDom(){
 
 function renderRmPerms(){
   var filtered=PERM_DEFS.filter(function(p){
-    if(rmCurrentFilter==='tools')return p.mod==='tools';
-    if(rmCurrentFilter==='team')return p.mod==='team';
-    if(rmCurrentFilter==='live')return p.status==='live';
-    if(rmCurrentFilter==='future')return p.status==='future';
+    if(rmCurrentFilter==="tools")return p.mod==="tools";
+    if(rmCurrentFilter==="team")return p.mod==="team";
+    if(rmCurrentFilter==="live")return p.status==="live";
+    if(rmCurrentFilter==="future")return p.status==="future";
     return true;
   });
   var sections=[
-    {key:'tools-access',label:'🔧 Tools',color:'#3b82f6',gateId:'rm_tools',
+    {key:"tools-access",label:"\uD83D\uDD27 Tools",color:"#3b82f6",gateId:"rm_tools",
      rows:[
-       {label:'New Pricelist', view:'rm_view_new_pl', edit:'rm_edit_new_pl'},
-       {label:'Used Pricelist',view:'rm_view_used_pl',edit:'rm_edit_used_pl'},
-       {label:'Price Compare', view:'rm_view_pc',     edit:'rm_edit_pc'},
-       {label:'Stock Kit',     view:'rm_view_stock',  edit:'rm_edit_stock'},
-       {label:'Service',       view:'rm_view_svc',    edit:'rm_manage_svc'},
+       {label:"New Pricelist", view:"rm_view_new_pl", edit:"rm_edit_new_pl"},
+       {label:"Used Pricelist",view:"rm_view_used_pl",edit:"rm_edit_used_pl"},
+       {label:"Price Compare", view:"rm_view_pc",     edit:"rm_edit_pc"},
+       {label:"Stock Kit",     view:"rm_view_stock",  edit:"rm_edit_stock"},
+       {label:"Service",       view:"rm_view_svc",    edit:"rm_manage_svc"}
      ]},
-    {key:'team-access',label:'👥 Team',color:'#10b981',gateId:'rm_team',
+    {key:"team-access",label:"\uD83D\uDC65 Team",color:"#10b981",gateId:"rm_team",
      rows:[
-       {label:'Assign Tasks',  singles:['rm_task_dept','rm_task_cross']},
-       {label:'Approve Tasks', singles:['rm_approve_tasks']},
-       {label:'Attendance',    singles:['rm_attendance']},
-       {label:'Leave',         singles:['rm_leave_approve']},
-       {label:'Performance',   singles:['rm_perf_own','rm_perf_dept','rm_perf_all']},
-       {label:'Sales',         singles:['rm_view_all_sales','rm_export_sales']},
-       {label:'Announcements', singles:['rm_create_ann','rm_pin_ann']},
-       {label:'Chat',          singles:['rm_create_chat']},
-       {label:'Change Log',    singles:['rm_view_log']},
+       {label:"Assign Tasks",  singles:["rm_task_dept","rm_task_cross"]},
+       {label:"Approve Tasks", singles:["rm_approve_tasks"]},
+       {label:"Attendance",    singles:["rm_attendance"]},
+       {label:"Leave",         singles:["rm_leave_approve"]},
+       {label:"Performance",   singles:["rm_perf_own","rm_perf_dept","rm_perf_all"]},
+       {label:"Sales",         singles:["rm_view_all_sales","rm_export_sales"]},
+       {label:"Announcements", singles:["rm_create_ann","rm_pin_ann"]},
+       {label:"Chat",          singles:["rm_create_chat"]},
+       {label:"Change Log",    singles:["rm_view_log"]}
      ]},
-    {key:'team-admin',label:'⚙ Administration',color:'#a78bfa',gateId:null,
+    {key:"team-admin",label:"\u2699 Administration",color:"#a78bfa",gateId:null,
      rows:[
-       {label:'Users',         singles:['rm_manage_users']},
-       {label:'Roles',         singles:['rm_manage_roles']},
-       {label:'Departments',   singles:['rm_manage_depts']},
-       {label:'Att. Export',   singles:['rm_export_att']},
-       {label:'Benefits',      singles:['rm_access_benefit','rm_manage_benefit']},
-       {label:'Payroll',       singles:['rm_access_payroll']},
-     ]},
+       {label:"Users",       singles:["rm_manage_users"]},
+       {label:"Roles",       singles:["rm_manage_roles"]},
+       {label:"Departments", singles:["rm_manage_depts"]},
+       {label:"Att.Export",  singles:["rm_export_att"]},
+       {label:"Benefits",    singles:["rm_access_benefit","rm_manage_benefit"]},
+       {label:"Payroll",     singles:["rm_access_payroll"]}
+     ]}
   ];
+
   function ckBox(id,lbl){
-    var p=PERM_DEFS.find(function(x){return x.id===id;});
-    if(!p||!filtered.some(function(x){return x.id===id;}))return '';
+    var found=PERM_DEFS.find(function(x){return x.id===id;});
+    if(!found)return "";
+    if(!filtered.some(function(x){return x.id===id;}))return "";
     var st=rmGetState(id);
-    return '<label style="white-space:nowrap;font-size:11px;color:'+(st.disabled?'#2a4a6a':'#c9d1d9')+'">'
-      +'<input type="checkbox" id="'+id+'" '+(st.checked?'checked ':'')+(st.disabled?'disabled ':'')
-      +'style="margin-right:4px;accent-color:#3b82f6">'
-      +(lbl||p.label)+'</label>';
+    var cb=document.createElement("input");
+    cb.type="checkbox";cb.id=id;
+    if(st.checked)cb.checked=true;
+    if(st.disabled)cb.disabled=true;
+    cb.style.cssText="margin-right:4px;accent-color:#3b82f6;vertical-align:middle";
+    var lbl2=document.createElement("label");
+    lbl2.style.cssText="font-size:11px;color:"+(st.disabled?"#2a4a6a":"#c9d1d9")+";white-space:nowrap;cursor:"+(st.disabled?"not-allowed":"pointer");
+    lbl2.appendChild(cb);
+    lbl2.appendChild(document.createTextNode(lbl||found.label));
+    var wrap=document.createElement("span");
+    wrap.appendChild(lbl2);
+    return wrap.outerHTML;
   }
-  var html='';
+
+  var wrap=document.getElementById("rm_perm_rows");
+  if(!wrap)return;
+  wrap.innerHTML="";
+
   sections.forEach(function(sec){
     var gateChecked=sec.gateId?rmGetState(sec.gateId).checked:true;
-    // Check any row visible in current filter
     var anyVisible=false;
     if(sec.gateId&&filtered.some(function(p){return p.id===sec.gateId;}))anyVisible=true;
     sec.rows.forEach(function(r){
@@ -5019,62 +5032,92 @@ function renderRmPerms(){
       if(r.singles){r.singles.forEach(function(id){if(filtered.some(function(p){return p.id===id;}))anyVisible=true;});}
     });
     if(!anyVisible)return;
-    var hasViewEdit=sec.rows.some(function(r){return r.view;});
-    html+='<div style="border:1px solid #1e2d45;border-radius:8px;overflow:hidden;margin-bottom:8px">';
-    // Header row
-    html+='<div style="background:#0d1626;padding:7px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e2d45">';
+
+    // Outer card
+    var card=document.createElement("div");
+    card.style.cssText="border:1px solid #1e2d45;border-radius:8px;overflow:hidden;margin-bottom:8px";
+
+    // Header
+    var hdr=document.createElement("div");
+    hdr.style.cssText="background:#0d1626;padding:7px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e2d45";
     if(sec.gateId){
       var gst=rmGetState(sec.gateId);
-      html+='<input type="checkbox" id="'+sec.gateId+'" '+(gst.checked?'checked ':'')+(gst.disabled?'disabled ':'')
-        +'onchange="onRmGateChange(\''+sec.key+'\')" style="width:14px;height:14px;accent-color:'+sec.color+'">';
+      var gck=document.createElement("input");
+      gck.type="checkbox";gck.id=sec.gateId;
+      if(gst.checked)gck.checked=true;
+      if(gst.disabled)gck.disabled=true;
+      gck.style.cssText="width:14px;height:14px;accent-color:"+sec.color;
+      gck.setAttribute("onchange","onRmGateChange(\""+sec.key+"\")");
+      hdr.appendChild(gck);
     }
-    html+='<span style="font-size:12px;font-weight:700;color:'+sec.color+'">'+sec.label+'</span>';
-    html+='</div>';
-    // Content table
-    html+='<table id="rmSec_'+sec.key+'" style="width:100%;border-collapse:collapse;table-layout:fixed;'+(sec.gateId&&!gateChecked?'display:none':'')+'"><tbody>';
-    if(hasViewEdit){
-      html+='<tr style="background:#080d16">'
-        +'<td style="padding:3px 12px;font-size:9px;color:#2a4a6a;font-weight:700;text-transform:uppercase;width:120px"></td>'
-        +'<td style="padding:3px 8px;font-size:9px;color:#2a4a6a;font-weight:700;text-transform:uppercase;width:90px">View</td>'
-        +'<td style="padding:3px 8px;font-size:9px;color:#2a4a6a;font-weight:700;text-transform:uppercase">Edit / Manage</td>'
-        +'</tr>';
+    var ttl=document.createElement("span");
+    ttl.style.cssText="font-size:12px;font-weight:700;color:"+sec.color;
+    ttl.textContent=sec.label;
+    hdr.appendChild(ttl);
+    card.appendChild(hdr);
+
+    // Table
+    var tbl=document.createElement("table");
+    tbl.id="rmSec_"+sec.key;
+    tbl.style.cssText="width:100%;border-collapse:collapse"+(sec.gateId&&!gateChecked?";display:none":"");
+    var tbody=document.createElement("tbody");
+
+    var hasVE=sec.rows.some(function(r){return r.view;});
+    if(hasVE){
+      var hr=document.createElement("tr");
+      hr.style.background="#080d16";
+      ["","View","Edit / Manage"].forEach(function(t,ci){
+        var th=document.createElement("td");
+        th.style.cssText="padding:3px "+(ci===0?"12":"8")+"px;font-size:9px;color:#2a4a6a;font-weight:700;text-transform:uppercase"+(ci===0?";width:120px":ci===1?";width:90px":"");
+        th.textContent=t;
+        hr.appendChild(th);
+      });
+      tbody.appendChild(hr);
     }
+
     sec.rows.forEach(function(r){
       if(r.view){
         var vIn=filtered.some(function(p){return p.id===r.view;});
         var eIn=filtered.some(function(p){return p.id===r.edit;});
         if(!vIn&&!eIn)return;
-        html+='<tr style="border-top:1px solid #0d1626">'
-          +'<td style="padding:6px 12px;font-size:11px;color:#8b949e">'+r.label+'</td>'
-          +'<td style="padding:6px 8px">'+(vIn?ckBox(r.view,'View'):'')+'</td>'
-          +'<td style="padding:6px 8px">'+(eIn?ckBox(r.edit,'Edit'):'')+'</td>'
-          +'</tr>';
+        var tr=document.createElement("tr");
+        tr.style.borderTop="1px solid #0d1626";
+        var cells=["<td style='padding:6px 12px;font-size:11px;color:#8b949e;width:120px'>"+r.label+"</td>",
+          "<td style='padding:6px 8px;width:90px'>"+(vIn?ckBox(r.view,"View"):"")+"</td>",
+          "<td style='padding:6px 8px'>"+(eIn?ckBox(r.edit,"Edit"):"")+"</td>"];
+        tr.innerHTML=cells.join("");
+        tbody.appendChild(tr);
       } else if(r.singles){
         var anyIn=r.singles.some(function(id){return filtered.some(function(p){return p.id===id;});});
         if(!anyIn)return;
-        var cks=r.singles.map(function(id){
-          if(!filtered.some(function(p){return p.id===id;}))return '';
-          var p2=PERM_DEFS.find(function(x){return x.id===id;});
-          return ckBox(id,p2?p2.label:'');
-        }).join('&nbsp;&nbsp;&nbsp;');
-        html+='<tr style="border-top:1px solid #0d1626">'
-          +'<td style="padding:6px 12px;font-size:11px;color:#8b949e">'+r.label+'</td>'
-          +'<td colspan="2" style="padding:6px 8px">'+cks+'</td>'
-          +'</tr>';
+        var tr2=document.createElement("tr");
+        tr2.style.borderTop="1px solid #0d1626";
+        var boxes=r.singles.map(function(id){
+          if(!filtered.some(function(p){return p.id===id;}))return "";
+          var pd=PERM_DEFS.find(function(x){return x.id===id;});
+          return ckBox(id,pd?pd.label:"");
+        }).join("&nbsp;&nbsp;");
+        tr2.innerHTML="<td style='padding:6px 12px;font-size:11px;color:#8b949e;width:120px'>"+r.label+"</td>"
+          +"<td colspan='2' style='padding:6px 8px'>"+boxes+"</td>";
+        tbody.appendChild(tr2);
       }
     });
-    html+='</tbody></table></div></div>';
+
+    tbl.appendChild(tbody);
+    card.appendChild(tbl);
+    wrap.appendChild(card);
   });
-  if(!html)html='<div style="padding:1rem;font-size:12px;color:#4a6fa5;text-align:center">No permissions in this filter</div>';
-  var wrap=document.getElementById('rm_perm_rows');
-  if(wrap)wrap.innerHTML=html;
+
+  if(!wrap.children.length){
+    wrap.innerHTML="<div style='padding:1rem;font-size:12px;color:#4a6fa5;text-align:center'>No permissions in this filter</div>";
+  }
   sections.forEach(function(sec){
     if(sec.gateId)applyRmGateVisibility(sec.key,rmGetState(sec.gateId).checked);
   });
 }
 
 function onRmGateChange(secKey){
-  var gateMap={'tools-access':'rm_tools','team-access':'rm_team'};
+  var gateMap={"tools-access":"rm_tools","team-access":"rm_team"};
   var gateId=gateMap[secKey];
   if(!gateId)return;
   var el=document.getElementById(gateId);
@@ -5083,8 +5126,8 @@ function onRmGateChange(secKey){
 }
 
 function applyRmGateVisibility(secKey,gateChecked){
-  var el=document.getElementById('rmSec_'+secKey);
-  if(el)el.style.display=gateChecked?'table':'none';
+  var el=document.getElementById("rmSec_"+secKey);
+  if(el)el.style.display=gateChecked?"table":"none";
 }
 
 var rmTipTimeout=null;
