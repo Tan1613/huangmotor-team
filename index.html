@@ -1735,69 +1735,12 @@ body{position:relative}
               <div id="nu_role_desc" style="font-size:11px;color:#4a6fa5;min-height:14px"></div>
             </div>
 
-            <!-- Permission checkboxes — auto-filled from role, manually overridable -->
-            <div style="font-size:11px;color:#6b8ab0;margin-bottom:6px">Permissions <span style="color:#2a4a6a">(auto-filled from role — adjust if needed)</span></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-              <div style="border:1px solid #1e3a5f;border-radius:8px;overflow:hidden">
-                <div style="background:#0d1e35;padding:7px 10px;display:flex;align-items:center;gap:8px">
-                  <input type="checkbox" id="nu_tools" onchange="onNuPermChange()">
-                  <label for="nu_tools" style="font-size:12px;font-weight:600;color:#60a5fa;cursor:pointer;flex:1">🔧 Tools</label>
-                </div>
-                                <div style="padding:8px 12px;font-size:11px;color:#4a6fa5;line-height:1.6">
-                  Pricelist / Generator / Max Finance / Viewer Mode and other module permissions are managed in the <span style="color:#60a5fa;font-weight:600">Tools admin panel</span>.
-                </div>
-              </div>
-              <div style="border:1px solid #1a3a1a;border-radius:8px;overflow:hidden">
-                <div style="background:#0d2318;padding:7px 10px;display:flex;align-items:center;gap:8px">
-                  <input type="checkbox" id="nu_team" onchange="onNuPermChange()">
-                  <label for="nu_team" style="font-size:12px;font-weight:600;color:#34d399;cursor:pointer;flex:1">👥 Team</label>
-                </div>
-                <div style="padding:8px 12px;display:flex;flex-direction:column;gap:5px">
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_task_dept" onchange="onNuPermChange()"> Assign tasks (dept)</label>
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_task_cross" onchange="onNuPermChange()"> Assign tasks (cross)</label>
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_attendance" onchange="onNuPermChange()"> View attendance</label>
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_leave" onchange="onNuPermChange()"> Approve leave</label>
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_perf_own" checked onchange="onNuPermChange()"> View own perf</label>
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_perf_dept" onchange="onNuPermChange()"> View dept perf</label>
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_perf_all" onchange="onNuPermChange()"> View all perf</label>
-                </div>
-              </div>
+            <!-- Permission preview — read-only, based on selected role -->
+            <div style="font-size:11px;color:#6b8ab0;margin-bottom:6px">Permissions <span style="color:#2a4a6a">(from selected role — read-only preview)</span></div>
+            <div id="nuPermPreview" style="background:#0a0f1a;border:1px solid #1e2d45;border-radius:8px;padding:10px;font-size:11px;color:#4a6fa5;min-height:40px">
+              Select a role above to preview permissions.
             </div>
-            <!-- Changed from role indicator -->
-            <div id="nu_perm_diff" style="display:none;margin-top:8px;padding:8px 10px;background:#1a1200;border:1px solid #f59e0b44;border-radius:6px;font-size:11px;color:#f59e0b">
-              ⚠ Permissions differ from selected role.
-              <button class="btn sm" onclick="promptSaveAsNewRole()" style="margin-left:8px;font-size:10px">Save as new role?</button>
-            </div>
-            <!-- Extended permissions -->
-            <div style="margin-top:10px;border:1px solid #2a3a2a;border-radius:8px;overflow:hidden">
-              <div style="background:#0d1a0d;padding:7px 10px;font-size:11px;font-weight:600;color:#4ade80">📊 Sales & Content</div>
-              <div style="padding:8px 12px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_view_all_sales" onchange="onNuPermChange()"> View all sales</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_export_sales" onchange="onNuPermChange()"> Export sales</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_create_ann" onchange="onNuPermChange()"> Create announcements</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_pin_ann" onchange="onNuPermChange()"> Pin announcements</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_create_chat" onchange="onNuPermChange()"> Create chat rooms</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_view_log" onchange="onNuPermChange()"> View change log</label>
-              </div>
-            </div>
-            <div style="margin-top:8px;border:1px solid #2a2a3a;border-radius:8px;overflow:hidden">
-              <div style="background:#0d0d1a;padding:7px 10px;font-size:11px;font-weight:600;color:#a78bfa">&#9881; Administration</div>
-              <div style="padding:8px 12px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_users" onchange="onNuPermChange()"> Manage users</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_roles" onchange="onNuPermChange()"> Manage roles</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_depts" onchange="onNuPermChange()"> Manage departments</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_export_att" onchange="onNuPermChange()"> Export attendance</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_approve_tasks" onchange="onNuPermChange()"> Approve Task Completion</label>
-              </div>
-            </div>
-            <div style="margin-top:8px;border:1px solid #2a1a2a;border-radius:8px;overflow:hidden">
-              <div style="background:#1a0d1a;padding:7px 10px;font-size:11px;font-weight:600;color:#f0abfc">Future Modules</div>
-              <div style="padding:8px 12px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_access_benefit" onchange="onNuPermChange()"> Access Benefits</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_manage_benefit" onchange="onNuPermChange()"> Manage Benefits</label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nu_access_payroll" onchange="onNuPermChange()"> Access Payroll</label>
-              </div>
-            </div>
+          </div>
           </div>
 
           <div style="display:flex;justify-content:flex-end;margin-top:1rem">
@@ -3984,24 +3927,9 @@ async function loadPerformance(){
 }
 
 /* ══ USER MANAGEMENT ══ */
-function onViewerChange(checked){
-  // Viewer mode is managed in Tools — no portal checkboxes to toggle
-}
-// Map between form checkbox IDs and PERM_FIELDS
-var NU_PERM_MAP={
-  nu_tools:'can_access_tools',nu_team:'can_access_team',
-  nu_task_dept:'can_assign_task_dept',nu_task_cross:'can_assign_task_cross',
-  nu_approve_tasks:'can_approve_tasks',
-  nu_attendance:'can_view_attendance',nu_leave:'can_approve_leave',
-  nu_perf_own:'can_view_perf_own',nu_perf_dept:'can_view_perf_dept',nu_perf_all:'can_view_perf_all',
-  nu_view_all_sales:'can_view_all_sales',nu_create_ann:'can_create_announcement',
-  nu_pin_ann:'can_pin_announcement',nu_create_chat:'can_create_chat_room',
-  nu_manage_users:'can_manage_users',nu_manage_roles:'can_manage_roles',
-  nu_manage_depts:'can_manage_departments',nu_export_att:'can_export_attendance',
-  nu_export_sales:'can_export_sales',nu_view_log:'can_view_change_log',
-  nu_access_benefit:'can_access_benefit',nu_manage_benefit:'can_manage_benefit',
-  nu_access_payroll:'can_access_payroll'
-};
+function onViewerChange(){/* no-op — viewer mode managed in Tools */}
+function onNuPermChange(){/* no-op — permissions come from role */}
+
 
 function onNuRoleChange(){
   var role=document.getElementById('nu_role').value;
@@ -4037,59 +3965,58 @@ function onNuCustomRoleChange(){
   var roleId=parseInt(sel.value);
   var role=allRoles.find(function(r){return r.id===roleId;});
   var descEl=document.getElementById('nu_role_desc');
-  if(!role){descEl.textContent='';return;}
-  descEl.textContent=role.description||'';
-  // Auto-fill checkboxes from role
-  Object.keys(NU_PERM_MAP).forEach(function(ckId){
-    var field=NU_PERM_MAP[ckId];
-    var el=document.getElementById(ckId);
-    if(el)el.checked=!!role[field];
-  });
-  // Handle viewer mode mutex
-  onViewerChange(!!role.is_viewer_mode);
-  // Hide diff indicator since we just loaded from role
-  document.getElementById('nu_perm_diff').style.display='none';
-}
-
-function onNuPermChange(){
-  // Compare current checkboxes to selected role
-  var sel=document.getElementById('nu_custom_role');
-  var roleId=parseInt(sel.value);
-  var role=allRoles.find(function(r){return r.id===roleId;});
-  if(!role){document.getElementById('nu_perm_diff').style.display='none';return;}
-  var differs=Object.keys(NU_PERM_MAP).some(function(ckId){
-    var el=document.getElementById(ckId);
-    if(!el)return false;
-    var field=NU_PERM_MAP[ckId];
-    return !!el.checked!==!!role[field];
-  });
-  document.getElementById('nu_perm_diff').style.display=differs?'':'none';
-}
-
-async function promptSaveAsNewRole(){
-  await loadAllRoles();
-  // Show existing roles as reference
-  var existing=allRoles.map(function(r){return '  • '+r.name+(r.description?' — '+r.description:'');}).join('\n');
-  var name=prompt('Save current permissions as a new role.\n\nExisting roles:\n'+existing+'\n\nNew role name:');
-  if(!name||!name.trim())return;
-  // Build role data from current checkboxes
-  var data={name:name.trim(),is_active:true,can_view_perf_own:true};
-  Object.keys(NU_PERM_MAP).forEach(function(ckId){
-    var el=document.getElementById(ckId);
-    if(el)data[NU_PERM_MAP[ckId]]=el.checked;
-  });
-  var result=await sbPost('custom_roles',data);
-  if(result&&result.length){
-    await loadAllRoles();
-    await populateNuRoleDropdown();
-    document.getElementById('nu_custom_role').value=result[0].id;
-    document.getElementById('nu_role_desc').textContent=data.description||'';
-    document.getElementById('nu_perm_diff').style.display='none';
-    toast('Role "'+name+'" created and selected','success');
-  } else {
-    toast('Failed to create role','error');
+  var preview=document.getElementById('nuPermPreview');
+  if(!role){
+    if(descEl)descEl.textContent='';
+    if(preview)preview.innerHTML='<span style="color:#4a6fa5">Select a role above to preview permissions.</span>';
+    return;
   }
+  if(descEl)descEl.textContent=role.description||'';
+  // Build read-only preview grouped by category
+  var groups={
+    'Tools':['can_access_tools'],
+    'Team — Core':['can_access_team','can_assign_task_dept','can_assign_task_cross','can_approve_tasks','can_view_attendance','can_approve_leave'],
+    'Performance':['can_view_perf_own','can_view_perf_dept','can_view_perf_all'],
+    'Sales & Content':['can_view_all_sales','can_export_sales','can_create_announcement','can_pin_announcement','can_create_chat_room','can_view_change_log'],
+    'Administration':['can_manage_users','can_manage_roles','can_manage_departments','can_export_attendance'],
+    'Benefits & Payroll':['can_access_benefit','can_manage_benefit','can_access_payroll'],
+  };
+  var labelMap={
+    can_access_tools:'Access Tools',can_access_team:'Access Team',
+    can_assign_task_dept:'Assign Tasks (Dept)',can_assign_task_cross:'Assign Tasks (Cross)',
+    can_approve_tasks:'Approve Tasks',can_view_attendance:'View Attendance',
+    can_approve_leave:'Approve Leave',can_view_perf_own:'View Own Perf',
+    can_view_perf_dept:'View Dept Perf',can_view_perf_all:'View All Perf',
+    can_view_all_sales:'View All Sales',can_export_sales:'Export Sales',
+    can_create_announcement:'Create Announcements',can_pin_announcement:'Pin Announcements',
+    can_create_chat_room:'Create Chat Rooms',can_view_change_log:'View Change Log',
+    can_manage_users:'Manage Users',can_manage_roles:'Manage Roles',
+    can_manage_departments:'Manage Departments',can_export_attendance:'Export Attendance',
+    can_access_benefit:'Access Benefits',can_manage_benefit:'Manage Benefits',
+    can_access_payroll:'Access Payroll'
+  };
+  var html='<div style="display:flex;flex-direction:column;gap:6px">';
+  Object.entries(groups).forEach(function(kv){
+    var grp=kv[0];var fields=kv[1];
+    var active=fields.filter(function(f){return !!role[f];});
+    if(!active.length)return;
+    html+='<div style="display:flex;align-items:flex-start;gap:8px">'
+      +'<span style="font-size:10px;color:#2a4a6a;min-width:100px;padding-top:1px">'+grp+'</span>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:4px">'
+      +active.map(function(f){
+        return '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:#0d1e35;color:#60a5fa">'+esc(labelMap[f]||f)+'</span>';
+      }).join('')
+      +'</div></div>';
+  });
+  // Check if nothing active
+  var anyActive=Object.values(groups).some(function(fields){return fields.some(function(f){return !!role[f];});});
+  if(!anyActive)html+='<span style="color:#4a6fa5">No permissions assigned in this role.</span>';
+  html+='</div>';
+  if(preview)preview.innerHTML=html;
 }
+
+function onNuPermChange(){/* no-op — permissions come from role directly */}
+
 
 function generateTempPassword(){
   var chars='abcdefghjkmnpqrstuvwxyz23456789';
@@ -4102,33 +4029,35 @@ async function createUser(){
   if(!u){toast('Username required','error');return;}
   var r=document.getElementById('nu_role').value;
   var isAdmin=r==='admin';
-  if(r!=='admin'){
+  if(!isAdmin){
     var roleId=document.getElementById('nu_custom_role').value;
     if(!roleId){toast('Please select a Custom Role','error');return;}
   }
   var tempPw=generateTempPassword();var hash=await sha256(tempPw);
   var dept=document.getElementById('nu_dept').value;
-  var customRoleId=(r!=='admin')?parseInt(document.getElementById('nu_custom_role').value):null;
+  var customRoleId=(!isAdmin)?parseInt(document.getElementById('nu_custom_role').value):null;
+  // Copy ALL permissions directly from the selected role — no overrides, no checkbox reading
   var perms={};
-  if(!isAdmin){Object.keys(NU_PERM_MAP).forEach(function(ckId){var el=document.getElementById(ckId);if(el)perms[NU_PERM_MAP[ckId]]=el.checked;});perms.can_view_perf_own=true;}
-  var overrideFields=[];
-  if(customRoleId){var roleT=allRoles.find(function(x){return x.id===customRoleId;});if(roleT){Object.keys(NU_PERM_MAP).forEach(function(ckId){var field=NU_PERM_MAP[ckId];var el=document.getElementById(ckId);if(el&&!!el.checked!==!!roleT[field])overrideFields.push(field);});}}
+  if(!isAdmin&&customRoleId){
+    var roleT=allRoles.find(function(x){return x.id===customRoleId;});
+    if(roleT){PERM_FIELDS.forEach(function(f){perms[f]=!!roleT[f];});}
+  }
   var data=Object.assign({username:u,password_hash:hash,role:r,is_active:true,must_change_password:true,
     display_name:document.getElementById('nu_dispname').value.trim()||null,
     position:document.getElementById('nu_position').value.trim()||null,
     department:dept||null,gender:document.getElementById('nu_gender').value||null,
     ethnicity:document.getElementById('nu_ethnicity').value||null,worker_type:'local',
     joined_date:document.getElementById('nu_joined').value||null,resigned_date:document.getElementById('nu_resigned').value||null,
-    custom_role_id:customRoleId,permission_overrides:overrideFields},perms);
+    custom_role_id:customRoleId,permission_overrides:[]},perms);
   var res=await sbPost('users',data);
   if(res){
     ['nu_username','nu_dispname','nu_position'].forEach(function(id){document.getElementById(id).value='';});
-    Object.keys(NU_PERM_MAP).forEach(function(id){var el=document.getElementById(id);if(el){el.checked=false;el.disabled=false;}});
-    document.getElementById('nu_perf_own').checked=true;
     document.getElementById('nu_role').value='staff';
     var crEl=document.getElementById('nu_custom_role');if(crEl)crEl.value='';
     document.getElementById('nu_modules').style.display='none';
-    var diffEl=document.getElementById('nu_perm_diff');if(diffEl)diffEl.style.display='none';
+    var preview=document.getElementById('nuPermPreview');
+    if(preview)preview.innerHTML='<span style="color:#4a6fa5">Select a role above to preview permissions.</span>';
+    var descEl=document.getElementById('nu_role_desc');if(descEl)descEl.textContent='';
     showInviteModal(u,tempPw,'https://login.huangmotor.com');
     await loadAllUsersCache();await loadAdminUsers();
   } else {toast('Failed — username may already exist','error');}
