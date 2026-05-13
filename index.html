@@ -508,7 +508,7 @@ body{position:relative}
         <span style="margin-left:auto;font-size:10px;color:#2a4a6a;padding-top:3px">Hover row for description</span>
       </div>
       <!-- Permission rows -->
-      <div id="rm_perm_rows" style="border:1px solid #1e2d45;border-radius:8px;overflow:hidden;max-height:340px;overflow-y:auto"></div>
+      <div id="rm_perm_rows" style="border:1px solid #1e2d45;border-radius:8px;overflow:hidden;overflow-x:hidden;max-height:340px;overflow-y:auto;max-width:100%"></div>
       <div class="form-actions" style="margin-top:12px">
         <button class="btn" onclick="closeModal('roleModal')">Cancel</button>
         <button class="btn primary" onclick="saveRole()">Save Role</button>
@@ -5031,7 +5031,7 @@ function renderRmPerms(){
     html+='<span style="font-size:12px;font-weight:700;color:'+sec.color+'">'+sec.label+'</span>';
     html+='</div>';
     // Content table
-    html+='<table id="rmSec_'+sec.key+'" style="width:100%;border-collapse:collapse;'+(sec.gateId&&!gateChecked?'display:none':'')+'"><tbody>';
+    html+='<table id="rmSec_'+sec.key+'" style="width:100%;border-collapse:collapse;table-layout:fixed;'+(sec.gateId&&!gateChecked?'display:none':'')+'"><tbody>';
     if(hasViewEdit){
       html+='<tr style="background:#080d16">'
         +'<td style="padding:3px 12px;font-size:9px;color:#2a4a6a;font-weight:700;text-transform:uppercase;width:120px"></td>'
@@ -5063,7 +5063,7 @@ function renderRmPerms(){
           +'</tr>';
       }
     });
-    html+='</tbody></table></div>';
+    html+='</tbody></table></div></div>';
   });
   if(!html)html='<div style="padding:1rem;font-size:12px;color:#4a6fa5;text-align:center">No permissions in this filter</div>';
   var wrap=document.getElementById('rm_perm_rows');
