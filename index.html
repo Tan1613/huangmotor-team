@@ -1743,11 +1743,8 @@ body{position:relative}
                   <input type="checkbox" id="nu_tools" onchange="onNuPermChange()">
                   <label for="nu_tools" style="font-size:12px;font-weight:600;color:#60a5fa;cursor:pointer;flex:1">🔧 Tools</label>
                 </div>
-                <div style="padding:8px 12px;display:flex;flex-direction:column;gap:5px">
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_pl" onchange="onNuPermChange()"> Edit Pricelist</label>
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_gen" onchange="onNuPermChange()"> Edit Generator</label>
-                  <label style="display:flex;align-items:center;gap:7px;font-size:12px"><input type="checkbox" id="nu_mf" onchange="onNuPermChange()"> Edit Max Finance</label>
-                  <label style="display:flex;align-items:flex-start;gap:7px;font-size:12px"><input type="checkbox" id="nu_viewer" onchange="onViewerChange(this.checked);onNuPermChange()"> <span>Viewer Mode</span></label>
+                                <div style="padding:8px 12px;font-size:11px;color:#4a6fa5;line-height:1.6">
+                  Pricelist / Generator / Max Finance / Viewer Mode and other module permissions are managed in the <span style="color:#60a5fa;font-weight:600">Tools admin panel</span>.
                 </div>
               </div>
               <div style="border:1px solid #1a3a1a;border-radius:8px;overflow:hidden">
@@ -3988,23 +3985,13 @@ async function loadPerformance(){
 
 /* ══ USER MANAGEMENT ══ */
 function onViewerChange(checked){
-  // Viewer mode is mutually exclusive with edit permissions
-  if(checked){
-    ['nu_pl','nu_gen','nu_mf'].forEach(function(id){
-      var el=document.getElementById(id);
-      if(el){el.checked=false;el.disabled=true;}
-    });
-  } else {
-    ['nu_pl','nu_gen','nu_mf'].forEach(function(id){
-      var el=document.getElementById(id);
-      if(el)el.disabled=false;
-    });
-  }
+  // Viewer mode is managed in Tools — no portal checkboxes to toggle
 }
 // Map between form checkbox IDs and PERM_FIELDS
 var NU_PERM_MAP={
   nu_tools:'can_access_tools',nu_team:'can_access_team',
   nu_task_dept:'can_assign_task_dept',nu_task_cross:'can_assign_task_cross',
+  nu_approve_tasks:'can_approve_tasks',
   nu_attendance:'can_view_attendance',nu_leave:'can_approve_leave',
   nu_perf_own:'can_view_perf_own',nu_perf_dept:'can_view_perf_dept',nu_perf_all:'can_view_perf_all',
   nu_view_all_sales:'can_view_all_sales',nu_create_ann:'can_create_announcement',
@@ -4013,8 +4000,7 @@ var NU_PERM_MAP={
   nu_manage_depts:'can_manage_departments',nu_export_att:'can_export_attendance',
   nu_export_sales:'can_export_sales',nu_view_log:'can_view_change_log',
   nu_access_benefit:'can_access_benefit',nu_manage_benefit:'can_manage_benefit',
-  nu_access_payroll:'can_access_payroll',
-  nu_approve_tasks:'can_approve_tasks'
+  nu_access_payroll:'can_access_payroll'
 };
 
 function onNuRoleChange(){
